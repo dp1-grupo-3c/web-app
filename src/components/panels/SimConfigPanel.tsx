@@ -4,7 +4,7 @@ import { Calendar, CircleHelp, Play } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/feedback";
-import { Field, TextInput } from "@/components/ui/form";
+import { DateInput, Field, TextInput } from "@/components/ui/form";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { SIMULATION_DAYS_5D, SIMULATION_TITLE } from "@/lib/constants";
 import { addDays, formatDate, formatWeekdayDate, parseISODate } from "@/lib/format";
@@ -60,13 +60,12 @@ export function SimConfigPanel({ mode, readOnly, startDate, onStartDate, traffic
       >
         <div className="grid grid-cols-2 gap-3">
           <Field label="Fecha de inicio" htmlFor="s-start" required error={dateError}>
-            <TextInput
+            <DateInput
               id="s-start"
-              type="date"
               value={startDate}
               disabled={readOnly}
               error={!!dateError}
-              onChange={(e) => { onStartDate(e.target.value); setDateError(null); }}
+              onChange={(v) => { onStartDate(v); setDateError(null); }}
             />
           </Field>
           <Field label="Fecha de fin" htmlFor="s-end">

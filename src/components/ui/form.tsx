@@ -1,6 +1,9 @@
+"use client";
+
 import { ChevronDown, ChevronUp, CircleAlert, Search, X } from "lucide-react";
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import { useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
+import { formatDate, parseISODate, toISODate } from "@/lib/format";
 
 export const fieldClass = (error?: boolean) =>
   cn(
@@ -45,6 +48,67 @@ export function Field({ label, htmlFor, required, error, help, children, classNa
 
 export function TextInput({ error, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
   return <input {...rest} aria-invalid={error || undefined} className={cn(fieldClass(error), className)} />;
+}
+
+type DateInputProps = {
+  id?: string;
+  /** Fecha en ISO ("YYYY-MM-DD"), o "" si está vacía. */
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  error?: boolean;
+  className?: string;
+};
+
+/** ISO si los tres números forman una fecha real (rechaza p. ej. 31/02); null si no. */
+function isoFromParts(day: number, month: number, year: number): string | null {
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return toISODate(d);
+}
+
+/**
+ * Fecha en formato peruano (dd/mm/aaaa), sin depender del idioma del
+ * navegador: el `<input type="date">` nativo muestra el orden de fecha del
+ * sistema operativo o del navegador (a menudo mm/dd/aaaa en inglés) y la
+ * página no puede forzarlo, así que se reemplaza por un campo de texto con
+ * máscara propia.
+ */
+export function DateInput({ id, value, onChange, disabled, error, className }: DateInputProps) {
+  const format = (v: string) => (v ? formatDate(parseISODate(v)) : "");
+  const [text, setText] = useState(() => format(value));
+  // Si el valor cambia desde afuera (p. ej. un reinicio del formulario), sincroniza el texto
+  // durante el render (en vez de un efecto) para no disparar un renderizado extra.
+  const [lastValue, setLastValue] = useState(value);
+  if (value !== lastValue) {
+    setLastValue(value);
+    setText(format(value));
+  }
+
+  const handleChange = (raw: string) => {
+    const digits = raw.replace(/\D/g, "").slice(0, 8);
+    setText([digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean).join("/"));
+    if (digits.length === 0) onChange("");
+    else if (digits.length === 8) {
+      const iso = isoFromParts(+digits.slice(0, 2), +digits.slice(2, 4), +digits.slice(4, 8));
+      if (iso) onChange(iso);
+    }
+  };
+
+  return (
+    <input
+      id={id}
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      placeholder="dd/mm/aaaa"
+      value={text}
+      disabled={disabled}
+      aria-invalid={error || undefined}
+      onChange={(e) => handleChange(e.target.value)}
+      className={cn(fieldClass(error), "tabular-nums", className)}
+    />
+  );
 }
 
 type NumberInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {

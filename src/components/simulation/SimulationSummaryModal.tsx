@@ -20,6 +20,7 @@ const HERO: Record<SimulationOutcome, { box: string; icon: string; Icon: typeof 
   exito: { box: "border-success/30 bg-success/6", icon: "bg-success/14 text-success", Icon: CircleCheck },
   cancelada: { box: "border-warning/30 bg-warning/6", icon: "bg-warning/14 text-warning", Icon: CircleAlert },
   colapso: { box: "border-critic/35 bg-critic/7", icon: "bg-critic/14 text-critic", Icon: TriangleAlert },
+  fallida: { box: "border-critic/35 bg-critic/7", icon: "bg-critic/14 text-critic", Icon: TriangleAlert },
 };
 
 function Box({ title, icon, children, className }: { title: string; icon: ReactNode; children: ReactNode; className?: string }) {
@@ -35,13 +36,15 @@ type Props = {
   mode: SimulationMode;
   outcome: SimulationOutcome;
   startDate: string;
-  /** null mientras el servidor no envía el resumen. */
+  /** null mientras el servidor no envía el resumen (o si la corrida falló antes de generarlo). */
   summary: SimulationSummary | null;
+  /** Detalle del error cuando outcome === "fallida" y el backend no llegó a enviar un resumen. */
+  errorMessage?: string | null;
   onClose: () => void;
   onNew: () => void;
 };
 
-export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, onClose, onNew }: Props) {
+export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, errorMessage, onClose, onNew }: Props) {
   const toast = useToast();
   const hero = HERO[outcome];
   const headline = summaryHeadline({ outcome, mode, startDate, firstLateOrder: s?.firstLateOrder });
@@ -129,6 +132,11 @@ export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, o
                 </div>
               </div>
             </>
+          ) : outcome === "fallida" ? (
+            <div role="status" className="flex items-center gap-3 rounded-xl border border-critic/35 bg-critic/7 px-4 py-5 text-sm text-n200">
+              <TriangleAlert className="size-5 shrink-0 text-critic" aria-hidden />
+              {errorMessage ?? "El servidor no envió más detalles del error."}
+            </div>
           ) : (
             <div role="status" className="flex items-center gap-3 rounded-xl border border-line bg-night px-4 py-5 text-sm text-n300">
               <LoaderCircle className="size-5 animate-spin text-pink" aria-hidden />

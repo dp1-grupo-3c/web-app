@@ -1,56 +1,30 @@
-import { Pause, Play } from "lucide-react";
-import { Button, ControlButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Meter } from "@/components/ui/feedback";
-import { cn } from "@/lib/cn";
 import { SIMULATION_DAYS_5D, SIMULATION_TITLE } from "@/lib/constants";
 import { addMinutes, formatClock, formatElapsed, formatNumber, formatTime, formatWeekdayDate, parseISODate } from "@/lib/format";
 import type { SimulationClock, SimulationMode } from "@/lib/types";
 import { HudBar, HudSection, Kpi } from "./Hud";
-
-export const SPEEDS = [1, 2, 4] as const;
-export type Speed = (typeof SPEEDS)[number];
 
 type SimHudProps = {
   mode: SimulationMode;
   startDate: string;
   clock: SimulationClock | null;
   ended: boolean;
-  paused: boolean;
-  speed: Speed;
   compact: boolean;
-  onTogglePause: () => void;
-  onSpeed: (s: Speed) => void;
   onCancel: () => void;
 };
 
-/** Barra de la simulación: control, fecha simulada, progreso, KPIs y cancelar. */
-export function SimHud({ mode, startDate, clock, ended, paused, speed, compact, onTogglePause, onSpeed, onCancel }: SimHudProps) {
+/**
+ * Barra de la simulación: fecha simulada, progreso, KPIs y cancelar.
+ * No hay control de pausa ni de velocidad: el backend no los soporta
+ * (ver GUIA_FLUJO_DATOS.md, "Lo que el backend no ofrece hoy").
+ */
+export function SimHud({ mode, startDate, clock, ended, compact, onCancel }: SimHudProps) {
   const elapsed = clock?.elapsedMinutes ?? 0;
   const now = clock ? new Date(clock.simTime) : addMinutes(parseISODate(startDate), 0);
   const day = Math.floor(elapsed / 1440) + 1;
   return (
     <HudBar dimmed={ended}>
-      <HudSection>
-        <ControlButton solid label={paused ? "Reanudar" : "Pausar"} onClick={onTogglePause} disabled={ended}>
-          {paused ? <Play className="size-5" /> : <Pause className="size-5" />}
-        </ControlButton>
-        {!compact && (
-          <div role="group" aria-label="Velocidad" className="flex gap-0.5 rounded-lg border border-line bg-night p-0.5">
-            {SPEEDS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={speed === s}
-                disabled={ended}
-                onClick={() => onSpeed(s)}
-                className={cn("h-7 min-w-[34px] rounded-md text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50", speed === s ? "bg-craft/22 text-craft" : "text-n400 hover:text-white")}
-              >
-                {s}×
-              </button>
-            ))}
-          </div>
-        )}
-      </HudSection>
       <HudSection>
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-n500">{SIMULATION_TITLE[mode]}</span>

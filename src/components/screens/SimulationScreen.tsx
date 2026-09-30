@@ -2,7 +2,7 @@
 
 import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings } from "lucide-react";
 import { useState } from "react";
-import { SimHud, type Speed } from "@/components/hud/SimHud";
+import { SimHud } from "@/components/hud/SimHud";
 import { GridMap } from "@/components/map/GridMap";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
@@ -19,7 +19,7 @@ import { SideRail, type RailItem } from "@/components/workspace/SideRail";
 import { usePanelParam } from "@/components/workspace/usePanelParam";
 import { Workspace } from "@/components/workspace/Workspace";
 import { DEFAULT_TRAFFIC_LIGHT, PANEL_WIDTH } from "@/lib/constants";
-import { cancelSimulation, setSimulationPaused, setSimulationSpeed, startSimulation } from "@/lib/data/actions";
+import { cancelSimulation, forgetSimulation, startSimulation } from "@/lib/data/actions";
 import { useBreakdowns, useMapSnapshot, useMetrics, useOrders, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
@@ -49,17 +49,15 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const [startDate, setStartDate] = useState(() => toISODate(new Date()));
   const [trafficLight, setTrafficLight] = useState(DEFAULT_TRAFFIC_LIGHT);
   const [starting, setStarting] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [speed, setSpeed] = useState<Speed>(1);
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [selected, setSelected] = useState<EntityRef | null>(null);
   const [layers, setLayers] = useState(ALL_LAYERS);
   const [orderId, setOrderId] = useState<string | null>(null);
 
-  // La simulación termina por el servidor (éxito o colapso) o porque el usuario la cancela.
-  const ended = phase === "ended" || feed.summary != null;
-  const outcome: SimulationOutcome | null = feed.summary?.outcome ?? (cancelledByUser ? "cancelada" : null);
+  // La simulación termina por el servidor (éxito, colapso o error) o porque el usuario la cancela.
+  const ended = phase === "ended" || feed.outcome != null;
+  const outcome: SimulationOutcome | null = feed.outcome ?? (cancelledByUser ? "cancelada" : null);
   const effectivePhase: Phase = ended ? "ended" : phase;
 
   const width = panel === "config" ? PANEL_WIDTH.wide : PANEL_WIDTH.default;
@@ -71,22 +69,11 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     setStarting(false);
     if (!res.ok) return toast.error(res.message);
     setPhase("running");
-    setPaused(false);
     setPanel(null);
-  };
-  const togglePause = async () => {
-    const res = await setSimulationPaused(mode, !paused);
-    if (!res.ok) return toast.error(res.message);
-    setPaused(!paused);
-  };
-  const changeSpeed = async (s: Speed) => {
-    const res = await setSimulationSpeed(mode, s);
-    if (!res.ok) return toast.error(res.message);
-    setSpeed(s);
   };
   const confirmCancel = async () => {
     setCancelling(true);
-    const res = await cancelSimulation(mode);
+    const res = await cancelSimulation();
     setCancelling(false);
     if (!res.ok) return toast.error(res.message);
     setConfirming(false);
@@ -95,11 +82,10 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     setPanel(null);
   };
   const newSimulation = () => {
+    forgetSimulation();
     setPhase("idle");
     setCancelledByUser(false);
     setSummaryDismissed(false);
-    setPaused(false);
-    setSpeed(1);
     setPanel("config");
   };
 
@@ -157,11 +143,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             startDate={startDate}
             clock={feed.clock}
             ended={ended}
-            paused={paused}
-            speed={speed}
             compact={!!shown}
-            onTogglePause={togglePause}
-            onSpeed={changeSpeed}
             onCancel={() => setConfirming(true)}
           />
         )
@@ -172,7 +154,15 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         <>
           {confirming && <ConfirmCancelDialog busy={cancelling} onKeep={() => setConfirming(false)} onConfirm={confirmCancel} />}
           {ended && outcome && !summaryDismissed && (
-            <SimulationSummaryModal mode={mode} outcome={outcome} startDate={feed.summary?.startDate ?? startDate} summary={feed.summary} onClose={() => setSummaryDismissed(true)} onNew={newSimulation} />
+            <SimulationSummaryModal
+              mode={mode}
+              outcome={outcome}
+              startDate={feed.summary?.startDate ?? startDate}
+              summary={feed.summary}
+              errorMessage={feed.error}
+              onClose={() => setSummaryDismissed(true)}
+              onNew={newSimulation}
+            />
           )}
         </>
       }

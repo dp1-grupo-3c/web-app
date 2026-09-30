@@ -7,6 +7,7 @@ export const OUTCOME_LABEL: Record<SimulationOutcome, string> = {
   exito: "Culminó con éxito",
   cancelada: "Cancelada",
   colapso: "Colapso de operaciones",
+  fallida: "Error del servidor",
 };
 
 /** Mensaje principal del resumen (se usa en el modal y en el reporte). */
@@ -18,6 +19,7 @@ export function summaryHeadline(s: Pick<SimulationSummary, "outcome" | "mode" | 
   const range = s.mode === "5d" ? ` del ${ini} al ${fin}` : ` iniciada el ${ini}`;
   if (s.outcome === "exito") return `La ${name}${range} terminó con éxito.`;
   if (s.outcome === "cancelada") return `Cancelaste la ${name}${range}.`;
+  if (s.outcome === "fallida") return `La ${name}${range} se detuvo por un error del servidor.`;
   const late = s.firstLateOrder;
   if (!late) return `La ${name}${range} se detuvo porque las operaciones colapsaron.`;
   const when = formatSimStamp(late.dueAt, s.startDate).date;
@@ -29,6 +31,7 @@ export const OUTCOME_DETAIL: Record<SimulationOutcome, string> = {
   exito: "Todos los pedidos se entregaron dentro de su plazo.",
   cancelada: "Estos son los resultados obtenidos hasta el momento de la cancelación.",
   colapso: "Una simulación colapsa en cuanto el primer pedido supera su plazo de entrega. Este es el detalle de ese pedido.",
+  fallida: "El backend interrumpió la corrida por un error interno antes de poder enviar el resumen.",
 };
 
 /** Reporte en texto plano con el mismo contenido que el resumen en pantalla. */

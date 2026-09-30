@@ -40,7 +40,14 @@ export type Warehouse = {
   vehiclesAtBase?: number;
 };
 
-export type Blockage = { id: string; from: Coord; to: Coord; until?: string };
+export type Blockage = {
+  id: string;
+  from: Coord;
+  to: Coord;
+  until?: string;
+  /** Polilínea completa (nodo a nodo). `from`/`to` son su primer y último punto. */
+  path?: Coord[];
+};
 
 export type MapSnapshot = { warehouses: Warehouse[]; vehicles: Vehicle[]; blockages: Blockage[] };
 
@@ -92,7 +99,8 @@ export type BreakdownRecord = {
 export type VehiclePlates = Record<VehicleKind, string[]>;
 
 export type SimulationMode = "5d" | "colapso";
-export type SimulationOutcome = "exito" | "cancelada" | "colapso";
+/** "fallida" = error interno del backend (sin resumen; se muestra el mensaje de la corrida). */
+export type SimulationOutcome = "exito" | "cancelada" | "colapso" | "fallida";
 
 export type SimulationClock = {
   /** Fecha y hora simulada (ISO 8601). */

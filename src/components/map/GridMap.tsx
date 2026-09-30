@@ -168,7 +168,7 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
           </g>
 
           {!idle && layers.bloqueos && snapshot.blockages.map((b) => (
-            <path key={`bl-${b.id}`} d={toPath(g, [b.from, b.to])} stroke="var(--color-critic)" strokeWidth={Math.max(5, g.cell * 0.3)} strokeLinecap="round" />
+            <path key={`bl-${b.id}`} d={toPath(g, b.path ?? [b.from, b.to])} fill="none" stroke="var(--color-critic)" strokeWidth={Math.max(5, g.cell * 0.3)} strokeLinecap="round" strokeLinejoin="round" />
           ))}
 
           {!idle && layers.rutas && snapshot.vehicles.map((v) => {
