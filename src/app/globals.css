@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* Tokens del estándar GUI KindBox (61.std.gui.v01) */
+@theme {
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-plex), var(--font-inter), sans-serif;
+
+  /* Marca */
+  --color-night: #1e2833;
+  --color-craft: #c9986b;
+  --color-craft-hover: #d6ac84;
+  --color-magenta: #fd4576;
+  --color-magenta-hover: #fe6a91;
+  --color-magenta-pressed: #e03563;
+  --color-pink: #f7bfce;
+  --color-pink-hover: #f9d3dd;
+  --color-pink-pressed: #f48aa8;
+
+  /* Interfaz */
+  --color-canvas: #161d25;
+  --color-panel: #171f28;
+  --color-field: #232b35;
+  --color-raised: #1b242e;
+  --color-line: #2a3441;
+  --color-line-strong: #384351;
+
+  /* Sistema: alertas y notificaciones */
+  --color-critic: #fd4576;
+  --color-warning: #fdc045;
+  --color-success: #27e040;
+
+  /* Subtext */
+  --color-n900: #626c7a;
+  --color-n800: #707986;
+  --color-n700: #7d8591;
+  --color-n600: #999fa7;
+  --color-n500: #8c939c;
+  --color-n400: #a6abb2;
+  --color-n300: #b3b7bd;
+  --color-n200: #c1c4c9;
+  --color-n100: #cfd1d3;
+  --color-n50: #dddedf;
+
+  /* Flota (propuesta de tokens, validada para daltonismo sobre #1E2833) */
+  --color-truck: #62e06e;
+  --color-bike: #2ec4d6;
+  --color-moto: #b47af5;
+
+  --animate-live: live 2s ease-in-out infinite;
+  --animate-blink: blink 1s ease-in-out infinite;
+  --animate-panel-in: panel-in 180ms ease-out;
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-toast-in: toast-in 200ms ease-out;
+
+  @keyframes live {
+    0%, 100% { box-shadow: 0 0 0 4px rgb(39 224 64 / 0.2); }
+    50% { box-shadow: 0 0 0 7px rgb(39 224 64 / 0.04); }
+  }
+  @keyframes blink {
+    50% { opacity: 0.35; }
+  }
+  @keyframes panel-in {
+    from { transform: translateX(16px); opacity: 0.4; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-canvas font-sans text-n50 antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-warning);
+    outline-offset: 2px;
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
