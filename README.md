@@ -2,8 +2,6 @@
 
 Interfaz de monitoreo logístico y simulación de KindBox, construida con Next.js 16 (App Router), React 19, Tailwind CSS 4 y lucide-react. Implementa las pantallas del mockup validado (`../mockup-pantallas.html`) siguiendo el estándar GUI `61.std.gui.v01`.
 
-> **Estado:** solo pantallas. La capa de datos no está conectada: no hay backend ni datos de ejemplo. Las pantallas muestran sus estados vacíos.
-
 ## Cómo ejecutar
 
 ```bash
@@ -49,16 +47,3 @@ src/
     data/actions.ts     ACCIONES: aquí se conectan los comandos
     report.ts           Reporte .txt del resumen de simulación
 ```
-
-## Conexión con el backend (pendiente)
-
-Toda la comunicación pasa por **`src/lib/data/`**; ninguna pantalla llama al servidor directamente.
-
-- **`hooks.ts`**: `useConnection`, `useMapSnapshot`, `useOpsKpis`, `useOrders`, `useMetrics`, `useBreakdowns`, `useVehiclePlates`, `useSavedTrafficLight` y `useSimulationFeed`. Por ahora devuelven listas vacías o `null`. Para conectarlos hay que reemplazar el cuerpo de cada uno (fetch, polling, SSE o WebSocket) respetando los tipos de `lib/types.ts`.
-- **`actions.ts`**: `registerOrder`, `registerBreakdown`, `uploadBreakdownFile`, `saveTrafficLight`, `startSimulation`, `setSimulationPaused`, `setSimulationSpeed` y `cancelSimulation`. Por ahora solo escriben en la consola y responden `{ ok: true }`, para que los flujos se puedan recorrer. Cuando el servidor rechace una operación, deben devolver `{ ok: false, message }` con un texto amable; la interfaz lo mostrará en un aviso.
-
-Reglas del dominio ya reflejadas en la interfaz:
-
-- **Retícula de 70 × 50:** cada intersección `(x, y)`, con x de 0 a 70 e y de 0 a 50 y origen abajo a la izquierda, es una coordenada válida.
-- **Colapso:** la simulación colapsa en cuanto el primer pedido supera su plazo. `SimulationSummary.firstLateOrder` debe venir informado cuando `outcome === "colapso"`.
-- **Semáforo:** los límites contiguos están enlazados (verde desde = ámbar hasta; ámbar desde = rojo hasta).
