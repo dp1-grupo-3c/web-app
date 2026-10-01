@@ -6,15 +6,15 @@
  * backend.
  *
  * No usa React Context a propósito: así las pantallas (incluida
- * "operaciones diarias", que queda sin conectar) no necesitan envolverse
- * en un Provider para que el resto siga funcionando igual que antes.
+ * "operaciones diarias") no necesitan envolverse
+ * en un Provider para compartir la corrida.
  */
 
 import * as api from "@/lib/backend/api";
 import { ErrorServicio } from "@/lib/backend/api";
 import { abrirCanal, type EstadoCanal } from "@/lib/backend/canal";
 import { esFinal, inicial, reducir, type Accion, type EstadoSim } from "@/lib/backend/estado";
-import type { RespuestaAveria, RespuestaSalud, SolicitudSimulacion, VistaAlmacen, VistaParametros } from "@/lib/backend/types";
+import type { RespuestaAveria, RespuestaSalud, VistaAlmacen, VistaParametros } from "@/lib/backend/types";
 import { filaPedidoToFirstLate, TIPO_POR_MODO, trafficLightToSemaforoBody } from "@/lib/data/adapters";
 import { SIMULATION_DAYS_5D } from "@/lib/constants";
 import { addDays, parseISODate, toISODate } from "@/lib/format";
@@ -153,36 +153,18 @@ export const reintentarCanal = () => canalCtrl?.reintentar();
 
 // ---- Acciones --------------------------------------------------------------
 
-/**
- * El backend solo admite una corrida a la vez (409 si ya hay una en curso).
- * Si esta pestaña ya sabe de una corrida activa (de este mismo modo o de
- * otro), la cancela primero. Si aun así el POST devuelve 409 —por ejemplo,
- * otra pestaña arrancó una corrida entre medio—, se resuelve la corrida
- * activa por /api/salud, se cancela y se reintenta una sola vez.
- */
-async function arrancarSinConflicto(solicitud: Partial<SolicitudSimulacion>) {
-  const activaId = state.estado.idActual && !esFinal(state.estado.corrida?.estado) ? state.estado.idActual : null;
-  if (activaId) {
-    // Best-effort: si ya había terminado (carrera con el estado local), el POST de abajo lo valida igual.
-    try { await api.cancelarCorrida(activaId); } catch { /* se reintenta abajo si hace falta */ }
-  }
-  try {
-    return await api.arrancarCorrida(solicitud);
-  } catch (e) {
-    if (!(e instanceof ErrorServicio) || e.codigo !== 409) throw e;
-    const salud = await api.obtenerSalud();
-    if (salud.corridaActiva) await api.cancelarCorrida(salud.corridaActiva);
-    return api.arrancarCorrida(solicitud);
-  }
-}
-
 export async function arrancar(mode: SimulationMode, input: { startDate: string; trafficLight: TrafficLight }): Promise<Result<{ id: string }>> {
   ensureStarted();
+  if (state.estado.idActual && !esFinal(state.estado.corrida?.estado)) {
+    return { ok: false, message: "Ya hay una corrida activa. Para iniciar otra, cancélala explícitamente desde su pantalla." };
+  }
   try {
     const parametros = await api.cambiarSemaforo(input.trafficLight.redTo, input.trafficLight.amberTo);
     set({ parametros });
     const start = parseISODate(input.startDate);
-    const r = await arrancarSinConflicto({
+    // Un 409 se muestra al usuario. Iniciar nunca autoriza cancelar la corrida
+    // compartida, que otra sesión puede haber arrancado mientras tanto.
+    const r = await api.arrancarCorrida({
       tipo: TIPO_POR_MODO[mode],
       primerDia: input.startDate,
       ...(mode === "5d" ? { ultimoDia: toISODate(addDays(start, SIMULATION_DAYS_5D - 1)) } : {}),
@@ -239,4 +221,30 @@ export async function guardarSemaforo(t: TrafficLight): Promise<Result> {
   } catch (e) {
     return { ok: false, message: msg(e) };
   }
+}
+
+/** Arranque explícito del día a día. El servidor fija K=1 y reloj acompasado. */
+export async function arrancarDia(primerDia: string): Promise<Result<{ id: string }>> {
+  ensureStarted();
+  if (state.estado.idActual && !esFinal(state.estado.corrida?.estado)) {
+    return { ok: false, message: "Ya hay una corrida activa. No se ha iniciado otra operación." };
+  }
+  try {
+    const r = await api.arrancarCorrida({
+      tipo: "DIA_A_DIA", primerDia, ultimoDia: primerDia,
+      generarAverias: false, minutosEntreFotografias: 1,
+    });
+    dispatch({ t: "ws", m: { tipo: "corrida", corrida: r.id, carga: r } });
+    return { ok: true, data: { id: r.id } };
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+}
+
+/** Evita que un control diario rezagado cancele una simulación recién iniciada. */
+export async function cancelarDia(id: string): Promise<Result> {
+  if (state.estado.idActual !== id || state.estado.corrida?.tipo !== "DIA_A_DIA") {
+    return { ok: false, message: "La operación seleccionada ya no es la corrida actual." };
+  }
+  return cancelar();
 }

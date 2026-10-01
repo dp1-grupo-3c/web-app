@@ -49,7 +49,7 @@ import type {
 export const TIPO_POR_MODO: Record<SimulationMode, TipoEscenario> = { "5d": "SIMULACION_5D", colapso: "COLAPSO" };
 
 export function modoPorTipo(tipo: TipoEscenario): SimulationMode | null {
-  return tipo === "SIMULACION_5D" ? "5d" : tipo === "COLAPSO" ? "colapso" : null; // DIA_A_DIA: sin pantalla propia todavía
+  return tipo === "SIMULACION_5D" ? "5d" : tipo === "COLAPSO" ? "colapso" : null; // DIA_A_DIA usa la pantalla de operaciones.
 }
 
 const OUTCOME_POR_ESTADO: Partial<Record<EstadoCorrida, SimulationOutcome>> = {

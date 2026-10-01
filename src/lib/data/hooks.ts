@@ -8,10 +8,7 @@
  * corrida activa a la vez en el backend). Cada hook conserva su firma
  * original; lo que cambia es que ya no devuelven datos vacíos.
  *
- * Scope "live" (operaciones diarias) sigue sin conectar: el backend no
- * tiene un modo "en vivo" independiente de una corrida (ver GUIA_FLUJO_DATOS.md,
- * "Lo que el backend no ofrece hoy"). Falta decidir si esa pantalla arranca
- * una corrida DIA_A_DIA automáticamente.
+ * La vista diaria consume exclusivamente corridas DIA_A_DIA.
  */
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -48,7 +45,6 @@ import type {
   VehiclePlates,
 } from "@/lib/types";
 
-const EMPTY_MAP: MapSnapshot = { warehouses: [], vehicles: [], blockages: [] };
 const EMPTY_ORDERS: Order[] = [];
 const EMPTY_BREAKDOWNS: BreakdownRecord[] = [];
 const EMPTY_PLATES: VehiclePlates = { auto: [], moto: [], bicicleta: [] };
@@ -60,11 +56,22 @@ function useStoreState() {
 
 /** true si la corrida activa del store es la que le corresponde a este modo de simulación. */
 const matchesSim = (s: store.Store, mode: SimulationMode) => s.estado.corrida?.tipo === TIPO_POR_MODO[mode];
+const matchesScope = (s: store.Store, scope: DataScope) => scope.kind === "client"
+  || (scope.kind === "live" ? s.estado.corrida?.tipo === "DIA_A_DIA" : matchesSim(s, scope.mode));
+
+export function useDailyRun() {
+  const s = useStoreState();
+  const corrida = s.estado.corrida;
+  return {
+    corrida: corrida?.tipo === "DIA_A_DIA" ? corrida : null,
+    occupied: !!s.estado.idActual && !esFinal(corrida?.estado),
+  };
+}
 
 /** Estado de la conexión en tiempo real. "waiting" = aún no hay fuente de datos. */
 export function useConnection(scope: DataScope): ConnectionState {
   const s = useStoreState();
-  if (scope.kind === "live") return "waiting"; // TODO(backend): sin modo "en vivo" independiente de una corrida
+  if (!matchesScope(s, scope)) return "waiting";
   if (!s.estado.corrida) return s.canal === "desconectado" ? "offline" : "waiting";
   if (s.canal === "conectado") return "live";
   if (s.canal === "reconectando") return "reconnecting";
@@ -76,21 +83,29 @@ export function useConnection(scope: DataScope): ConnectionState {
 export function useMapSnapshot(scope: DataScope): MapSnapshot {
   const s = useStoreState();
   return useMemo(() => {
-    if (scope.kind === "live") return EMPTY_MAP; // TODO(backend)
-    const active = scope.kind === "client" || matchesSim(s, scope.mode);
-    return instantaneaToMapSnapshot(active ? s.estado.instantanea : null, s.almacenes);
+    const active = matchesScope(s, scope);
+    return instantaneaToMapSnapshot(active ? s.estado.instantanea : null, active ? (s.estado.instantanea?.almacenes ?? s.almacenes) : s.almacenes);
   }, [scope, s]);
 }
 
 /** KPIs del resumen superior de operaciones diarias. */
 export function useOpsKpis(): OpsKpis | null {
-  return null; // TODO(backend): pantalla "operaciones diarias" pendiente
+  const s = useStoreState();
+  const i = s.estado.instantanea;
+  const c = s.estado.corrida;
+  if (c?.tipo !== "DIA_A_DIA" || !i) return null;
+  return {
+    fleet: { auto: c.unidadesActivasPorTipo.AUTO, moto: c.unidadesActivasPorTipo.MOTO, bicicleta: c.unidadesActivasPorTipo.BICICLETA },
+    activeOrders: i.metricas.pedidosPendientes + i.metricas.pedidosIncumplidos,
+    deliveredToday: i.metricas.pedidosEntregados,
+    alerts: i.unidades.filter((u) => u.tipoAveria > 0).length,
+  };
 }
 
 /** Pedidos activos: sondeo REST independiente (no viajan por WebSocket). */
 export function useOrders(scope: DataScope): Order[] {
   const s = useStoreState();
-  const id = scope.kind === "live" ? null : scope.kind === "client" ? s.estado.idActual : matchesSim(s, scope.mode) ? s.estado.idActual : null;
+  const id = matchesScope(s, scope) ? s.estado.idActual : null;
   const [filas, setFilas] = useState<FilaPedido[]>([]);
 
   useEffect(() => {
@@ -116,8 +131,7 @@ export function useOrders(scope: DataScope): Order[] {
 export function useMetrics(scope: DataScope): Metrics | null {
   const s = useStoreState();
   return useMemo(() => {
-    if (scope.kind === "live") return null; // TODO(backend)
-    if (scope.kind === "sim" && !matchesSim(s, scope.mode)) return null;
+    if (!matchesScope(s, scope)) return null;
     const m = s.estado.instantanea?.metricas ?? s.estado.resultado?.metricas;
     return m ? metricasToMetrics(m) : null;
   }, [scope, s]);
@@ -132,8 +146,7 @@ export function useMetrics(scope: DataScope): Metrics | null {
 export function useBreakdowns(scope: DataScope): BreakdownRecord[] {
   const s = useStoreState();
   return useMemo(() => {
-    if (scope.kind === "live") return EMPTY_BREAKDOWNS; // TODO(backend)
-    if (scope.kind === "sim" && !matchesSim(s, scope.mode)) return EMPTY_BREAKDOWNS;
+    if (!matchesScope(s, scope)) return EMPTY_BREAKDOWNS;
     const minuto = s.estado.instantanea?.minutoSimulado ?? 0;
     const unidades = s.estado.instantanea?.unidades ?? [];
     return s.averiasSesion.map((r, i): BreakdownRecord => {
@@ -154,8 +167,7 @@ export function useBreakdowns(scope: DataScope): BreakdownRecord[] {
 export function useVehiclePlates(scope: DataScope): VehiclePlates {
   const s = useStoreState();
   return useMemo(() => {
-    if (scope.kind === "live") return EMPTY_PLATES; // TODO(backend)
-    if (scope.kind === "sim" && !matchesSim(s, scope.mode)) return EMPTY_PLATES;
+    if (!matchesScope(s, scope)) return EMPTY_PLATES;
     const plates: VehiclePlates = { auto: [], moto: [], bicicleta: [] };
     for (const u of s.estado.instantanea?.unidades ?? []) {
       if (u.tipoAveria === 0) plates[vistaUnidadToVehicle(u).kind].push(u.codigo);

@@ -47,3 +47,32 @@ src/
     data/actions.ts     ACCIONES: aquí se conectan los comandos
     report.ts           Reporte .txt del resumen de simulación
 ```
+
+## Integración y límites actuales
+
+La web ya consume REST y WebSocket del backend `metaheuristics-platform/service`.
+En desarrollo, `BACKEND_ORIGIN` apunta por defecto a `http://localhost:8080`.
+Los hooks y acciones se apoyan en un store compartido; el mapa utiliza SVG.
+
+En `/operaciones/diarias` se puede iniciar explícitamente una corrida `DIA_A_DIA`,
+consultar mapa, pedidos, métricas y averías, y detenerla con confirmación. Avanza a 1×
+desde las 00:00 de la fecha elegida con los pedidos del dataset. No se inicia al abrir
+la página y no genera averías aleatorias. El backend todavía permite una sola corrida
+activa: las simulaciones y la operación diaria no pueden coexistir. La web muestra el
+conflicto sin cancelar la corrida de otro usuario.
+
+Faltan registro de pedidos nuevos, continuidad entre días, persistencia/recuperación,
+pausa y velocidad en caliente. La vista Cliente aún consume información operativa:
+no está terminado el seguimiento restringido por código. El registro manual informa
+que el pedido no se guardó y conserva el formulario.
+
+Este build requiere el servidor Next; aún no se ha configurado la exportación estática
+para el despliegue Nginx descrito en el PDF. El despliegue del otro repositorio todavía
+empaqueta su visualizador anterior. El diagnóstico y orden de implementación están en
+`metaheuristics-platform/docs/REVISION_ARQUITECTURA.md`.
+
+```bash
+npm test        # regresiones de comandos y convivencia entre sesiones
+npm run lint
+npm run build
+```

@@ -2,7 +2,7 @@
  * ACCIONES (comandos hacia el backend).
  *
  * Delegan en src/lib/data/store.ts, que mantiene el WebSocket y el sondeo
- * REST compartidos. `registerOrder` sigue simulada: el backend no tiene
+ * REST compartidos. `registerOrder` devuelve un error: el backend no tiene
  * ningún endpoint para crear pedidos (solo los trae el dataset del
  * escenario), así que no hay nada real que llamar todavía.
  *
@@ -28,13 +28,11 @@ export type NewBreakdownInput = { plate: string; type: BreakdownType };
 
 export type StartSimulationInput = { mode: SimulationMode; startDate: string; trafficLight: TrafficLight };
 
-async function notConnected<T>(action: string, payload?: unknown): Promise<ActionResult<T>> {
-  console.info(`[KindBox] "${action}" no tiene un endpoint en el backend todavía.`, payload ?? "");
-  return { ok: true };
-}
-
 /** Sin endpoint en el backend: los pedidos vienen fijos del escenario de la corrida. */
-export const registerOrder = (input: NewOrderInput) => notConnected<{ orderId: string }>("registerOrder", input);
+export async function registerOrder(input: NewOrderInput): Promise<ActionResult<{ orderId: string }>> {
+  void input;
+  return { ok: false, message: "El registro de pedidos aún no está disponible. El pedido no se ha guardado." };
+}
 
 const BREAKDOWN_TIPO: Record<BreakdownType, 1 | 2 | 3> = { T1: 1, T2: 2, T3: 3 };
 export const registerBreakdown = (input: NewBreakdownInput) => store.registrarAveria(input.plate, BREAKDOWN_TIPO[input.type]);
