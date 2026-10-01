@@ -18,6 +18,7 @@ import { PANEL_WIDTH } from "@/lib/constants";
 import { useBreakdowns, useConnection, useMapSnapshot, useMetrics, useOpsKpis, useOrders, useSavedTrafficLight, useVehiclePlates } from "@/lib/data/hooks";
 import type { DataScope, EntityRef } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
+import { DailyRunControl } from "./DailyRunControl";
 
 const SCOPE: DataScope = { kind: "live" };
 const PANELS = ["semaforo", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
@@ -75,7 +76,7 @@ export function DailyOperationsScreen() {
           snapshot={snapshot}
           trafficLight={trafficLight}
           layers={layers}
-          topInset={112}
+          topInset={230}
           selected={selected}
           onSelect={setSelected}
           highlight={highlightFor(orders, orderId, panel === "pedidos" ? draft : undefined)}
@@ -89,6 +90,7 @@ export function DailyOperationsScreen() {
         <>
           <OpsHud connection={connection} kpis={kpis} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} />
           <ConnectionBanner state={connection} />
+          <DailyRunControl />
         </>
       }
       panel={panelNode}
