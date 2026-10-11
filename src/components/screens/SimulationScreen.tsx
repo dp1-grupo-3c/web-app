@@ -12,6 +12,7 @@ import { MetricsPanel } from "@/components/panels/MetricsPanel";
 import { EMPTY_DRAFT, OrdersPanel } from "@/components/panels/OrdersPanel";
 import { SimConfigPanel } from "@/components/panels/SimConfigPanel";
 import { ConfirmCancelDialog } from "@/components/simulation/ConfirmCancelDialog";
+import { OtherRunNotice, RUN_TITLE } from "@/components/simulation/OtherRunNotice";
 import { SimOnboarding } from "@/components/simulation/SimOnboarding";
 import { SimulationSummaryModal } from "@/components/simulation/SimulationSummaryModal";
 import { useToast } from "@/components/ui/Toast";
@@ -19,8 +20,10 @@ import { SideRail, type RailItem } from "@/components/workspace/SideRail";
 import { usePanelParam } from "@/components/workspace/usePanelParam";
 import { Workspace } from "@/components/workspace/Workspace";
 import { DEFAULT_TRAFFIC_LIGHT, PANEL_WIDTH } from "@/lib/constants";
+import { esFinal } from "@/lib/backend/estado";
 import { cancelSimulation, forgetSimulation, startSimulation } from "@/lib/data/actions";
-import { useBreakdowns, useMapSnapshot, useMetrics, useOrders, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
+import { TIPO_POR_MODO } from "@/lib/data/adapters";
+import { useActiveRun, useBreakdowns, useMapSnapshot, useMetrics, useOrders, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
@@ -42,23 +45,33 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const breakdowns = useBreakdowns(scope);
   const plates = useVehiclePlates(scope);
   const feed = useSimulationFeed(mode);
+  const active = useActiveRun();
+  const savedTrafficLight = useSavedTrafficLight();
 
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [cancelledByUser, setCancelledByUser] = useState(false);
-  const [summaryDismissed, setSummaryDismissed] = useState(false);
+  const [cancelledId, setCancelledId] = useState<string | null>(null);
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(() => toISODate(new Date()));
   const [trafficLight, setTrafficLight] = useState(DEFAULT_TRAFFIC_LIGHT);
   const [starting, setStarting] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [selected, setSelected] = useState<EntityRef | null>(null);
   const [layers, setLayers] = useState(ALL_LAYERS);
   const [orderId, setOrderId] = useState<string | null>(null);
 
+  // El backend ejecuta una sola corrida a la vez: la fase sale de esa corrida,
+  // no de si se inició desde esta pantalla, para retomarla al recargar,
+  // al volver a la pantalla o cuando la inició otra sesión.
+  const own = active.corrida?.tipo === TIPO_POR_MODO[mode] ? active.corrida : null;
+  const other = active.running && active.corrida && !own ? active.corrida : null;
+  const syncing = !!active.id && !active.corrida; // id conocido por /salud, detalle aún en camino
+  const cancelledByUser = !!own && cancelledId === own.id;
   // La simulación termina por el servidor (éxito, colapso o error) o porque el usuario la cancela.
-  const ended = phase === "ended" || feed.outcome != null;
+  const ended = !!own && (esFinal(own.estado) || feed.outcome != null || cancelledByUser);
   const outcome: SimulationOutcome | null = feed.outcome ?? (cancelledByUser ? "cancelada" : null);
-  const effectivePhase: Phase = ended ? "ended" : phase;
+  const effectivePhase: Phase = !own ? "idle" : ended ? "ended" : "running";
+  const runStartDate = own?.primerDia ?? startDate;
+  const runTrafficLight = own ? savedTrafficLight : trafficLight;
 
   const width = panel === "config" ? PANEL_WIDTH.wide : PANEL_WIDTH.default;
   const close = () => setPanel(null);
@@ -68,24 +81,24 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     const res = await startSimulation({ mode, startDate, trafficLight });
     setStarting(false);
     if (!res.ok) return toast.error(res.message);
-    setPhase("running");
     setPanel(null);
   };
   const confirmCancel = async () => {
+    if (!confirming) return;
+    const stoppingOther = confirming === other?.id;
     setCancelling(true);
-    const res = await cancelSimulation();
+    const res = await cancelSimulation(confirming);
     setCancelling(false);
+    setConfirming(null);
     if (!res.ok) return toast.error(res.message);
-    setConfirming(false);
-    setCancelledByUser(true);
-    setPhase("ended");
+    if (stoppingOther) return toast.success("Se detuvo la corrida anterior. Ya puedes configurar esta simulación.");
+    setCancelledId(confirming);
     setPanel(null);
   };
   const newSimulation = () => {
     forgetSimulation();
-    setPhase("idle");
-    setCancelledByUser(false);
-    setSummaryDismissed(false);
+    setCancelledId(null);
+    setDismissedId(null);
     setPanel("config");
   };
 
@@ -107,7 +120,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
 
   const panelNode =
     shown === "config" ? (
-      <SimConfigPanel mode={mode} readOnly={!idle} startDate={startDate} onStartDate={setStartDate} trafficLight={trafficLight} onTrafficLight={setTrafficLight} starting={starting} onStart={start} onClose={close} width={width} />
+      <SimConfigPanel mode={mode} readOnly={!idle || !!other || syncing} startDate={runStartDate} onStartDate={setStartDate} trafficLight={runTrafficLight} onTrafficLight={setTrafficLight} starting={starting} onStart={start} onClose={close} width={width} />
     )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} />
     : shown === "pedidos" ? (
@@ -124,27 +137,28 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         <>
           <GridMap
             snapshot={snapshot}
-            trafficLight={trafficLight}
+            trafficLight={runTrafficLight}
             layers={layers}
             topInset={112}
             neutralWarehouses={idle}
             selected={selected}
             onSelect={setSelected}
             highlight={highlightFor(orders, orderId)}
-            emptyMessage={idle ? undefined : WAITING_MESSAGE}
+            emptyMessage={idle && !syncing ? undefined : WAITING_MESSAGE}
           />
-          {idle && !shown && <SimOnboarding mode={mode} onConfigure={() => setPanel("config")} />}
+          {other && !shown && <OtherRunNotice tipo={other.tipo} primerDia={other.primerDia} onStop={() => setConfirming(other.id)} />}
+          {idle && !other && !syncing && !shown && <SimOnboarding mode={mode} onConfigure={() => setPanel("config")} />}
         </>
       }
       hud={
         !idle && (
           <SimHud
             mode={mode}
-            startDate={startDate}
+            startDate={runStartDate}
             clock={feed.clock}
             ended={ended}
             compact={!!shown}
-            onCancel={() => setConfirming(true)}
+            onCancel={() => own && setConfirming(own.id)}
           />
         )
       }
@@ -152,15 +166,25 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
       rail={<SideRail items={items} bottomItems={bottom} active={shown} onToggle={(p) => setPanel(shown === p ? null : p)} homeHref="/operaciones" />}
       overlay={
         <>
-          {confirming && <ConfirmCancelDialog busy={cancelling} onKeep={() => setConfirming(false)} onConfirm={confirmCancel} />}
-          {ended && outcome && !summaryDismissed && (
+          {confirming && (
+            confirming === other?.id ? (
+              <ConfirmCancelDialog
+                busy={cancelling}
+                onKeep={() => setConfirming(null)}
+                onConfirm={confirmCancel}
+                title={`¿Detener «${RUN_TITLE[other.tipo]}»?`}
+                description="La corrida se detendrá para todas las sesiones conectadas y no podrás reanudarla."
+              />
+            ) : <ConfirmCancelDialog busy={cancelling} onKeep={() => setConfirming(null)} onConfirm={confirmCancel} />
+          )}
+          {ended && outcome && dismissedId !== own?.id && (
             <SimulationSummaryModal
               mode={mode}
               outcome={outcome}
-              startDate={feed.summary?.startDate ?? startDate}
+              startDate={feed.summary?.startDate ?? runStartDate}
               summary={feed.summary}
               errorMessage={feed.error}
-              onClose={() => setSummaryDismissed(true)}
+              onClose={() => setDismissedId(own?.id ?? null)}
               onNew={newSimulation}
             />
           )}

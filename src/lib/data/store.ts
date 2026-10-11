@@ -104,7 +104,27 @@ function fetchFirstLateIfNeeded(estado: EstadoSim) {
  * resumen en vez de dejar configurar una corrida nueva.
  */
 export function olvidarCorrida() {
+  olvidada = state.estado.idActual;
   set({ estado: inicial, averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null });
+}
+
+/** Corrida terminada que el usuario descartó: /salud podría seguir reportándola. */
+let olvidada: string | null = null;
+
+/**
+ * Consulta /salud y adopta la corrida activa del backend si el store aún no
+ * la sigue. Cubre las corridas iniciadas antes de cargar la página o desde
+ * otra sesión cuando el WebSocket no las anunció (caído o reconectando).
+ */
+export async function sincronizarActiva() {
+  try {
+    const salud = await api.obtenerSalud();
+    set({ salud });
+    const id = salud.corridaActiva;
+    if (id && id !== state.estado.idActual && id !== olvidada) dispatch({ t: "seleccionar", id });
+  } catch {
+    // se reintenta en el siguiente ciclo
+  }
 }
 
 // ---- Arranque (idempotente) ----------------------------------------------
@@ -116,12 +136,8 @@ export function ensureStarted() {
   if (started || typeof window === "undefined") return;
   started = true;
 
-  api.obtenerSalud()
-    .then((salud) => {
-      set({ salud });
-      if (salud.corridaActiva) dispatch({ t: "seleccionar", id: salud.corridaActiva });
-    })
-    .catch(() => {});
+  sincronizarActiva();
+  setInterval(sincronizarActiva, 5000);
   api.obtenerAlmacenes().then((almacenes) => set({ almacenes })).catch(() => {});
   api.obtenerParametros().then((parametros) => set({ parametros })).catch(() => {});
 
@@ -177,9 +193,14 @@ export async function arrancar(mode: SimulationMode, input: { startDate: string;
   }
 }
 
-export async function cancelar(): Promise<Result> {
+/**
+ * Cancela la corrida actual. Con `idEsperado`, solo si sigue siendo la que el
+ * usuario vio al confirmar: la corrida compartida pudo cambiar entretanto.
+ */
+export async function cancelar(idEsperado?: string): Promise<Result> {
   const id = state.estado.idActual;
   if (!id) return { ok: false, message: "No hay ninguna corrida activa para cancelar." };
+  if (idEsperado && id !== idEsperado) return { ok: false, message: "La corrida que intentas detener ya no es la actual." };
   try {
     const r = await api.cancelarCorrida(id);
     dispatch({ t: "ws", m: { tipo: "corrida", corrida: id, carga: r } });
@@ -246,5 +267,5 @@ export async function cancelarDia(id: string): Promise<Result> {
   if (state.estado.idActual !== id || state.estado.corrida?.tipo !== "DIA_A_DIA") {
     return { ok: false, message: "La operación seleccionada ya no es la corrida actual." };
   }
-  return cancelar();
+  return cancelar(id);
 }

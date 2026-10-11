@@ -122,3 +122,33 @@ test("un control diario obsoleto no cancela otra corrida", async () => {
   assert.equal((await store.cancelarDia("corrida-compartida")).ok, false);
   assert.equal(calls.cancel, 0);
 });
+
+test("se adopta la corrida activa que reporta el servidor aunque la haya iniciado otra sesión", async () => {
+  const { api, store } = modules();
+  api.obtenerSalud = async () => ({ corridaActiva: "corrida-ajena" });
+  await store.sincronizarActiva();
+  assert.equal(store.getSnapshot().estado.idActual, "corrida-ajena");
+});
+
+test("una corrida terminada y descartada no se vuelve a adoptar", async () => {
+  const { api, store } = modules();
+  fakeApi(api);
+  await store.arrancar("5d", input);
+  store.olvidarCorrida();
+  api.obtenerSalud = async () => ({ corridaActiva: "corrida-compartida" });
+  await store.sincronizarActiva();
+  assert.equal(store.getSnapshot().estado.idActual, null);
+  api.obtenerSalud = async () => ({ corridaActiva: "corrida-nueva" });
+  await store.sincronizarActiva();
+  assert.equal(store.getSnapshot().estado.idActual, "corrida-nueva");
+});
+
+test("detener no cancela una corrida distinta a la que se confirmó", async () => {
+  const { api, store } = modules();
+  const calls = fakeApi(api);
+  await store.arrancar("5d", input);
+  assert.equal((await store.cancelar("otra-corrida")).ok, false);
+  assert.equal(calls.cancel, 0);
+  assert.equal((await store.cancelar("corrida-compartida")).ok, true);
+  assert.equal(calls.cancel, 1);
+});

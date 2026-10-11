@@ -43,7 +43,7 @@ export const saveTrafficLight = (value: TrafficLight) => store.guardarSemaforo(v
 
 export const startSimulation = (input: StartSimulationInput) => store.arrancar(input.mode, { startDate: input.startDate, trafficLight: input.trafficLight });
 
-export const cancelSimulation = () => store.cancelar();
+export const cancelSimulation = (expectedId?: string) => store.cancelar(expectedId);
 
 /** Olvida la corrida terminada del lado del cliente para poder configurar una nueva (no llama al backend). */
 export const forgetSimulation = () => store.olvidarCorrida();
