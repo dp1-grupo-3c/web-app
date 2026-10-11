@@ -68,6 +68,22 @@ export function useDailyRun() {
   };
 }
 
+/**
+ * Corrida actual del backend, sea del tipo que sea: solo hay una a la vez.
+ * Al montar la pantalla vuelve a consultar /salud para no depender de lo que
+ * el store supiera antes de navegar.
+ */
+export function useActiveRun() {
+  const s = useStoreState();
+  useEffect(() => { store.sincronizarActiva(); }, []);
+  const corrida = s.estado.corrida;
+  return {
+    id: s.estado.idActual,
+    corrida,
+    running: !!s.estado.idActual && !esFinal(corrida?.estado),
+  };
+}
+
 /** Estado de la conexión en tiempo real. "waiting" = aún no hay fuente de datos. */
 export function useConnection(scope: DataScope): ConnectionState {
   const s = useStoreState();
