@@ -159,7 +159,6 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             snapshot={snapshot}
             trafficLight={runTrafficLight}
             layers={layers}
-            topInset={112}
             neutralWarehouses={idle}
             selected={selected}
             onSelect={setSelected}

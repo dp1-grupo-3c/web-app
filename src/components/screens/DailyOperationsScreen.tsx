@@ -76,7 +76,6 @@ export function DailyOperationsScreen() {
           snapshot={snapshot}
           trafficLight={trafficLight}
           layers={layers}
-          topInset={230}
           selected={selected}
           onSelect={setSelected}
           highlight={highlightFor(orders, orderId, panel === "pedidos" ? draft : undefined)}
