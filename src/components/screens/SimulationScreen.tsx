@@ -10,12 +10,14 @@ import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
 import { EMPTY_DRAFT, OrdersPanel } from "@/components/panels/OrdersPanel";
+import { SectionsPanel } from "@/components/panels/SectionsPanel";
 import { SimConfigPanel } from "@/components/panels/SimConfigPanel";
 import { ConfirmCancelDialog } from "@/components/simulation/ConfirmCancelDialog";
 import { OtherRunNotice, RUN_TITLE } from "@/components/simulation/OtherRunNotice";
 import { SimOnboarding } from "@/components/simulation/SimOnboarding";
 import { SimulationSummaryModal } from "@/components/simulation/SimulationSummaryModal";
 import { useToast } from "@/components/ui/Toast";
+import { PanelPinContext, usePinnedPreference } from "@/components/workspace/PanelPin";
 import { SideRail, type RailItem } from "@/components/workspace/SideRail";
 import { usePanelParam } from "@/components/workspace/usePanelParam";
 import { Workspace } from "@/components/workspace/Workspace";
@@ -28,8 +30,16 @@ import { toISODate } from "@/lib/format";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 
-const PANELS = ["config", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
+const PANELS = ["menu", "config", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
+const DESCRIPTIONS: Partial<Record<Panel, string>> = {
+  config: "Fecha de inicio y rangos del semáforo.",
+  metricas: "Indicadores acumulados de la simulación.",
+  pedidos: "Pedidos activos y su destino en el mapa.",
+  averias: "Registra averías y revisa las recientes.",
+  ayuda: "Guía rápida de la pantalla.",
+  leyenda: "Íconos del mapa y capas visibles.",
+};
 const SCOPES: Record<SimulationMode, DataScope> = { "5d": { kind: "sim", mode: "5d" }, colapso: { kind: "sim", mode: "colapso" } };
 const noop = () => {};
 
@@ -39,6 +49,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const scope = SCOPES[mode];
   const toast = useToast();
   const [panel, setPanel] = usePanelParam(PANELS);
+  const [pinned, setPinned] = usePinnedPreference();
   const snapshot = useMapSnapshot(scope);
   const orders = useOrders(scope);
   const metrics = useMetrics(scope);
@@ -116,10 +127,19 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     { id: "leyenda", label: "Leyenda", Icon: Layers },
   ];
   // Durante la configuración solo se ofrecen los paneles disponibles.
-  const shown = idle && panel && !["config", "ayuda", "leyenda"].includes(panel) ? null : panel;
+  const requested = idle && panel && !["menu", "config", "ayuda", "leyenda"].includes(panel) ? null : panel;
+  // Fijado, el panel no se cierra: sin una sección elegida muestra el menú de secciones.
+  const shown = requested ?? (pinned ? "menu" : null);
+  const section = shown === "menu" ? null : shown;
+  const pin = {
+    pinned,
+    onTogglePin: () => setPinned(!pinned),
+    onBack: shown === "menu" ? undefined : () => setPanel("menu"),
+  };
 
   const panelNode =
-    shown === "config" ? (
+    shown === "menu" ? <SectionsPanel items={[...items, ...bottom]} descriptions={DESCRIPTIONS} onPick={setPanel} onClose={close} width={width} />
+    : shown === "config" ? (
       <SimConfigPanel mode={mode} readOnly={!idle || !!other || syncing} startDate={runStartDate} onStartDate={setStartDate} trafficLight={runTrafficLight} onTrafficLight={setTrafficLight} starting={starting} onStart={start} onClose={close} width={width} />
     )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} />
@@ -146,8 +166,8 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             highlight={highlightFor(orders, orderId)}
             emptyMessage={idle && !syncing ? undefined : WAITING_MESSAGE}
           />
-          {other && !shown && <OtherRunNotice tipo={other.tipo} primerDia={other.primerDia} onStop={() => setConfirming(other.id)} />}
-          {idle && !other && !syncing && !shown && <SimOnboarding mode={mode} onConfigure={() => setPanel("config")} />}
+          {other && !section && <OtherRunNotice tipo={other.tipo} primerDia={other.primerDia} onStop={() => setConfirming(other.id)} />}
+          {idle && !other && !syncing && !section && <SimOnboarding mode={mode} onConfigure={() => setPanel("config")} />}
         </>
       }
       hud={
@@ -162,8 +182,9 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
           />
         )
       }
-      panel={panelNode}
-      rail={<SideRail items={items} bottomItems={bottom} active={shown} onToggle={(p) => setPanel(shown === p ? null : p)} homeHref="/operaciones" />}
+      panel={panelNode && <PanelPinContext.Provider value={pin}>{panelNode}</PanelPinContext.Provider>}
+      panelFloating={!pinned}
+      rail={<SideRail items={items} bottomItems={bottom} active={shown} onToggle={(p) => setPanel(shown === p ? (pinned ? "menu" : null) : p)} homeHref="/operaciones" />}
       overlay={
         <>
           {confirming && (
