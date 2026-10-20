@@ -18,7 +18,7 @@ npm run lint
 | `/` | Bienvenida · selección de perfil |
 | `/operaciones` | Menú de operaciones (personal PaqRap) |
 | `/operaciones/diarias` | Operaciones en vivo (operador) |
-| `/cliente` | Operaciones en vivo (cliente) |
+| `/cliente` | Mis pedidos (cliente): pide el número de cliente y lista sus pedidos (`?id=`) · demostración |
 | `/simulacion/5-dias` | Simulación de 5 días |
 | `/simulacion/colapso` | Simulación hasta el colapso |
 
@@ -62,8 +62,9 @@ activa: las simulaciones y la operación diaria no pueden coexistir. La web mues
 conflicto sin cancelar la corrida de otro usuario.
 
 Faltan registro de pedidos nuevos, continuidad entre días, persistencia/recuperación,
-pausa y velocidad en caliente. La vista Cliente aún consume información operativa:
-no está terminado el seguimiento restringido por código. El registro manual informa
+pausa y velocidad en caliente. La vista Cliente es una demostración: pide el número de
+cliente y muestra 10 pedidos tomados al azar de la corrida en curso (fijos para
+cada número), porque el backend todavía no filtra pedidos por cliente. El registro manual informa
 que el pedido no se guardó y conserva el formulario.
 
 Este build requiere el servidor Next; aún no se ha configurado la exportación estática
