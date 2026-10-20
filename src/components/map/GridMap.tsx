@@ -6,11 +6,12 @@ import { Button, ControlButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { GRID } from "@/lib/constants";
 import { formatCoord } from "@/lib/format";
-import type { Coord, EntityRef, MapSnapshot, TrafficLight } from "@/lib/types";
+import type { Coord, EntityRef, MapSnapshot, TrafficLight, Vehicle } from "@/lib/types";
 import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from "./EntityPopover";
 import { computeGeometry, nearestCoord, project, toPath, zoomView, type View } from "./geometry";
 import { BlockageIcon, PINK, vehicleAppearance, warehouseAppearance, type MapLayers } from "./layers";
 import { MapPin } from "./MapPin";
+import { useVehicleMotion } from "./motion";
 
 type GridMapProps = {
   snapshot: MapSnapshot;
@@ -42,6 +43,8 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
   const [hover, setHover] = useState<Coord | null>(null);
   const [dragging, setDragging] = useState(false);
   const ready = size.w > 0 && size.h > 0;
+  const motion = useVehicleMotion(snapshot.vehicles);
+  const shownAt = (v: Vehicle) => motion[v.id] ?? v.position;
 
   // Tamaño del contenedor
   useEffect(() => {
@@ -118,7 +121,7 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
     };
     if (selected.type === "vehicle") {
       const v = snapshot.vehicles.find((x) => x.id === selected.id);
-      if (v && !idle) popover = <VehiclePopover vehicle={v} anchor={anchorFor(v.position)} onClose={close} mapHeight={size.h} />;
+      if (v && !idle) popover = <VehiclePopover vehicle={v} anchor={anchorFor(shownAt(v))} onClose={close} mapHeight={size.h} />;
     } else if (selected.type === "warehouse") {
       const w = snapshot.warehouses.find((x) => x.id === selected.id);
       if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} />;
@@ -198,7 +201,7 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
 
           {!idle && layers.flota && snapshot.vehicles.map((v) => {
             const { color, Icon, meta } = vehicleAppearance(v);
-            const [x, y] = project(g, v.position);
+            const [x, y] = project(g, shownAt(v));
             return <MapPin key={`vh-${v.id}`} x={x} y={y} color={color} Icon={Icon} label={`${meta.label} ${v.plate}${v.status === "averiado" ? " (averiado)" : ""}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} />;
           })}
 
