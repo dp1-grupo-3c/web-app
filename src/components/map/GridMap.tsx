@@ -17,8 +17,6 @@ type GridMapProps = {
   snapshot: MapSnapshot;
   trafficLight: TrafficLight;
   layers: MapLayers;
-  /** Espacio superior reservado para el resumen (HUD). */
-  topInset: number;
   /** Almacenes sin semáforo (simulación aún no iniciada). */
   neutralWarehouses?: boolean;
   /** Intersección destacada (pedido seleccionado o destino elegido). */
@@ -32,9 +30,7 @@ type GridMapProps = {
   emptyMessage?: ReactNode;
 };
 
-const TICK_COLOR = "#8c939c";
-
-export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage }: GridMapProps) {
+export function GridMap({ snapshot, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage }: GridMapProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
@@ -75,7 +71,7 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
     return () => window.removeEventListener("keydown", onKey);
   }, [pickMode, onCancelPick]);
 
-  const g = computeGeometry(size.w, size.h, topInset, view);
+  const g = computeGeometry(size.w, size.h, view);
   const local = (e: PointerEvent) => {
     const r = svgRef.current!.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top] as const;
@@ -133,7 +129,6 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
 
   const [x0, y0] = project(g, { x: 0, y: GRID.height });
   const [x1, y1] = project(g, { x: GRID.width, y: 0 });
-  const step = view.zoom >= 2 ? 5 : 10;
   const minor = Math.max(0.8, g.cell * 0.07);
   const major = Math.max(1.6, g.cell * 0.14);
 
@@ -152,22 +147,14 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
           onPointerUp={onPointerUp}
           onPointerLeave={() => setHover(null)}
         >
-          <rect x={x0 - g.cell * 0.7} y={y0 - g.cell * 0.7} width={x1 - x0 + g.cell * 1.4} height={y1 - y0 + g.cell * 1.4} rx={10} fill="#1e2833" stroke="#2b3643" />
+          <rect width={size.w} height={size.h} fill="#1e2833" />
           <g aria-hidden>
             {Array.from({ length: GRID.width + 1 }, (_, i) => (
-              <line key={`v${i}`} x1={x0 + i * g.cell} y1={y0} x2={x0 + i * g.cell} y2={y1} stroke={i % 10 ? "#2c3845" : "#3f4c5c"} strokeWidth={i % 10 ? minor : major} />
+              <line key={`v${i}`} x1={x0 + i * g.cx} y1={y0} x2={x0 + i * g.cx} y2={y1} stroke={i % 10 ? "#2c3845" : "#3f4c5c"} strokeWidth={i % 10 ? minor : major} />
             ))}
             {Array.from({ length: GRID.height + 1 }, (_, j) => (
-              <line key={`h${j}`} x1={x0} y1={y1 - j * g.cell} x2={x1} y2={y1 - j * g.cell} stroke={j % 10 ? "#2c3845" : "#3f4c5c"} strokeWidth={j % 10 ? minor : major} />
+              <line key={`h${j}`} x1={x0} y1={y1 - j * g.cy} x2={x1} y2={y1 - j * g.cy} stroke={j % 10 ? "#2c3845" : "#3f4c5c"} strokeWidth={j % 10 ? minor : major} />
             ))}
-            {Array.from({ length: Math.floor(GRID.width / step) + 1 }, (_, k) => (
-              <text key={`tx${k}`} x={x0 + k * step * g.cell} y={y1 + 24} textAnchor="middle" fill={TICK_COLOR} fontSize={11}>{k * step}</text>
-            ))}
-            {Array.from({ length: Math.floor(GRID.height / step) + 1 }, (_, k) => (
-              <text key={`ty${k}`} x={x0 - 16} y={y1 - k * step * g.cell + 4} textAnchor="end" fill={TICK_COLOR} fontSize={11}>{k * step}</text>
-            ))}
-            <text x={x1 + 14} y={y1 + 24} fill="#626c7a" fontSize={11} fontWeight={600}>x</text>
-            <text x={x0 - 16} y={y0 - 16} textAnchor="end" fill="#626c7a" fontSize={11} fontWeight={600}>y</text>
           </g>
 
           {!idle && layers.bloqueos && snapshot.blockages.map((b) => (
@@ -219,6 +206,22 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
         </svg>
       )}
 
+      {hover && !dragging && (() => {
+        // Dirección de la intersección bajo el cursor (la retícula ya no lleva numeración).
+        const [x, y] = project(g, hover);
+        const right = x < size.w - 170;
+        const below = y < 90;
+        return (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute z-[5] rounded-lg border border-line-strong bg-panel/95 px-2.5 py-1.5 text-[13px] whitespace-nowrap text-n200 tabular-nums shadow-[0_8px_24px_rgb(0_0_0/0.35)]"
+            style={{ left: x, top: y, transform: `translate(${right ? "14px" : "calc(-100% - 14px)"}, ${below ? "14px" : "calc(-100% - 14px)"})` }}
+          >
+            Dirección <b className="font-semibold text-white">({hover.x}, {hover.y})</b>
+          </div>
+        );
+      })()}
+
       {popover}
 
       {pickMode && (
@@ -228,19 +231,15 @@ export function GridMap({ snapshot, trafficLight, layers, topInset, neutralWareh
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 z-[3] flex items-end gap-2.5">
-        <div className="flex flex-col rounded-xl border border-line bg-panel/95 p-1 shadow-[0_8px_24px_rgb(0_0_0/0.3)]">
-          <ControlButton label="Acercar" onClick={() => setView((v) => zoomView(v, 1))}><Plus className="size-[22px]" /></ControlButton>
-          <hr className="mx-1.5 my-0.5 border-line-strong" />
-          <ControlButton label="Alejar" onClick={() => setView((v) => zoomView(v, -1))}><Minus className="size-[22px]" /></ControlButton>
-          <hr className="mx-1.5 my-0.5 border-line-strong" />
-          <ControlButton label="Ver toda la retícula" onClick={() => setView({ zoom: 1, pan: { x: 0, y: 0 } })}><Focus className="size-[22px]" /></ControlButton>
+      <div className="absolute bottom-3 left-4 z-[3] flex items-center gap-2.5">
+        <div className="flex h-10 items-center rounded-xl border border-line bg-panel/95 px-0.5 shadow-[0_8px_24px_rgb(0_0_0/0.3)] [&>button]:size-9">
+          <ControlButton label="Acercar" onClick={() => setView((v) => zoomView(v, 1))}><Plus className="size-5" /></ControlButton>
+          <span className="mx-0.5 h-5 border-l border-line-strong" aria-hidden />
+          <ControlButton label="Alejar" onClick={() => setView((v) => zoomView(v, -1))}><Minus className="size-5" /></ControlButton>
+          <span className="mx-0.5 h-5 border-l border-line-strong" aria-hidden />
+          <ControlButton label="Ver toda la retícula" onClick={() => setView({ zoom: 1, pan: { x: 0, y: 0 } })}><Focus className="size-5" /></ControlButton>
         </div>
-        <div aria-live="off" className="flex h-8 items-center gap-2 rounded-lg border border-line bg-panel/95 px-3 text-[13px] whitespace-nowrap text-n200 tabular-nums">
-          <Crosshair className="size-4" aria-hidden />
-          {hover ? <span>x <b className="font-semibold text-white">{hover.x}</b> · y <b className="font-semibold text-white">{hover.y}</b></span> : <span>Pasa el cursor por el mapa</span>}
-        </div>
-        <span className="flex h-8 items-center text-xs text-n500">{Math.round(view.zoom * 100)} %</span>
+        <span className="flex h-8 items-center rounded-lg bg-panel/80 px-2 text-xs text-n400">{Math.round(view.zoom * 100)} %</span>
         {ready && isEmpty && emptyMessage && (
           <div role="status" className="flex h-8 items-center gap-2 rounded-lg border border-line bg-panel/95 px-3 text-[13px] whitespace-nowrap text-n300">
             <span className="size-2 rounded-full bg-n700" aria-hidden />
