@@ -219,3 +219,58 @@ export function useSimulationFeed(mode: SimulationMode): {
     return { clock, summary, outcome, error: s.estado.corrida.error };
   }, [s, mode]);
 }
+
+const DEMO_ORDERS = 10;
+
+/** Orden pseudoaleatorio estable para un cliente (FNV-1a): la muestra no cambia entre consultas. */
+function demoRank(clientId: string, orderId: number) {
+  let h = 2166136261;
+  for (const ch of `${clientId}:${orderId}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  // Mezcla final: sin ella, IDs consecutivos quedan en orden casi consecutivo.
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+/**
+ * Pedidos del cliente — SIMULADO. El backend aún no relaciona pedidos con el
+ * cliente que consulta, así que se toman 10 pedidos al azar de la corrida en
+ * curso (fijos para cada ID) y se sigue su estado con cada consulta.
+ */
+export function useClientDemoOrders(clientId: string): { orders: Order[]; running: boolean; loading: boolean } {
+  const s = useStoreState();
+  const id = s.estado.idActual;
+  const running = !!id && !esFinal(s.estado.corrida?.estado);
+  const [data, setData] = useState<{ key: string; picked: number[]; filas: FilaPedido[] } | null>(null);
+  const key = `${id}:${clientId}`;
+
+  useEffect(() => {
+    if (!id) return;
+    let vivo = true;
+    const ciclo = async () => {
+      try {
+        const pagina = await api.paginaPedidos(id, { tamano: 500, soloActivos: false });
+        if (!vivo) return;
+        setData((prev) => {
+          // Se conservan los ya elegidos y, mientras falten, se completan con los siguientes en el orden del cliente.
+          const picked = prev?.key === key ? prev.picked.filter((p) => pagina.filas.some((f) => f.id === p)) : [];
+          const rest = pagina.filas.filter((f) => !picked.includes(f.id)).sort((a, b) => demoRank(clientId, a.id) - demoRank(clientId, b.id));
+          picked.push(...rest.slice(0, DEMO_ORDERS - picked.length).map((f) => f.id));
+          return { key, picked, filas: pagina.filas };
+        });
+      } catch {
+        // se mantiene la última lista conocida
+      }
+    };
+    ciclo();
+    const t = setInterval(ciclo, 3000);
+    return () => { vivo = false; clearInterval(t); };
+  }, [id, clientId, key]);
+
+  const vehicles = useMemo(() => s.estado.instantanea?.unidades.map(vistaUnidadToVehicle) ?? [], [s.estado.instantanea]);
+  const orders = useMemo(() => {
+    if (!id || data?.key !== key) return EMPTY_ORDERS;
+    return data.filas.filter((f) => data.picked.includes(f.id)).map((f) => filaPedidoToOrder(f, vehicles));
+  }, [id, key, data, vehicles]);
+  return { orders, running, loading: !!id && data?.key !== key };
+}
