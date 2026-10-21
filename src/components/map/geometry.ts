@@ -9,11 +9,8 @@ export type View = { zoom: number; pan: { x: number; y: number } };
  */
 export type Geometry = { cx: number; cy: number; cell: number; ox: number; oy: number; width: number; height: number };
 
-/**
- * La retícula ocupa todo el recuadro; el resumen (HUD) y los controles flotan encima.
- * Arriba queda lo justo para que no se recorte un marcador en la fila superior.
- */
-const INSET = { left: 16, right: 16, top: 44, bottom: 16 };
+/** La retícula ocupa todo el recuadro con un margen mínimo; el resumen (HUD) y los controles flotan encima. */
+const INSET = { left: 16, right: 16, top: 16, bottom: 16 };
 export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 4;
 
