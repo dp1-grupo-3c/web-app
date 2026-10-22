@@ -70,6 +70,18 @@
   }
 }
 
+/* Resalta la ruta seleccionada sin ocultarla por completo durante las pausas. */
+.selected-vehicle-route {
+  animation: selected-route-pulse 1.2s ease-in-out infinite;
+}
+@keyframes selected-route-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .selected-vehicle-route { animation: none; }
+}
+
 @layer base {
   html {
     color-scheme: dark;

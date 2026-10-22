@@ -28,7 +28,10 @@ export const formatElapsed = (minutes: number) =>
 export const formatClock = (seconds: number) => `${pad2(Math.floor(seconds / 60))}:${pad2(seconds % 60)}`;
 
 /** 197 → "3:17 h" */
-export const formatHours = (minutes: number) => `${Math.floor(minutes / 60)}:${pad2(Math.round(minutes % 60))} h`;
+export const formatHours = (minutes: number) => {
+  const rounded = Math.max(0, Math.round(minutes));
+  return `${Math.floor(rounded / 60)}:${pad2(rounded % 60)} h`;
+};
 
 /** 170 → "2 h 50 min"; 42 → "42 min" */
 export const formatDuration = (minutes: number) =>

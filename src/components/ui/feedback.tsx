@@ -68,11 +68,11 @@ export function Tile({ children, color, size = 40, className }: { children: Reac
   );
 }
 
-export function StatCard({ label, value, detail }: { label: string; value: ReactNode; detail?: ReactNode }) {
+export function StatCard({ label, value, detail, compactValue = false, centered = false }: { label: string; value: ReactNode; detail?: ReactNode; compactValue?: boolean; centered?: boolean }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-line bg-night px-4 py-3.5">
+    <div className={cn("flex min-w-0 flex-col justify-center gap-1 rounded-xl border border-line bg-night px-4 py-3.5", centered && "items-center text-center")} style={compactValue ? { containerType: "inline-size" } : undefined}>
       <span className="text-xs text-n500">{label}</span>
-      <span className="text-2xl leading-tight font-bold whitespace-nowrap text-white tabular-nums">{value}</span>
+      <span className={cn("block w-full min-w-0 font-bold whitespace-nowrap text-white tabular-nums", compactValue ? "leading-snug" : "text-2xl leading-tight")} title={typeof value === "string" ? value : undefined} style={compactValue ? { fontSize: `min(1.125rem, ${145 / (typeof value === "string" || typeof value === "number" ? Math.max(1, String(value).length) : 16)}cqw)` } : undefined}>{value}</span>
       {detail && <span className="text-xs text-n500">{detail}</span>}
     </div>
   );

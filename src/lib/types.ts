@@ -7,7 +7,7 @@
 export type Coord = { x: number; y: number };
 
 export type VehicleKind = "auto" | "moto" | "bicicleta";
-export type VehicleStatus = "en_ruta" | "disponible" | "averiado";
+export type VehicleStatus = "en_ruta" | "disponible" | "averiado" | "en_alimentacion" | "abasteciendo";
 export type BreakdownType = "T1" | "T2" | "T3";
 export type PriorityCode = "P1" | "P2" | "P3" | "P4" | "N";
 export type StatusTone = "ok" | "warn" | "crit";
@@ -25,6 +25,8 @@ export type Vehicle = {
   load: number;
   capacity: number;
   etaMinutes?: number;
+  /** Destino inmediato; puede faltar durante el servicio aunque exista ruta pendiente. */
+  destination?: Coord;
   breakdownType?: BreakdownType;
   orders: VehicleOrderLoad[];
 };
@@ -49,7 +51,8 @@ export type Blockage = {
   path?: Coord[];
 };
 
-export type MapSnapshot = { warehouses: Warehouse[]; vehicles: Vehicle[]; blockages: Blockage[] };
+export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number };
+export type MapSnapshot = { warehouses: Warehouse[]; vehicles: Vehicle[]; blockages: Blockage[]; sample?: MotionSample };
 
 export type OrderStatus = "por_asignar" | "en_almacen" | "en_ruta" | "entregado";
 

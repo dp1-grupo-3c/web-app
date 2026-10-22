@@ -1,28 +1,22 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-function pageList(page: number, count: number): (number | "…")[] {
-  if (count <= 5) return Array.from({ length: count }, (_, i) => i + 1);
-  const pages = [...new Set([1, count, page - 1, page, page + 1].filter((p) => p >= 1 && p <= count))].sort((a, b) => a - b);
-  const out: (number | "…")[] = [];
-  pages.forEach((p, i) => {
-    if (i && p - pages[i - 1] > 1) out.push("…");
-    out.push(p);
-  });
-  return out;
+export function pageList(page: number, count: number): (number | null)[] {
+  const start = Math.max(1, Math.min(page - 2, count - 4));
+  return Array.from({ length: 5 }, (_, i) => start + i <= count ? start + i : null);
 }
 
 /** Paginación del estándar: página activa resaltada en Warning. */
 export function Pagination({ page, pageCount, onChange }: { page: number; pageCount: number; onChange: (p: number) => void }) {
-  const btn = "grid h-7 min-w-7 place-items-center rounded-md text-[13px]";
+  const btn = "grid size-7 place-items-center rounded-md text-xs tabular-nums";
   return (
-    <nav aria-label="Paginación" className="flex items-center gap-0.5">
+    <nav aria-label={`Paginación: página ${page} de ${pageCount}`} className="grid shrink-0 grid-cols-[repeat(7,1.75rem)] items-center gap-0.5">
       <button type="button" aria-label="Página anterior" disabled={page <= 1} onClick={() => onChange(page - 1)} className={cn(btn, "text-warning hover:bg-field disabled:text-n900 disabled:hover:bg-transparent")}>
         <ChevronLeft className="size-4" />
       </button>
       {pageList(page, pageCount).map((p, i) =>
-        p === "…" ? (
-          <span key={`e${i}`} className={cn(btn, "text-n900")}>…</span>
+        p === null ? (
+          <span key={`e${i}`} aria-hidden className={btn} />
         ) : (
           <button
             key={p}

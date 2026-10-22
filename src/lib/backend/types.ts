@@ -74,6 +74,7 @@ export interface MetricasSimulacion {
   pedidosIncumplidos: number;
   costoAcumulado: number;
   kilometrosPorTipo: Record<TipoUnidad, number>;
+  /** Promedios en minutos ya calculados por el backend; no son sumas. */
   minutosEntregaPorPlazo: Record<string, number>;
   entregasPorPlazo: Record<string, number>;
   activacionesSemaforo: { minuto: number; nombreAlmacen: string; color: ColorSemaforo; disponible: number }[];
