@@ -74,6 +74,7 @@ export function DailyOperationsScreen() {
       map={
         <GridMap
           snapshot={snapshot}
+          orders={orders}
           trafficLight={trafficLight}
           layers={layers}
           selected={selected}

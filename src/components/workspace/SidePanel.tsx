@@ -33,7 +33,7 @@ export function SidePanel({ title, subtitle, onClose, footer, children, width }:
         )}
         {!pinned && <IconButton label="Cerrar panel" onClick={onClose}><X className="size-[22px]" /></IconButton>}
       </header>
-      <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-6 pt-1 pb-6">{children}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pt-1 pb-6 [scrollbar-gutter:stable]">{children}</div>
       {footer && <footer className="flex gap-3 border-t border-line px-6 pt-4 pb-6">{footer}</footer>}
     </section>
   );

@@ -64,18 +64,13 @@ export const outcomePorEstado = (e: EstadoCorrida): SimulationOutcome | null => 
 
 const KIND_POR_TIPO: Record<TipoUnidad, VehicleKind> = { AUTO: "auto", MOTO: "moto", BICICLETA: "bicicleta" };
 
-/**
- * EN_ALIMENTACION/ABASTECIENDO (en base, recargando) no tienen equivalente
- * propio en el frontend: se muestran como "disponible" porque no están en
- * ruta. EN_MANTENIMIENTO se agrupa con "averiado" porque, de cara al mapa,
- * el vehículo está igual de fuera de servicio.
- */
+/** Conserva las pausas operativas; mantenimiento continúa fuera de servicio. */
 const STATUS_POR_ESTADO: Record<VistaUnidad["estado"], VehicleStatus> = {
   DISPONIBLE: "disponible",
   EN_RUTA: "en_ruta",
   ENTREGANDO: "en_ruta",
-  EN_ALIMENTACION: "disponible",
-  ABASTECIENDO: "disponible",
+  EN_ALIMENTACION: "en_alimentacion",
+  ABASTECIENDO: "abasteciendo",
   AVERIADA: "averiado",
   EN_MANTENIMIENTO: "averiado",
 };
@@ -90,18 +85,23 @@ function pairsToCoords(flat: number[]): Coord[] {
 
 export function vistaUnidadToVehicle(u: VistaUnidad): Vehicle {
   const status = STATUS_POR_ESTADO[u.estado];
+  const traveled = pairsToCoords(u.caminoRecorrido);
+  const pending = pairsToCoords(u.caminoPendiente);
   return {
     id: u.codigo,
     plate: u.codigo,
     kind: KIND_POR_TIPO[u.tipo],
     status,
     position: { x: u.x, y: u.y },
-    route: u.destinoX >= 0 ? { traveled: pairsToCoords(u.caminoRecorrido), pending: pairsToCoords(u.caminoPendiente) } : undefined,
+    // Durante cualquier servicio destinoX vale -1; el itinerario sigue vigente.
+    route: traveled.length || pending.length ? { traveled, pending } : undefined,
     load: u.cargaABordo,
     capacity: u.capacidad,
     etaMinutes: u.destinoX >= 0 ? u.minutosHastaDestino : undefined,
+    destination: u.destinoX >= 0 && u.destinoY >= 0 ? { x: u.destinoX, y: u.destinoY } : undefined,
     breakdownType: BREAKDOWN_POR_TIPO[u.tipoAveria],
-    orders: u.pedidosABordo.map((p) => ({ orderId: String(p.idPedido), packagesInVehicle: p.enLaUnidad, packagesTotal: p.totalDelPedido })),
+    // La exactitud del manifiesto depende del backend: no inferir carga física de la ruta.
+    orders: u.pedidosABordo.filter((p) => p.enLaUnidad > 0).map((p) => ({ orderId: String(p.idPedido), packagesInVehicle: p.enLaUnidad, packagesTotal: p.totalDelPedido })),
   };
 }
 
@@ -130,14 +130,14 @@ export function vistaBloqueoToBlockage(b: VistaBloqueo, index: number): Blockage
 
 // ---- Fotografía → MapSnapshot -------------------------------------------
 
-export function instantaneaToMapSnapshot(i: InstantaneaSimulacion | null, almacenes: VistaAlmacen[]): MapSnapshot {
+export function instantaneaToMapSnapshot(i: InstantaneaSimulacion | null, almacenes: VistaAlmacen[], runId: string | null = null): MapSnapshot {
   const warehouses = almacenes.map(vistaAlmacenToWarehouse);
-  // Un vehículo en la posición exacta de un almacén está en base: se dibujaría encima de su ícono.
-  const enBase = (c: Coord) => warehouses.some((w) => w.position.x === c.x && w.position.y === c.y);
   return {
     warehouses,
-    vehicles: i ? i.unidades.map(vistaUnidadToVehicle).filter((v) => !enBase(v.position)) : [],
+    // Mantener también la flota en almacenes: puede estar alimentándose o abasteciendo.
+    vehicles: i ? i.unidades.map(vistaUnidadToVehicle) : [],
     blockages: i ? i.bloqueosVigentes.map(vistaBloqueoToBlockage) : [],
+    sample: i ? { runId, simulatedMinute: i.minutoSimulado, realMilliseconds: i.milisegundosReales } : undefined,
   };
 }
 
@@ -184,10 +184,14 @@ const distanceKmFromBackend = (k: Record<TipoUnidad, number>): Record<VehicleKin
   bicicleta: k.BICICLETA ?? 0,
 });
 
-function avgDeliveryByPriority(minutosPorPlazo: Record<string, number>, entregasPorPlazo: Record<string, number>): PriorityAverage[] {
-  return Object.entries(minutosPorPlazo).map(([horas, totalMinutos]) => {
-    const entregas = entregasPorPlazo[horas] ?? 0;
-    return { priority: priorityByHours(Number(horas)), avgMinutes: entregas > 0 ? totalMinutos / entregas : 0 };
+function avgDeliveryByPriority(promediosPorPlazo: Record<string, number>, entregasPorPlazo: Record<string, number>): PriorityAverage[] {
+  // EstadoSimulacion.metricas() ya divide la suma entre el número de pedidos completos.
+  // Omitir prioridades sin muestras y claves desconocidas, sin fabricar promedios de cero.
+  return PRIORITIES.flatMap(({ code, hours }) => {
+    const average = promediosPorPlazo[String(hours)];
+    return entregasPorPlazo[String(hours)] > 0 && Number.isFinite(average) && average >= 0
+      ? [{ priority: code, avgMinutes: average }]
+      : [];
   });
 }
 

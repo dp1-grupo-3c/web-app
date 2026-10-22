@@ -157,6 +157,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         <>
           <GridMap
             snapshot={snapshot}
+          orders={orders}
             trafficLight={runTrafficLight}
             layers={layers}
             neutralWarehouses={idle}

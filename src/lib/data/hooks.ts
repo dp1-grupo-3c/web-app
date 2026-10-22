@@ -100,7 +100,7 @@ export function useMapSnapshot(scope: DataScope): MapSnapshot {
   const s = useStoreState();
   return useMemo(() => {
     const active = matchesScope(s, scope);
-    return instantaneaToMapSnapshot(active ? s.estado.instantanea : null, active ? (s.estado.instantanea?.almacenes ?? s.almacenes) : s.almacenes);
+    return instantaneaToMapSnapshot(active ? s.estado.instantanea : null, active ? (s.estado.instantanea?.almacenes ?? s.almacenes) : s.almacenes, active ? s.estado.idActual : null);
   }, [scope, s]);
 }
 
@@ -122,26 +122,35 @@ export function useOpsKpis(): OpsKpis | null {
 export function useOrders(scope: DataScope): Order[] {
   const s = useStoreState();
   const id = matchesScope(s, scope) ? s.estado.idActual : null;
-  const [filas, setFilas] = useState<FilaPedido[]>([]);
+  const [result, setResult] = useState<{ id: string; filas: FilaPedido[] } | null>(null);
 
   useEffect(() => {
-    if (!id) return; // la lectura de abajo ya devuelve vacío cuando no hay id
+    if (!id) return;
     let vivo = true;
+    let timer: ReturnType<typeof setTimeout>;
     const ciclo = async () => {
       try {
-        const pagina = await api.paginaPedidos(id, { tamano: 500, soloActivos: true });
-        if (vivo) setFilas(pagina.filas);
+        // Completar la lista: los destinos del vehículo seleccionado pueden
+        // pertenecer a páginas posteriores a los primeros 500 pedidos.
+        const first = await api.paginaPedidos(id, { pagina: 0, tamano: 500, soloActivos: true });
+        const filas = [...first.filas];
+        for (let page = 1; vivo && page < first.totalPaginas; page++) {
+          const next = await api.paginaPedidos(id, { pagina: page, tamano: 500, soloActivos: true });
+          filas.push(...next.filas);
+        }
+        if (vivo) setResult({ id, filas: [...new Map(filas.map((f) => [f.id, f])).values()] });
       } catch {
         // se mantiene la última lista conocida
+      } finally {
+        if (vivo) timer = setTimeout(ciclo, 3000);
       }
     };
     ciclo();
-    const t = setInterval(ciclo, 3000);
-    return () => { vivo = false; clearInterval(t); };
+    return () => { vivo = false; clearTimeout(timer); };
   }, [id]);
 
   const vehicles = useMemo(() => s.estado.instantanea?.unidades.map(vistaUnidadToVehicle) ?? [], [s.estado.instantanea]);
-  return useMemo(() => (id ? filas.map((f) => filaPedidoToOrder(f, vehicles)) : EMPTY_ORDERS), [id, filas, vehicles]);
+  return useMemo(() => (id && result?.id === id ? result.filas.map((f) => filaPedidoToOrder(f, vehicles)) : EMPTY_ORDERS), [id, result, vehicles]);
 }
 
 export function useMetrics(scope: DataScope): Metrics | null {

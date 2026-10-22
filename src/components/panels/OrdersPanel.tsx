@@ -210,9 +210,10 @@ function OrdersList({ audience, orders, selectedId, onSelect }: { audience: Orde
           <Chip on={urgentOnly} onClick={() => { setUrgentOnly(true); setPage(1); }}><Clock className="size-3.5 text-warning" aria-hidden />Vencen en menos de 1 h</Chip>
         </div>
       )}
-      <div className="overflow-hidden rounded-xl border border-line bg-night">
-        <table className="w-full text-sm">
-          <thead className="bg-raised text-xs text-n500">
+      <div className="shrink-0 overflow-hidden rounded-xl border border-line bg-night">
+        <table className="w-full table-fixed text-[13px]">
+          <colgroup><col style={{ width: "22%" }} /><col style={{ width: "23%" }} /><col style={{ width: "25%" }} /><col style={{ width: "30%" }} /></colgroup>
+          <thead className="h-10 bg-raised text-[11px] text-n500 [&_th]:px-2 [&_th]:py-0">
             <tr>
               <th className="px-3 py-2.5 text-left font-medium">Pedido</th>
               <th className="px-3 py-2.5 text-left font-medium">Destino</th>
@@ -223,7 +224,7 @@ function OrdersList({ audience, orders, selectedId, onSelect }: { audience: Orde
           <tbody>
             {slice.length === 0 ? (
               <tr>
-                <td colSpan={4}>
+                <td colSpan={4} style={{ height: perPage * 64 }}>
                   <EmptyState icon={<Search className="size-7" aria-hidden />} title={`No encontramos pedidos con “${query}”.`}>Revisa el número e inténtalo nuevamente.</EmptyState>
                 </td>
               </tr>
@@ -238,21 +239,22 @@ function OrdersList({ audience, orders, selectedId, onSelect }: { audience: Orde
                     aria-selected={on}
                     onClick={() => onSelect(on ? null : o.id)}
                     onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect(on ? null : o.id))}
-                    className={cn("cursor-pointer border-t border-line tabular-nums first:border-t-0 hover:bg-field", on && "bg-pink/10 [&>td:first-child]:shadow-[inset_3px_0_0_var(--color-pink)]")}
+                    className={cn("h-16 cursor-pointer border-t border-line tabular-nums first:border-t-0 hover:bg-field [&>td]:overflow-hidden [&>td]:px-2 [&>td]:py-0 [&>td]:whitespace-nowrap", on && "bg-pink/10 [&>td:first-child]:shadow-[inset_3px_0_0_var(--color-pink)]")}
                   >
-                    <td className="px-3 py-2.5"><b className="text-white">{o.id}</b><span className="block text-xs text-n500">{o.packages} paquetes</span></td>
-                    <td className="px-3 py-2.5 text-white">{formatCoord(o.destination)}</td>
+                    <td title={`${o.id} · ${o.packages} paquetes`}><b className="block truncate text-white">{o.id}</b><span className="block truncate text-xs text-n500">{o.packages} paq.</span></td>
+                    <td className="text-white" title={formatCoord(o.destination)}><span className="block truncate">{formatCoord(o.destination)}</span></td>
                     <td className="px-3 py-2.5"><Badge>{o.priority} · {priorityInfo(o.priority).hours} h</Badge></td>
-                    <td className={cn("px-3 py-2.5 text-right", urgent ? "text-warning" : "text-white")}>
-                      {urgent ? <span className="inline-flex items-center gap-1"><Clock className="size-3.5" aria-hidden />{o.minutesLeft} min</span> : formatDuration(o.minutesLeft)}
+                    <td className={cn("text-right", urgent ? "text-warning" : "text-white")} title={formatDuration(o.minutesLeft)}>
+                      <span className="block truncate">{urgent ? `${o.minutesLeft} min` : formatDuration(o.minutesLeft)}</span>
                     </td>
                   </tr>
                 );
               })
             )}
+            {slice.length > 0 && Array.from({ length: perPage - slice.length }, (_, i) => <tr key={`empty-${i}`} aria-hidden className="h-16"><td colSpan={4} /></tr>)}
           </tbody>
         </table>
-        <div className="flex items-center justify-between gap-2 border-t border-line bg-raised px-3 py-2 text-xs text-n400">
+        <div className="flex h-12 items-center justify-between gap-1 border-t border-line bg-raised px-2 text-[11px] text-n400">
           <span className="flex items-center gap-1.5 whitespace-nowrap">
             Filas
             <select
@@ -263,7 +265,7 @@ function OrdersList({ audience, orders, selectedId, onSelect }: { audience: Orde
             >
               {PAGE_SIZES.map((n) => <option key={n}>{n}</option>)}
             </select>
-            de {rows.length}
+            <span title={`${rows.length} pedidos`}>/ {rows.length}</span>
           </span>
           <Pagination page={current} pageCount={pageCount} onChange={setPage} />
         </div>

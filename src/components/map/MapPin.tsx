@@ -5,7 +5,8 @@ import type { KeyboardEvent } from "react";
  * Marcador del mapa. La punta está en (0, 0) sobre la intersección y el círculo
  * (r = 20) en (0, −30). Caja real: x −21…21, y −51…1, así nunca se recorta.
  */
-function PinShape({ color, Icon, ring }: { color: string; Icon: LucideIcon; ring?: boolean }) {
+function PinShape({ color, Icon, ring, BadgeIcon, centered }: { color: string; Icon: LucideIcon; ring?: boolean; BadgeIcon?: LucideIcon; centered?: boolean }) {
+  if (centered) return <><circle r={20} fill={color} stroke="#10161c" strokeWidth={2} /><Icon x={-11} y={-11} size={22} color="#161d25" strokeWidth={2} aria-hidden /></>;
   return (
     <>
       {ring && (
@@ -16,6 +17,7 @@ function PinShape({ color, Icon, ring }: { color: string; Icon: LucideIcon; ring
       )}
       <path d="M0 0 L-12 -14 A20 20 0 1 1 12 -14 Z" fill={color} stroke="#10161c" strokeWidth={2} strokeLinejoin="round" />
       <Icon x={-11} y={-41} size={22} color="#161d25" strokeWidth={2} aria-hidden />
+      {BadgeIcon && <g><circle cx={18} cy={-46} r={11} fill="var(--color-warning)" stroke="#10161c" strokeWidth={2} /><BadgeIcon x={12} y={-52} size={12} color="#161d25" aria-hidden /></g>}
     </>
   );
 }
@@ -28,10 +30,13 @@ type MapPinProps = {
   label: string;
   scale?: number;
   ring?: boolean;
+  BadgeIcon?: LucideIcon;
+  /** Centra el glifo sobre la coordenada; útil para bloqueos sobre su línea. */
+  centered?: boolean;
   onActivate?: () => void;
 };
 
-export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, onActivate }: MapPinProps) {
+export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, BadgeIcon, centered, onActivate }: MapPinProps) {
   const interactive = !!onActivate;
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -51,7 +56,7 @@ export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, onActivat
       className={interactive ? "cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125" : "pointer-events-none"}
     >
       <title>{label}</title>
-      <PinShape color={color} Icon={Icon} ring={ring} />
+      <PinShape color={color} Icon={Icon} ring={ring} BadgeIcon={BadgeIcon} centered={centered} />
     </g>
   );
 }

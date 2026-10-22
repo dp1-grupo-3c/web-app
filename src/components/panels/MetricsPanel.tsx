@@ -12,7 +12,7 @@ export function MetricsPanel({ metrics, simulation, onClose, width }: { metrics:
       <div className="grid grid-cols-2 gap-2.5">
         <StatCard label="Pedidos entregados" value={m ? formatNumber(m.delivered) : "—"} detail={simulation ? "en la simulación" : "hoy"} />
         <StatCard label="Entregas a tiempo" value={m ? formatPercent(m.onTimeRate) : "—"} detail="dentro del plazo" />
-        <StatCard label="Costo acumulado" value={m ? formatMoney(m.accumulatedCost) : "—"} detail="rutas y combustible" />
+        <StatCard label="Costo acumulado" value={m ? formatMoney(m.accumulatedCost) : "—"} detail="rutas y combustible" compactValue centered />
         <StatCard label="Distancia recorrida" value={m ? `${formatNumber(m.distanceKm)} km` : "—"} detail="toda la flota" />
       </div>
       <PanelSection title="Tiempo de entrega promedio por prioridad" icon={<Clock className="size-[18px]" aria-hidden />}>

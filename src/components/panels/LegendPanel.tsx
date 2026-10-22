@@ -1,4 +1,4 @@
-import { CircleX, House, Package, type LucideIcon } from "lucide-react";
+import { CircleX, Flag, House, Package, Utensils, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { VEHICLE_META, VEHICLE_ORDER } from "@/components/domain/vehicle";
 import { PinGlyph } from "@/components/map/MapPin";
@@ -34,15 +34,21 @@ export function LegendPanel({ layers, onToggle, onClose, width }: { layers: MapL
         <ul>
           {VEHICLE_ORDER.map((k) => <Item key={k} glyph={pin(VEHICLE_META[k].color, VEHICLE_META[k].Icon)}>{VEHICLE_META[k].label}</Item>)}
           <Item glyph={pin("var(--color-critic)", VEHICLE_META.auto.Icon)}>Vehículo averiado (cualquier tipo)</Item>
+          <Item glyph={<Utensils className="size-5 text-warning" />}>Cubiertos · pausa de alimentación</Item>
+          <Item glyph={<span className="rounded bg-panel px-2 text-xs">3</span>}>Vehículos agrupados en un almacén; pulsa para consultar sus estados</Item>
         </ul>
       </PanelSection>
       <PanelSection title="Rutas" action={toggle("rutas", "rutas")}>
         <ul>
-          <Item glyph={<svg width="30" height="10" aria-hidden><line x1="3" y1="5" x2="27" y2="5" stroke="#fff" strokeWidth="4" strokeLinecap="round" /></svg>}>Tramo ya recorrido</Item>
           <Item glyph={<svg width="30" height="10" aria-hidden><line x1="0" y1="5" x2="30" y2="5" stroke="#fff" strokeWidth="4" strokeDasharray="8 7" /></svg>}>Tramo por recorrer</Item>
           <Item glyph={<svg width="20" height="20" aria-hidden><circle cx="10" cy="10" r="7" fill="#fff" stroke="#161d25" strokeWidth="2.5" /></svg>}>Destino del vehículo</Item>
         </ul>
         <p className="text-xs text-n600">La ruta toma el color del vehículo que la recorre.</p>
+        <p className="text-xs text-n600">Selecciona un vehículo para ver su ruta parpadear y los destinos de sus pedidos.</p>
+        <ul>
+          <Item glyph={pin(PINK, Package)}>Pedido asignado; la bandera señala su destino de entrega</Item>
+          <Item glyph={pin("var(--color-warning)", Flag)}>Destino final del itinerario seleccionado</Item>
+        </ul>
       </PanelSection>
       <PanelSection title="Bloqueos" action={toggle("bloqueos", "bloqueos")}>
         <ul>

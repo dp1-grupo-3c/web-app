@@ -36,6 +36,21 @@ export const project = (g: Geometry, c: Coord): [number, number] => [g.ox + c.x 
 export const toPath = (g: Geometry, pts: Coord[]) =>
   pts.map((p, i) => { const [x, y] = project(g, p); return `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`; }).join(" ");
 
+/** Punto a media longitud de la polilínea, siempre sobre un tramo del bloqueo. */
+export function polylineMidpoint(points: Coord[]): Coord {
+  if (!points.length) return { x: 0, y: 0 };
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
+  let remaining = lengths.reduce((sum, length) => sum + length, 0) / 2;
+  for (let i = 0; i < lengths.length; i++) {
+    if (remaining <= lengths[i] && lengths[i] > 0) {
+      const fraction = remaining / lengths[i];
+      return { x: points[i].x + fraction * (points[i + 1].x - points[i].x), y: points[i].y + fraction * (points[i + 1].y - points[i].y) };
+    }
+    remaining -= lengths[i];
+  }
+  return points[0];
+}
+
 /** Intersección más cercana a un píxel, o null si cae fuera de la retícula. */
 export function nearestCoord(g: Geometry, px: number, py: number): Coord | null {
   const x = Math.round((px - g.ox) / g.cx);
