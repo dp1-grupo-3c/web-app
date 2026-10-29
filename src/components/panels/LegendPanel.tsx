@@ -1,4 +1,4 @@
-import { CircleX, Flag, House, Package, Utensils, type LucideIcon } from "lucide-react";
+import { CircleX, Flag, Hourglass, House, Package, Utensils, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { VEHICLE_META, VEHICLE_ORDER } from "@/components/domain/vehicle";
 import { PinGlyph } from "@/components/map/MapPin";
@@ -54,6 +54,8 @@ export function LegendPanel({ layers, onToggle, onClose, width }: { layers: MapL
         <ul>
           <Item glyph={pin("var(--color-critic)", CircleX)}>Vía bloqueada</Item>
           <Item glyph={<svg width="30" height="10" aria-hidden><line x1="3" y1="5" x2="27" y2="5" stroke="var(--color-critic)" strokeWidth="6" strokeLinecap="round" /></svg>}>Tramo sin paso</Item>
+          <Item glyph={pin("var(--color-critic)", Hourglass)}>Bloqueo por terminar: parpadea en su tramo final</Item>
+          <Item glyph={<svg width="30" height="10" aria-hidden><line x1="3" y1="5" x2="27" y2="5" stroke="var(--color-critic)" strokeWidth="6" strokeLinecap="round" strokeDasharray="9 8" /></svg>}>Tramo que se liberará pronto (discontinuo)</Item>
         </ul>
       </PanelSection>
       <PanelSection title="Retícula">

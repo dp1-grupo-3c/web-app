@@ -1,17 +1,20 @@
 "use client";
 
-import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings } from "lucide-react";
+import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, Truck } from "lucide-react";
 import { useState } from "react";
 import { SimHud } from "@/components/hud/SimHud";
 import { GridMap } from "@/components/map/GridMap";
+import { PendingChangeChip } from "@/components/map/PendingChangeChip";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
+import { FleetPanel } from "@/components/panels/FleetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
 import { EMPTY_DRAFT, OrdersPanel } from "@/components/panels/OrdersPanel";
 import { SectionsPanel } from "@/components/panels/SectionsPanel";
 import { SimConfigPanel } from "@/components/panels/SimConfigPanel";
+import { BufferingDialog } from "@/components/simulation/BufferingDialog";
 import { ConfirmCancelDialog } from "@/components/simulation/ConfirmCancelDialog";
 import { OtherRunNotice, RUN_TITLE } from "@/components/simulation/OtherRunNotice";
 import { SimOnboarding } from "@/components/simulation/SimOnboarding";
@@ -25,15 +28,16 @@ import { DEFAULT_TRAFFIC_LIGHT, PANEL_WIDTH } from "@/lib/constants";
 import { esFinal } from "@/lib/backend/estado";
 import { cancelSimulation, forgetSimulation, startSimulation } from "@/lib/data/actions";
 import { TIPO_POR_MODO } from "@/lib/data/adapters";
-import { useActiveRun, useBreakdowns, useMapSnapshot, useMetrics, useOrders, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
+import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrders, usePlayback, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 
-const PANELS = ["menu", "config", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
+const PANELS = ["menu", "config", "flota", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
 const DESCRIPTIONS: Partial<Record<Panel, string>> = {
   config: "Fecha de inicio y rangos del semáforo.",
+  flota: "Cantidad de vehículos y velocidad por tipo.",
   metricas: "Indicadores acumulados de la simulación.",
   pedidos: "Pedidos activos y su destino en el mapa.",
   averias: "Registra averías y revisa las recientes.",
@@ -58,6 +62,9 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const feed = useSimulationFeed(mode);
   const active = useActiveRun();
   const savedTrafficLight = useSavedTrafficLight();
+  const fleet = useFleetSettings();
+  const bufferVariant = useBufferVariant();
+  const play = usePlayback(mode);
 
   const [cancelledId, setCancelledId] = useState<string | null>(null);
   const [dismissedId, setDismissedId] = useState<string | null>(null);
@@ -115,9 +122,10 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
 
   const idle = effectivePhase === "idle";
   const items: RailItem<Panel>[] = idle
-    ? [{ id: "config", label: "Configurar", Icon: Settings }]
+    ? [{ id: "config", label: "Configurar", Icon: Settings }, { id: "flota", label: "Flota", Icon: Truck }]
     : [
         { id: "config", label: "Configurar", Icon: Settings },
+        { id: "flota", label: "Flota", Icon: Truck },
         { id: "metricas", label: "Métricas", Icon: Activity },
         { id: "pedidos", label: "Pedidos", Icon: Package },
         { id: "averias", label: "Averías", Icon: CircleAlert, badge: breakdowns.filter((b) => b.status === "activa").length },
@@ -127,7 +135,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     { id: "leyenda", label: "Leyenda", Icon: Layers },
   ];
   // Durante la configuración solo se ofrecen los paneles disponibles.
-  const requested = idle && panel && !["menu", "config", "ayuda", "leyenda"].includes(panel) ? null : panel;
+  const requested = idle && panel && !["menu", "config", "flota", "ayuda", "leyenda"].includes(panel) ? null : panel;
   // Fijado, el panel no se cierra: sin una sección elegida muestra el menú de secciones.
   const shown = requested ?? (pinned ? "menu" : null);
   const section = shown === "menu" ? null : shown;
@@ -142,6 +150,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     : shown === "config" ? (
       <SimConfigPanel mode={mode} readOnly={!idle || !!other || syncing} startDate={runStartDate} onStartDate={setStartDate} trafficLight={runTrafficLight} onTrafficLight={setTrafficLight} starting={starting} onStart={start} onClose={close} width={width} />
     )
+    : shown === "flota" ? <FleetPanel key={fleet.version} saved={fleet.value} onClose={close} width={width} />
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} />
     : shown === "pedidos" ? (
       <OrdersPanel audience="simulacion" orders={orders} selectedId={orderId} onSelect={setOrderId} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
@@ -165,6 +174,12 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             onSelect={setSelected}
             highlight={highlightFor(orders, orderId)}
             emptyMessage={idle && !syncing ? undefined : WAITING_MESSAGE}
+            status={!idle && (
+              <>
+                <PendingChangeChip pending={play.pending} />
+                {process.env.NODE_ENV === "development" && <span className="rounded bg-panel/80 px-1.5 text-[11px] text-n500">buffer: {bufferVariant} ({play.target})</span>}
+              </>
+            )}
           />
           {other && !section && <OtherRunNotice tipo={other.tipo} primerDia={other.primerDia} onStop={() => setConfirming(other.id)} />}
           {idle && !other && !syncing && !section && <SimOnboarding mode={mode} onConfigure={() => setPanel("config")} />}
@@ -178,6 +193,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             clock={feed.clock}
             ended={ended}
             compact={!!shown}
+            lagSeconds={play.lagSeconds}
             onCancel={() => own && setConfirming(own.id)}
           />
         )
@@ -198,6 +214,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
               />
             ) : <ConfirmCancelDialog busy={cancelling} onKeep={() => setConfirming(null)} onConfirm={confirmCancel} />
           )}
+          {effectivePhase === "running" && play.phase === "llenando" && <BufferingDialog queued={play.queued} target={play.target} />}
           {ended && outcome && dismissedId !== own?.id && (
             <SimulationSummaryModal
               mode={mode}

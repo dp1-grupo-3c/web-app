@@ -49,9 +49,13 @@ export type Blockage = {
   until?: string;
   /** Polilínea completa (nodo a nodo). `from`/`to` son su primer y último punto. */
   path?: Coord[];
+  /** Inicio y fin programados, en minutos simulados de la corrida. */
+  startMinute?: number;
+  endMinute?: number;
 };
 
-export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number };
+/** `durationMs`: duración de la transición que fijó el buffer de reproducción (si la hay). */
+export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number; durationMs?: number };
 export type MapSnapshot = { warehouses: Warehouse[]; vehicles: Vehicle[]; blockages: Blockage[]; sample?: MotionSample };
 
 export type ClientKind = "persona" | "empresa";
@@ -84,6 +88,9 @@ export type Order = {
 export type ConnectionState = "live" | "reconnecting" | "offline" | "waiting";
 
 export type FleetCount = Record<VehicleKind, number>;
+
+/** Cantidad de vehículos y velocidad (km/h) configuradas para cada tipo. */
+export type FleetSettings = Record<VehicleKind, { quantity: number; speed: number }>;
 
 export type OpsKpis = { fleet: FleetCount; activeOrders: number; deliveredToday: number; alerts: number };
 

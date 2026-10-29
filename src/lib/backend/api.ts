@@ -23,6 +23,7 @@ import type {
   ResumenCorrida,
   RespuestaAveria,
   RespuestaSalud,
+  SolicitudFlota,
   SolicitudSimulacion,
   TipoUnidad,
   VistaAlmacen,
@@ -78,6 +79,24 @@ export const cargarAverias = (id: string, archivo: File) =>
   api<ResultadoCargaAverias>(`/simulaciones/${id}/averias/masivo`, { metodo: "POST", archivo });
 export const cambiarVelocidad = (tipo: TipoUnidad, kmPorHora: number) =>
   api<VistaParametros>("/parametros/velocidad", { metodo: "PUT", cuerpo: { tipo, kmPorHora } });
+/**
+ * TODO(backend): endpoint aún no implementado. Contrato propuesto:
+ *
+ *   PUT /api/parametros/flota
+ *   { "unidades": { "AUTO":      { "cantidad": 10, "kmPorHora": 40 },
+ *                   "MOTO":      { "cantidad": 15, "kmPorHora": 25 },
+ *                   "BICICLETA": { "cantidad": 12, "kmPorHora": 12 } } }
+ *
+ *   200 → VistaParametros (idealmente con `cantidades: Record<TipoUnidad, number>`)
+ *   400 → cantidad no entera o negativa, velocidad <= 0 o no finita
+ *   409 → hay una corrida en curso y la cantidad no se puede cambiar en caliente
+ *
+ * Mientras no exista, el servidor responde 404/405 y el store lo traduce a
+ * un mensaje de "aún no disponible". Las velocidades ya se guardan con
+ * cambiarVelocidad, que sí existe.
+ */
+export const cambiarFlota = (s: SolicitudFlota) =>
+  api<VistaParametros>("/parametros/flota", { metodo: "PUT", cuerpo: s });
 export const cambiarSemaforo = (ambar: number, verde: number) =>
   api<VistaParametros>("/parametros/semaforo", { metodo: "PUT", cuerpo: { ambar, verde } });
 

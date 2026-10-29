@@ -8,11 +8,14 @@ import { useToast } from "@/components/ui/Toast";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { DEFAULT_TRAFFIC_LIGHT, TRAFFIC_LIGHT_MAX } from "@/lib/constants";
 import { saveOperationTrafficLight } from "@/lib/data/actions";
-import { sameTrafficLight, setLimit, validateTrafficLight, type TrafficLightKey } from "@/lib/traffic-light";
+import { linkedKey, sameTrafficLight, setLimit, validateTrafficLight, type TrafficLightKey } from "@/lib/traffic-light";
 import type { TrafficLight } from "@/lib/types";
+import { integerInRange } from "@/lib/validation";
 
 /** Barra de los tres rangos sobre la escala 0–1000. */
-export function TrafficLightPreview({ value: t }: { value: TrafficLight }) {
+export function TrafficLightPreview({ value }: { value: TrafficLight }) {
+  // Un límite en edición (NaN) se dibuja como 0 hasta que sea válido.
+  const t = Object.fromEntries(Object.entries(value).map(([k, n]) => [k, Number.isFinite(n) ? n : 0])) as TrafficLight;
   const pct = (n: number) => `${(n / TRAFFIC_LIGHT_MAX) * 100}%`;
   return (
     <div>
@@ -33,10 +36,23 @@ export function TrafficLightPreview({ value: t }: { value: TrafficLight }) {
 
 /** Editor de rangos. Los límites contiguos se enlazan solos. */
 export function TrafficLightEditor({ value, onChange, readOnly }: { value: TrafficLight; onChange: (t: TrafficLight) => void; readOnly?: boolean }) {
-  const error = validateTrafficLight(value);
+  // Texto tal como se escribió: un vacío o "-5" ya no se convierte en 0 en
+  // silencio. Solo se muestra mientras el valor externo sea el que produjo
+  // (así "Restablecer" lo descarta).
+  const [raw, setRaw] = useState<Partial<Record<TrafficLightKey, { text: string; value: number }>>>({});
+  const shownText = (k: TrafficLightKey) => (raw[k] && Object.is(raw[k].value, value[k]) ? raw[k].text : Number.isNaN(value[k]) ? "" : String(value[k]));
+  const rawError = (Object.keys(raw) as TrafficLightKey[])
+    .map((k) => ({ k, e: raw[k] && Object.is(raw[k].value, value[k]) ? integerInRange(raw[k].text, 0, TRAFFIC_LIGHT_MAX) : null }))
+    .find((x) => x.e);
+  const error = rawError ? { message: rawError.e!, keys: [rawError.k, linkedKey(rawError.k)] } : validateTrafficLight(value);
   const bad = (k: TrafficLightKey) => !!error?.keys.includes(k);
+  const edit = (k: TrafficLightKey, text: string) => {
+    const next = setLimit(value, k, integerInRange(text, 0, TRAFFIC_LIGHT_MAX) ? NaN : Number(text));
+    setRaw((r) => ({ ...r, [k]: { text, value: next[k] }, [linkedKey(k)]: undefined }));
+    onChange(next);
+  };
   const num = (k: TrafficLightKey, label: string) => (
-    <NumberInput aria-label={label} value={String(value[k])} step={10} min={0} max={TRAFFIC_LIGHT_MAX} disabled={readOnly} error={bad(k)} onValueChange={(v) => onChange(setLimit(value, k, Number(v) || 0))} />
+    <NumberInput aria-label={label} value={shownText(k)} step={10} min={0} max={TRAFFIC_LIGHT_MAX} disabled={readOnly} error={bad(k)} onValueChange={(v) => edit(k, v)} />
   );
   const fixed = (n: number) => <div className="flex h-10 items-center rounded-lg border border-dashed border-line-strong px-3 text-base text-n300 tabular-nums">{n}</div>;
   const row = (color: string, name: string, hint: string, from: ReactNode, to: ReactNode) => (

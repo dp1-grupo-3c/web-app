@@ -3,7 +3,8 @@
 import { ChevronDown, ChevronUp, CircleAlert, Search, X } from "lucide-react";
 import { useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
-import { formatDate, parseISODate, toISODate } from "@/lib/format";
+import { formatDate, parseISODate } from "@/lib/format";
+import { calendarDate, isoFromParts } from "@/lib/validation";
 
 export const fieldClass = (error?: boolean) =>
   cn(
@@ -54,18 +55,15 @@ type DateInputProps = {
   id?: string;
   /** Fecha en ISO ("YYYY-MM-DD"), o "" si está vacía. */
   value: string;
-  onChange: (value: string) => void;
+  /**
+   * Recibe la fecha ISO, o "" si el campo está vacío, incompleto o no es una
+   * fecha real; en esos dos últimos casos `problem` explica por qué.
+   */
+  onChange: (value: string, problem: string | null) => void;
   disabled?: boolean;
   error?: boolean;
   className?: string;
 };
-
-/** ISO si los tres números forman una fecha real (rechaza p. ej. 31/02); null si no. */
-function isoFromParts(day: number, month: number, year: number): string | null {
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-  return toISODate(d);
-}
 
 /**
  * Fecha en formato peruano (dd/mm/aaaa), sin depender del idioma del
@@ -85,14 +83,15 @@ export function DateInput({ id, value, onChange, disabled, error, className }: D
     setText(format(value));
   }
 
+  // Un texto incompleto o imposible (31/02) ya no conserva en silencio la
+  // fecha anterior: se informa "" y el motivo, sin borrar lo escrito.
   const handleChange = (raw: string) => {
     const digits = raw.replace(/\D/g, "").slice(0, 8);
     setText([digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean).join("/"));
-    if (digits.length === 0) onChange("");
-    else if (digits.length === 8) {
-      const iso = isoFromParts(+digits.slice(0, 2), +digits.slice(2, 4), +digits.slice(4, 8));
-      if (iso) onChange(iso);
-    }
+    const iso = digits.length === 8 ? isoFromParts(+digits.slice(0, 2), +digits.slice(2, 4), +digits.slice(4, 8)) : null;
+    const next = iso ?? "";
+    setLastValue(next);
+    onChange(next, iso ? null : calendarDate(digits));
   };
 
   return (

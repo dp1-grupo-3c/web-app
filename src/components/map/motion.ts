@@ -52,7 +52,9 @@ export function useVehicleMotion(vehicles: Vehicle[], sample?: MotionSample): Ve
     const now = performance.now();
     const reset = !initialized.current || sample?.runId !== before?.runId ||
       (sample && before && sample.simulatedMinute < before.simulatedMinute);
-    const elapsed = sample && before ? sample.realMilliseconds - before.realMilliseconds : now - lastArrival.current;
+    // Con buffer, la reproducción fija la duración de cada transición; sin él,
+    // se usa el tiempo real entre muestras.
+    const elapsed = sample?.durationMs || (sample && before ? sample.realMilliseconds - before.realMilliseconds : now - lastArrival.current);
     const duration = elapsed > 0 ? elapsed : 1000;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reset) { tracks.current = {}; shown.current = {}; previous.current = {}; }

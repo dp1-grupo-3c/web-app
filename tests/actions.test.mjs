@@ -264,6 +264,33 @@ test("detener no cancela una corrida distinta a la que se confirmó", async () =
   assert.equal(calls.cancel, 1);
 });
 
+const fleet = (autoSpeed, autoQuantity) => ({
+  auto: { quantity: autoQuantity, speed: autoSpeed },
+  moto: { quantity: 15, speed: 25 },
+  bicicleta: { quantity: 12, speed: 12 },
+});
+
+test("la flota solo envía las velocidades que cambiaron", async () => {
+  const { api, store } = modules();
+  const sent = [];
+  api.cambiarVelocidad = async (tipo, kmPorHora) => { sent.push([tipo, kmPorHora]); return { version: 2 }; };
+  api.cambiarFlota = async () => { throw new Error("no debe llamarse sin cambio de cantidad"); };
+  assert.equal((await store.guardarFlota(fleet(35.5, 10), fleet(40, 10))).ok, true);
+  assert.deepEqual(sent, [["AUTO", 35.5]]);
+});
+
+test("sin endpoint de cantidad se informa el guardado parcial sin anunciar éxito", async () => {
+  const { api, store } = modules();
+  let body;
+  api.cambiarVelocidad = async () => ({ version: 2 });
+  api.cambiarFlota = async (s) => { body = s; throw new api.ErrorServicio(404, "No static resource"); };
+  const result = await store.guardarFlota(fleet(35, 20), fleet(40, 10));
+  assert.equal(result.ok, false);
+  assert.match(result.message, /Guardamos las velocidades, pero no la cantidad: el cambio de cantidad aún no está disponible/);
+  assert.deepEqual(body.unidades.AUTO, { cantidad: 20, kmPorHora: 35 });
+  assert.equal(store.getSnapshot().cantidadesFlota, null);
+});
+
 // ---- Clientes --------------------------------------------------------------------
 
 const persona = {

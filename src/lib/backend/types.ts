@@ -203,6 +203,15 @@ export interface VistaParametros {
   version: number;
 }
 
+/**
+ * PROPUESTA — cuerpo de PUT /api/parametros/flota, que el backend aún no
+ * implementa (ver cambiarFlota en api.ts). Lleva los tres tipos juntos para
+ * que el cambio sea atómico.
+ */
+export interface SolicitudFlota {
+  unidades: Record<TipoUnidad, { cantidad: number; kmPorHora: number }>;
+}
+
 export interface RespuestaAveria {
   placa: string;
   tipo: number;
