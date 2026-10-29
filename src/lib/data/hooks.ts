@@ -8,29 +8,37 @@
  * corrida activa a la vez en el backend). Cada hook conserva su firma
  * original; lo que cambia es que ya no devuelven datos vacíos.
  *
- * La vista diaria consume exclusivamente corridas DIA_A_DIA.
+ * La operación diaria tiene su propio store (src/lib/data/operacion.ts) y
+ * sus hooks al final de este archivo.
  */
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import * as api from "@/lib/backend/api";
-import type { FilaPedido } from "@/lib/backend/types";
+import type { FilaPedido, VistaUnidad } from "@/lib/backend/types";
 import {
   buildSummary,
   filaPedidoToOrder,
+  incidenteToBreakdown,
   instantaneaToClock,
   instantaneaToMapSnapshot,
   metricasToMetrics,
   outcomePorEstado,
+  parametrosOperacionToTrafficLight,
   parametrosToTrafficLight,
+  pedidoActivo,
+  pedidoOperacionToOrder,
   TIPO_POR_MODO,
   vistaUnidadToVehicle,
 } from "@/lib/data/adapters";
+import * as clientes from "@/lib/data/clientes";
+import * as operacion from "@/lib/data/operacion";
 import * as store from "@/lib/data/store";
 import { esFinal } from "@/lib/backend/estado";
 import { DEFAULT_TRAFFIC_LIGHT } from "@/lib/constants";
 import type {
   BreakdownRecord,
   BreakdownType,
+  Client,
   ConnectionState,
   DataScope,
   MapSnapshot,
@@ -58,15 +66,6 @@ function useStoreState() {
 const matchesSim = (s: store.Store, mode: SimulationMode) => s.estado.corrida?.tipo === TIPO_POR_MODO[mode];
 const matchesScope = (s: store.Store, scope: DataScope) => scope.kind === "client"
   || (scope.kind === "live" ? s.estado.corrida?.tipo === "DIA_A_DIA" : matchesSim(s, scope.mode));
-
-export function useDailyRun() {
-  const s = useStoreState();
-  const corrida = s.estado.corrida;
-  return {
-    corrida: corrida?.tipo === "DIA_A_DIA" ? corrida : null,
-    occupied: !!s.estado.idActual && !esFinal(corrida?.estado),
-  };
-}
 
 /**
  * Corrida actual del backend, sea del tipo que sea: solo hay una a la vez.
@@ -282,4 +281,104 @@ export function useClientDemoOrders(clientId: string): { orders: Order[]; runnin
     return data.filas.filter((f) => data.picked.includes(f.id)).map((f) => filaPedidoToOrder(f, vehicles));
   }, [id, key, data, vehicles]);
   return { orders, running, loading: !!id && data?.key !== key };
+}
+
+// ---- Operación diaria (/api/operaciones) --------------------------------------
+
+function useOperacionState() {
+  useEffect(() => { operacion.ensureStarted(); }, []);
+  return useSyncExternalStore(operacion.subscribe, operacion.getSnapshot, operacion.getServerSnapshot);
+}
+
+const enServicio = (u: VistaUnidad) => u.estado !== "AVERIADA" && u.estado !== "EN_MANTENIMIENTO";
+
+/** Operación seguida por esta sesión. `cargado` es false hasta la primera respuesta de /actual. */
+export function useOperacion() {
+  const s = useOperacionState();
+  return { vista: s.vista, cargado: s.cargado, running: operacion.enCurso(s.vista) };
+}
+
+export function useOperacionConnection(): ConnectionState {
+  const s = useOperacionState();
+  if (!s.vista) return "waiting";
+  if (s.canal === "conectado") return "live";
+  if (s.canal === "reconectando") return "reconnecting";
+  if (s.canal === "desconectado") return "offline";
+  return "waiting";
+}
+
+export function useOperacionMapSnapshot(): MapSnapshot {
+  const s = useOperacionState();
+  return useMemo(() => {
+    const i = s.vista?.instantanea ?? null;
+    return instantaneaToMapSnapshot(i, i?.almacenes ?? s.almacenes, s.vista?.contextoId ?? null);
+  }, [s.vista, s.almacenes]);
+}
+
+/** Pedidos activos. La vista operativa ya trae el registro completo, sin sondeo aparte. */
+export function useOperacionOrders(): Order[] {
+  const { vista } = useOperacionState();
+  return useMemo(() => {
+    if (!vista) return EMPTY_ORDERS;
+    const vehicles = vista.instantanea.unidades.map(vistaUnidadToVehicle);
+    return vista.pedidos.filter(pedidoActivo).map((p) => pedidoOperacionToOrder(p, vehicles, vista.fechaHoraOperativa));
+  }, [vista]);
+}
+
+export function useOperacionKpis(): OpsKpis | null {
+  const { vista } = useOperacionState();
+  return useMemo(() => {
+    if (!vista) return null;
+    const fleet = { auto: 0, moto: 0, bicicleta: 0 };
+    for (const u of vista.instantanea.unidades) if (enServicio(u)) fleet[vistaUnidadToVehicle(u).kind]++;
+    const hoy = vista.fechaHoraOperativa.slice(0, 10);
+    return {
+      fleet,
+      activeOrders: vista.pedidos.filter(pedidoActivo).length,
+      deliveredToday: vista.pedidos.filter((p) => p.estado === "ENTREGADO" && p.transiciones.some((t) => t.estado === "ENTREGADO" && t.fechaHora.startsWith(hoy))).length,
+      alerts: vista.incidentes.filter((i) => !i.resuelto).length,
+    };
+  }, [vista]);
+}
+
+export function useOperacionMetrics(): Metrics | null {
+  const { vista } = useOperacionState();
+  return useMemo(() => (vista ? metricasToMetrics(vista.instantanea.metricas) : null), [vista]);
+}
+
+/** Más recientes primero. */
+export function useOperacionBreakdowns(): BreakdownRecord[] {
+  const { vista } = useOperacionState();
+  return useMemo(
+    () => (vista ? vista.incidentes.map((i) => incidenteToBreakdown(i, vista.instantanea.unidades)).reverse() : EMPTY_BREAKDOWNS),
+    [vista],
+  );
+}
+
+/** El backend rechaza averías de unidades ya deshabilitadas; no se ofrecen. */
+export function useOperacionPlates(): VehiclePlates {
+  const { vista } = useOperacionState();
+  return useMemo(() => {
+    if (!vista || !operacion.enCurso(vista)) return EMPTY_PLATES;
+    const plates: VehiclePlates = { auto: [], moto: [], bicicleta: [] };
+    for (const u of vista.instantanea.unidades) {
+      if (u.tipoAveria === 0 && enServicio(u)) plates[vistaUnidadToVehicle(u).kind].push(u.codigo);
+    }
+    return plates;
+  }, [vista]);
+}
+
+/** Umbrales propios de la operación en curso. */
+export function useOperacionTrafficLight(): TrafficLight {
+  const { vista } = useOperacionState();
+  return useMemo(() => (vista ? parametrosOperacionToTrafficLight(vista.parametros) : DEFAULT_TRAFFIC_LIGHT), [vista]);
+}
+
+// ---- Clientes (/api/clientes) -------------------------------------------------
+
+/** Clientes registrados, ordenados por nombre. Se vuelven a pedir al montar el componente que los usa. */
+export function useClients(): { clients: Client[]; loaded: boolean } {
+  useEffect(() => { clientes.refrescar(); }, []);
+  const s = useSyncExternalStore(clientes.subscribe, clientes.getSnapshot, clientes.getServerSnapshot);
+  return { clients: s.clientes, loaded: s.cargado };
 }
