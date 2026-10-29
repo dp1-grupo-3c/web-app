@@ -164,7 +164,7 @@ export function WarehousePopover({ warehouse: w, trafficLight, neutral, anchor, 
   );
 }
 
-export function BlockagePopover({ blockage: b, anchor, onClose, mapHeight }: { blockage: Blockage; anchor: Anchor; onClose: () => void; mapHeight: number }) {
+export function BlockagePopover({ blockage: b, endsIn, anchor, onClose, mapHeight }: { blockage: Blockage; endsIn?: number | null; anchor: Anchor; onClose: () => void; mapHeight: number }) {
   return (
     <Shell
       anchor={anchor}
@@ -173,7 +173,7 @@ export function BlockagePopover({ blockage: b, anchor, onClose, mapHeight }: { b
       head={
         <>
           <Tile color="var(--color-critic)"><CircleX className="size-5" aria-hidden /></Tile>
-          <Title title="Vía bloqueada" subtitle="Los vehículos la evitan" />
+          <Title title="Vía bloqueada" subtitle={endsIn != null ? `Se libera pronto: en ~${endsIn} min simulados` : "Los vehículos la evitan"} />
         </>
       }
     >

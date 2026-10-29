@@ -82,6 +82,20 @@
   .selected-vehicle-route { animation: none; }
 }
 
+/* Bloqueo por terminar. La duración del ciclo llega por style desde
+   src/config/simulacion.ts; el trazo discontinuo y el reloj del marcador lo
+   distinguen aunque no se anime. */
+.blockage-ending {
+  animation: blockage-ending-blink ease-in-out infinite;
+}
+@keyframes blockage-ending-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blockage-ending { animation: none; }
+}
+
 @layer base {
   html {
     color-scheme: dark;
