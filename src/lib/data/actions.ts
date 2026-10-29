@@ -11,7 +11,7 @@
  */
 
 import * as store from "@/lib/data/store";
-import type { BreakdownType, Coord, PriorityCode, SimulationMode, TrafficLight } from "@/lib/types";
+import type { BreakdownType, Coord, FleetSettings, PriorityCode, SimulationMode, TrafficLight } from "@/lib/types";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T } | { ok: false; message: string };
 
@@ -40,6 +40,9 @@ export const registerBreakdown = (input: NewBreakdownInput) => store.registrarAv
 export const uploadBreakdownFile = (file: File) => store.cargarAveriasMasivo(file);
 
 export const saveTrafficLight = (value: TrafficLight) => store.guardarSemaforo(value);
+
+/** Cantidad y velocidad por tipo de vehículo; la cantidad depende de un endpoint pendiente (ver store.guardarFlota). */
+export const saveFleet = (next: FleetSettings, previous: FleetSettings) => store.guardarFlota(next, previous);
 
 export const startSimulation = (input: StartSimulationInput) => store.arrancar(input.mode, { startDate: input.startDate, trafficLight: input.trafficLight });
 

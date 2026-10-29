@@ -12,6 +12,7 @@ import type {
   BreakdownType,
   Coord,
   FirstLateOrder,
+  FleetSettings,
   MapSnapshot,
   Metrics,
   Order,
@@ -36,6 +37,7 @@ import type {
   MetricasSimulacion,
   ResultadoSimulacion,
   ResumenCorrida,
+  SolicitudFlota,
   TipoEscenario,
   TipoUnidad,
   VistaAlmacen,
@@ -63,6 +65,7 @@ export const outcomePorEstado = (e: EstadoCorrida): SimulationOutcome | null => 
 // ---- Vehículos -------------------------------------------------------------
 
 const KIND_POR_TIPO: Record<TipoUnidad, VehicleKind> = { AUTO: "auto", MOTO: "moto", BICICLETA: "bicicleta" };
+export const TIPO_POR_KIND: Record<VehicleKind, TipoUnidad> = { auto: "AUTO", moto: "MOTO", bicicleta: "BICICLETA" };
 
 /** Conserva las pausas operativas; mantenimiento continúa fuera de servicio. */
 const STATUS_POR_ESTADO: Record<VistaUnidad["estado"], VehicleStatus> = {
@@ -215,6 +218,31 @@ export function metricasToMetrics(m: MetricasSimulacion): Metrics {
     avgDeliveryByPriority: avgDeliveryByPriority(m.minutosEntregaPorPlazo, m.entregasPorPlazo),
   };
 }
+
+// ---- Flota ------------------------------------------------------------------
+
+/**
+ * Velocidades vigentes del backend y cantidades de la corrida (unidades
+ * activas por tipo). Sin corrida, o sin parámetros aún, se usan los valores
+ * del enunciado: el backend todavía no expone la cantidad configurada.
+ */
+export function fleetSettings(p: VistaParametros | null, c: ResumenCorrida | null, defaults: FleetSettings): FleetSettings {
+  const out = {} as FleetSettings;
+  for (const [kind, tipo] of Object.entries(TIPO_POR_KIND) as [VehicleKind, TipoUnidad][]) {
+    out[kind] = {
+      quantity: c?.unidadesActivasPorTipo?.[tipo] ?? defaults[kind].quantity,
+      speed: p?.velocidades?.[tipo] ?? defaults[kind].speed,
+    };
+  }
+  return out;
+}
+
+/** Cuerpo del endpoint de flota propuesto (ver cambiarFlota en src/lib/backend/api.ts). */
+export const fleetToFlotaBody = (f: FleetSettings): SolicitudFlota => ({
+  unidades: Object.fromEntries(
+    (Object.entries(TIPO_POR_KIND) as [VehicleKind, TipoUnidad][]).map(([kind, tipo]) => [tipo, { cantidad: f[kind].quantity, kmPorHora: f[kind].speed }]),
+  ) as SolicitudFlota["unidades"],
+});
 
 // ---- Semáforo (umbral global) --------------------------------------------
 
