@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/feedback";
 import { DateInput, Field, TextInput } from "@/components/ui/form";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
+import { DATA_DATE_RANGE } from "@/config/simulacion";
 import { SIMULATION_DAYS_5D, SIMULATION_TITLE } from "@/lib/constants";
 import { addDays, formatDate, formatWeekdayDate, parseISODate } from "@/lib/format";
 import { validateTrafficLight } from "@/lib/traffic-light";
+import { INCOMPLETE_DATE, simulationStart } from "@/lib/validation";
 import type { SimulationMode, TrafficLight } from "@/lib/types";
 import { TrafficLightEditor } from "./TrafficLight";
 
@@ -26,12 +28,23 @@ type Props = {
 };
 
 export function SimConfigPanel({ mode, readOnly, startDate, onStartDate, trafficLight, onTrafficLight, starting, onStart, onClose, width }: Props) {
-  const [dateError, setDateError] = useState<string | null>(null);
+  // Problema de calendario que informa el campo (incompleta o inexistente) y
+  // si ya se intentó comenzar: "incompleta" y "vacía" solo se marcan entonces.
+  const [problem, setProblem] = useState<string | null>(null);
+  const [tried, setTried] = useState(false);
   const start = startDate ? parseISODate(startDate) : null;
   const end = start ? addDays(start, SIMULATION_DAYS_5D - 1) : null;
+  const check = (attempted: boolean) => {
+    if (readOnly) return null;
+    if (problem) return problem !== INCOMPLETE_DATE || attempted ? problem : null;
+    if (!startDate) return attempted ? "Elige una fecha de inicio para comenzar." : null;
+    return simulationStart(startDate, mode === "5d" ? SIMULATION_DAYS_5D : 1, DATA_DATE_RANGE);
+  };
+  const dateError = check(tried);
 
   const tryStart = () => {
-    if (!startDate) return setDateError("Elige una fecha de inicio para comenzar.");
+    setTried(true);
+    if (check(true)) return;
     if (validateTrafficLight(trafficLight)) return;
     onStart();
   };
@@ -59,13 +72,13 @@ export function SimConfigPanel({ mode, readOnly, startDate, onStartDate, traffic
         }
       >
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Fecha de inicio" htmlFor="s-start" required error={dateError}>
+          <Field label="Fecha de inicio" htmlFor="s-start" required error={dateError} help={readOnly ? undefined : `Con datos del ${formatDate(parseISODate(DATA_DATE_RANGE.from))} al ${formatDate(parseISODate(DATA_DATE_RANGE.to))}.`}>
             <DateInput
               id="s-start"
               value={startDate}
               disabled={readOnly}
               error={!!dateError}
-              onChange={(v) => { onStartDate(v); setDateError(null); }}
+              onChange={(v, p) => { onStartDate(v); setProblem(p); setTried(false); }}
             />
           </Field>
           <Field label="Fecha de fin" htmlFor="s-end">

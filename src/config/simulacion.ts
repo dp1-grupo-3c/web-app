@@ -30,3 +30,22 @@ export const FLEET_DEFAULTS = {
   moto: { quantity: 15, speed: 25 },
   bicicleta: { quantity: 12, speed: 12 },
 } as const;
+
+// ---- Validación de formularios ----------------------------------------------
+
+/**
+ * Rango de fechas con datos para simular (data_dp1: ventas y bloqueos de
+ * 2026-01 a 2028-12). Ningún endpoint lo expone todavía; si cambia el
+ * dataset, ajustar aquí.
+ */
+export const DATA_DATE_RANGE = { from: "2026-01-01", to: "2028-12-31" } as const;
+
+/** Tope provisional de paquetes por pedido (el enunciado no fija uno). */
+export const MAX_PACKAGES_PER_ORDER = 1000;
+
+/** Longitudes máximas que acepta el backend (SolicitudPedidoOperacion). */
+export const CLIENT_CODE_MAX_LENGTH = 100;
+export const CLIENT_NAME_MAX_LENGTH = 200;
+
+/** Teléfono: solo dígitos, espacios o "+", con esta cantidad de caracteres. */
+export const PHONE_LENGTH = { min: 7, max: 15 } as const;
