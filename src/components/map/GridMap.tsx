@@ -33,9 +33,11 @@ type GridMapProps = {
   onCancelPick?: () => void;
   /** Mensaje cuando no hay datos que dibujar. */
   emptyMessage?: ReactNode;
+  /** Indicador discreto junto a los controles (p. ej. "Aplicando cambios…"); nunca lo tapa el panel lateral. */
+  status?: ReactNode;
 };
 
-export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage }: GridMapProps) {
+export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status }: GridMapProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
@@ -292,6 +294,7 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
             {emptyMessage}
           </div>
         )}
+        {status}
       </div>
     </div>
   );

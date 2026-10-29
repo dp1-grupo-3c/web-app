@@ -11,6 +11,8 @@ type SimHudProps = {
   clock: SimulationClock | null;
   ended: boolean;
   compact: boolean;
+  /** Desfase del mapa respecto del servidor por el buffer de reproducción, en segundos. */
+  lagSeconds?: number;
   onCancel: () => void;
 };
 
@@ -19,7 +21,7 @@ type SimHudProps = {
  * No hay control de pausa ni de velocidad: el backend no los soporta
  * (ver GUIA_FLUJO_DATOS.md, "Lo que el backend no ofrece hoy").
  */
-export function SimHud({ mode, startDate, clock, ended, compact, onCancel }: SimHudProps) {
+export function SimHud({ mode, startDate, clock, ended, compact, lagSeconds = 0, onCancel }: SimHudProps) {
   const elapsed = clock?.elapsedMinutes ?? 0;
   const now = clock ? new Date(clock.simTime) : addMinutes(parseISODate(startDate), 0);
   const day = Math.floor(elapsed / 1440) + 1;
@@ -29,6 +31,14 @@ export function SimHud({ mode, startDate, clock, ended, compact, onCancel }: Sim
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-n500">{SIMULATION_TITLE[mode]}</span>
           <b className="text-[17px] leading-tight whitespace-nowrap text-white tabular-nums">{formatWeekdayDate(now)} · {formatTime(now)}</b>
+          {!ended && lagSeconds > 0 && (
+            <span
+              className="cursor-help text-[11px] leading-tight whitespace-nowrap text-n500"
+              title="Para que el movimiento sea fluido, el mapa y la hora se muestran unos segundos por detrás del servidor. Las averías se aplican sobre el estado actual del servidor, que va por delante: tenlo en cuenta al calcular."
+            >
+              Vista ~{lagSeconds} s por detrás del servidor
+            </span>
+          )}
         </div>
         {mode === "5d" ? (
           <div className="flex w-[140px] flex-col gap-1.5">

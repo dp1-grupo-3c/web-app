@@ -14,13 +14,57 @@ import * as api from "@/lib/backend/api";
 import { ErrorServicio } from "@/lib/backend/api";
 import { abrirCanal, type EstadoCanal } from "@/lib/backend/canal";
 import { esFinal, inicial, reducir, type Accion, type EstadoSim } from "@/lib/backend/estado";
-import type { RespuestaAveria, RespuestaSalud, VistaAlmacen, VistaParametros } from "@/lib/backend/types";
+import type { InstantaneaSimulacion, RespuestaAveria, RespuestaSalud, VistaAlmacen, VistaParametros } from "@/lib/backend/types";
+import {
+  BUFFER_FILL_TIMEOUT_MS,
+  BUFFER_SIZE,
+  BURST_GAP_MS,
+  CATCHUP_RATE,
+  DEFAULT_BUFFER_VARIANT,
+  FALLBACK_MS_PER_SIM_MINUTE,
+  PENDING_CHANGE_TIMEOUT_MS,
+  PENDING_ERROR_VISIBLE_MS,
+  PLAYBACK_CONTROL,
+  PLAYBACK_RATE_WINDOW,
+  PLAYBACK_TICK_MS,
+  type BufferVariant,
+} from "@/config/simulacion";
+import * as playback from "@/lib/data/playback";
 import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO, trafficLightToSemaforoBody } from "@/lib/data/adapters";
 import { SIMULATION_DAYS_5D } from "@/lib/constants";
 import { addDays, parseISODate, toISODate } from "@/lib/format";
 import type { FirstLateOrder, FleetCount, FleetSettings, SimulationMode, TrafficLight, VehicleKind } from "@/lib/types";
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; message: string };
+
+/** Lo que el buffer muestra ahora (puede ir por detrás de `estado.instantanea`, la última recibida). */
+export interface Reproduccion {
+  instantanea: InstantaneaSimulacion | null;
+  /** Duración de la transición hacia esta foto (la usa la animación del mapa). */
+  duracionMs: number;
+  /** "llenando" = aviso "Cargando…" inicial. */
+  fase: "inactiva" | "llenando" | "reproduciendo";
+  /** Fotos en cola y su objetivo, para el aviso de carga. */
+  enCola: number;
+  objetivo: number;
+  variante: BufferVariant;
+  /** Desfase esperado del buffer respecto del servidor, en ms reales. */
+  retrasoMs: number;
+}
+
+/**
+ * Cambio enviado por el usuario que aún no se ve en el mapa. `minuto` es el
+ * minuto simulado en que el servidor lo aplicó (llega con la respuesta).
+ */
+export interface CambioPendiente {
+  id: number;
+  placa: string;
+  minuto: number | null;
+  desde: number;
+  estado: "aplicando" | "error";
+  /** Solo en estado "error": hasta cuándo se muestra el aviso. */
+  hasta?: number;
+}
 
 export interface Store {
   estado: EstadoSim;
@@ -33,6 +77,8 @@ export interface Store {
   firstLateOrderFor: string | null;
   /** Cantidades aceptadas por PUT /parametros/flota (null mientras el backend no lo implemente). */
   cantidadesFlota: FleetCount | null;
+  reproduccion: Reproduccion;
+  cambiosPendientes: CambioPendiente[];
 }
 
 const initialStore: Store = {
@@ -45,6 +91,8 @@ const initialStore: Store = {
   firstLateOrder: null,
   firstLateOrderFor: null,
   cantidadesFlota: null,
+  reproduccion: { instantanea: null, duracionMs: 0, fase: "inactiva", enCola: 0, objetivo: BUFFER_SIZE[DEFAULT_BUFFER_VARIANT], variante: DEFAULT_BUFFER_VARIANT, retrasoMs: 0 },
+  cambiosPendientes: [],
 };
 
 let state: Store = initialStore;
@@ -76,12 +124,98 @@ function dispatch(a: Accion) {
   const next = reducir(prev, a);
   if (next === prev) return;
   const nuevaCorrida = next.idActual !== prev.idActual;
+  if (nuevaCorrida) reiniciarReproduccion(next.idActual);
+  // Al buffer van todas las fotos (también las de una ráfaga que el reducer
+  // ya superó con otra más nueva); él descarta duplicadas y atrasadas.
+  const foto = a.t === "ws" ? (a.m.tipo === "instantanea" ? a.m.carga : null) : a.t === "detalle" ? a.d.instantanea : null;
+  const id = a.t === "ws" ? a.m.corrida : a.t === "detalle" ? a.d.corrida.id : null;
+  if (foto && id === next.idActual) pb = playback.receive(pb, foto, pbConfig());
+  if (esFinal(next.corrida?.estado) || next.resultado) pb = playback.markEnded(pb);
   set({
     estado: next,
-    ...(nuevaCorrida ? { averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null } : {}),
+    ...(nuevaCorrida ? { averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null, cambiosPendientes: [] } : {}),
   });
+  publicarReproduccion();
   fetchFirstLateIfNeeded(next);
 }
+
+// ---- Reproducción con buffer (ver src/lib/data/playback.ts) ---------------
+
+let pb: playback.PlaybackState<InstantaneaSimulacion> = playback.idle();
+let variante: BufferVariant = DEFAULT_BUFFER_VARIANT;
+
+const pbConfig = (): playback.PlaybackConfig => ({
+  target: BUFFER_SIZE[variante],
+  fillTimeoutMs: BUFFER_FILL_TIMEOUT_MS,
+  catchUpRate: CATCHUP_RATE,
+  ...PLAYBACK_CONTROL,
+  rateWindow: PLAYBACK_RATE_WINDOW,
+  fallbackMsPerMinute: FALLBACK_MS_PER_SIM_MINUTE,
+  burstGapMs: BURST_GAP_MS,
+});
+
+function reiniciarReproduccion(id: string | null) {
+  pb = id ? playback.start(id, Date.now(), pbConfig()) : playback.idle();
+}
+
+/** Elige la variante del buffer (?buffer= en la URL). Se aplica en caliente: el control ajusta la cola. */
+export function fijarVarianteBuffer(v: BufferVariant) {
+  if (v === variante) return;
+  variante = v;
+  publicarReproduccion();
+}
+
+function publicarReproduccion() {
+  const r = state.reproduccion;
+  const cfg = pbConfig();
+  const next: Reproduccion = {
+    instantanea: pb.played,
+    duracionMs: pb.durationMs,
+    fase: pb.phase === "idle" ? "inactiva" : pb.phase === "filling" ? "llenando" : "reproduciendo",
+    enCola: pb.queue.length,
+    objetivo: cfg.target,
+    variante,
+    retrasoMs: playback.expectedLagMs(pb, cfg),
+  };
+  if (next.instantanea === r.instantanea && next.fase === r.fase && next.enCola === r.enCola && next.objetivo === r.objetivo && next.variante === r.variante && Math.round(next.retrasoMs / 1000) === Math.round(r.retrasoMs / 1000)) return;
+  set({ reproduccion: next });
+}
+
+/**
+ * Un cambio queda aplicado cuando se muestra la primera foto con minuto ≥ al
+ * que informó el servidor y en ella la unidad ya figura averiada. El backend
+ * de simulaciones no marca versión/plan en la instantánea; con un `revision`
+ * (como /api/operaciones) bastaría comparar números.
+ */
+function revisarPendientes(now: number) {
+  const foto = pb.played;
+  let cambio = false;
+  const quedan = state.cambiosPendientes.flatMap((c): CambioPendiente[] => {
+    if (c.estado === "error") {
+      if (now < (c.hasta ?? 0)) return [c];
+      cambio = true;
+      return [];
+    }
+    const visible = c.minuto != null && foto && foto.minutoSimulado >= c.minuto
+      && foto.unidades.some((u) => u.codigo === c.placa && u.tipoAveria > 0);
+    if (visible) { cambio = true; return []; }
+    if (now - c.desde > PENDING_CHANGE_TIMEOUT_MS) {
+      cambio = true;
+      return [{ ...c, estado: "error", hasta: now + PENDING_ERROR_VISIBLE_MS }];
+    }
+    return [c];
+  });
+  if (cambio) set({ cambiosPendientes: quedan });
+}
+
+function tickReproduccion() {
+  const now = Date.now();
+  pb = playback.advance(pb, now, pbConfig());
+  publicarReproduccion();
+  if (state.cambiosPendientes.length) revisarPendientes(now);
+}
+
+let secuenciaCambios = 0;
 
 /** Cuando llega el resultado, resuelve el detalle del primer pedido incumplido (solo IDs vienen en el resultado). */
 function fetchFirstLateIfNeeded(estado: EstadoSim) {
@@ -108,7 +242,9 @@ function fetchFirstLateIfNeeded(estado: EstadoSim) {
  */
 export function olvidarCorrida() {
   olvidada = state.estado.idActual;
-  set({ estado: inicial, averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null });
+  reiniciarReproduccion(null);
+  set({ estado: inicial, averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null, cambiosPendientes: [] });
+  publicarReproduccion();
 }
 
 /** Corrida terminada que el usuario descartó: /salud podría seguir reportándola. */
@@ -150,6 +286,7 @@ export function ensureStarted() {
   );
 
   pollLoop();
+  setInterval(tickReproduccion, PLAYBACK_TICK_MS);
 }
 
 function pollLoop() {
@@ -216,11 +353,23 @@ export async function cancelar(idEsperado?: string): Promise<Result> {
 export async function registrarAveria(placa: string, tipo: 1 | 2 | 3): Promise<Result> {
   const id = state.estado.idActual;
   if (!id) return { ok: false, message: "No hay ninguna corrida activa." };
+  // Indicador "Aplicando cambios…" desde el envío hasta verlo en el mapa.
+  const pendiente: CambioPendiente = { id: ++secuenciaCambios, placa, minuto: null, desde: Date.now(), estado: "aplicando" };
+  set({ cambiosPendientes: [...state.cambiosPendientes, pendiente] });
+  const quitar = () => set({ cambiosPendientes: state.cambiosPendientes.filter((c) => c.id !== pendiente.id) });
   try {
     const r = await api.registrarAveria(id, placa, tipo);
-    set({ averiasSesion: [r, ...state.averiasSesion] });
+    if (state.estado.idActual !== id) { quitar(); return { ok: true }; }
+    // Las fotos en cola muestran el plan anterior: en lugar de descartarlas
+    // (salto brusco) se reproducen más rápido hasta el minuto del cambio.
+    pb = playback.requestCatchUp(pb, r.minutoSimulado);
+    set({
+      averiasSesion: [r, ...state.averiasSesion],
+      cambiosPendientes: state.cambiosPendientes.map((c) => (c.id === pendiente.id ? { ...c, minuto: r.minutoSimulado } : c)),
+    });
     return { ok: true };
   } catch (e) {
+    quitar();
     return { ok: false, message: msg(e) };
   }
 }

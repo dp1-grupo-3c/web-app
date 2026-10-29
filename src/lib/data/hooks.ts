@@ -11,6 +11,7 @@
  * La vista diaria consume exclusivamente corridas DIA_A_DIA.
  */
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import * as api from "@/lib/backend/api";
 import type { FilaPedido } from "@/lib/backend/types";
@@ -28,7 +29,7 @@ import {
 } from "@/lib/data/adapters";
 import * as store from "@/lib/data/store";
 import { esFinal } from "@/lib/backend/estado";
-import { DEMO_ORDERS, FLEET_DEFAULTS } from "@/config/simulacion";
+import { BUFFER_SIZE, DEFAULT_BUFFER_VARIANT, DEMO_ORDERS, FLEET_DEFAULTS, type BufferVariant } from "@/config/simulacion";
 import { DEFAULT_TRAFFIC_LIGHT } from "@/lib/constants";
 import type {
   BreakdownRecord,
@@ -98,13 +99,40 @@ export function useConnection(scope: DataScope): ConnectionState {
   return "waiting";
 }
 
-/** Almacenes, vehículos (con rutas) y bloqueos para dibujar en la retícula. */
+/**
+ * Almacenes, vehículos (con rutas) y bloqueos para dibujar en la retícula.
+ * Las simulaciones muestran la foto que reproduce el buffer (con desfase y
+ * ritmo uniforme); la operación diaria, a 1×, la última recibida.
+ */
 export function useMapSnapshot(scope: DataScope): MapSnapshot {
   const s = useStoreState();
   return useMemo(() => {
     const active = matchesScope(s, scope);
-    return instantaneaToMapSnapshot(active ? s.estado.instantanea : null, active ? (s.estado.instantanea?.almacenes ?? s.almacenes) : s.almacenes, active ? s.estado.idActual : null);
+    const buffered = scope.kind === "sim";
+    const i = active ? (buffered ? s.reproduccion.instantanea : s.estado.instantanea) : null;
+    return instantaneaToMapSnapshot(i, active ? (i?.almacenes ?? s.almacenes) : s.almacenes, active ? s.estado.idActual : null, buffered ? s.reproduccion.duracionMs : undefined);
   }, [scope, s]);
+}
+
+/** Variante del buffer elegida con ?buffer=pequeno|grande (o la de NEXT_PUBLIC_BUFFER_VARIANT). */
+export function useBufferVariant(): BufferVariant {
+  const param = useSearchParams().get("buffer");
+  const variant: BufferVariant = param && param in BUFFER_SIZE ? (param as BufferVariant) : DEFAULT_BUFFER_VARIANT;
+  useEffect(() => { store.fijarVarianteBuffer(variant); }, [variant]);
+  return variant;
+}
+
+/** Estado del buffer de reproducción y de los cambios del usuario aún no visibles en el mapa. */
+export function usePlayback(mode: SimulationMode) {
+  const s = useStoreState();
+  const own = matchesSim(s, mode);
+  return {
+    phase: own ? s.reproduccion.fase : "inactiva",
+    queued: s.reproduccion.enCola,
+    target: s.reproduccion.objetivo,
+    lagSeconds: own ? Math.round(s.reproduccion.retrasoMs / 1000) : 0,
+    pending: own ? s.cambiosPendientes : [],
+  };
 }
 
 /** KPIs del resumen superior de operaciones diarias. */
@@ -238,7 +266,9 @@ export function useSimulationFeed(mode: SimulationMode): {
   const s = useStoreState();
   return useMemo(() => {
     if (!matchesSim(s, mode) || !s.estado.corrida) return { clock: null, summary: null, outcome: null, error: null };
-    const clock = s.estado.instantanea ? instantaneaToClock(s.estado.instantanea) : null;
+    // La hora sigue a la foto reproducida para coincidir con el mapa.
+    const shown = s.reproduccion.instantanea ?? s.estado.instantanea;
+    const clock = shown ? instantaneaToClock(shown) : null;
     const trafficLight = s.parametros ? parametrosToTrafficLight(s.parametros) : DEFAULT_TRAFFIC_LIGHT;
     const summary = s.estado.resultado ? buildSummary(s.estado.corrida, s.estado.resultado, trafficLight, s.firstLateOrder ?? undefined) : null;
     const outcome = summary?.outcome ?? (esFinal(s.estado.corrida.estado) ? outcomePorEstado(s.estado.corrida.estado) : null);
