@@ -219,6 +219,148 @@ export interface ResultadoCargaAverias {
   avisos: string[];
 }
 
+// ---- Operaciones diarias (/api/operaciones, /ws/operaciones) -------------
+// Ver docs/OPERACIONES_DIARIAS.md del backend. Las fechas LocalDateTime
+// llegan en ISO sin zona y ya están en la zona de la operación.
+
+export type EstadoOperacion = "EN_CURSO" | "DETENIDA" | "FALLIDA";
+export type EstadoPedido =
+  | "REGISTRADO" | "PLANIFICADO" | "EN_TRANSITO" | "EN_REPLANIFICACION"
+  | "ENTREGADO_PARCIALMENTE" | "ENTREGADO" | "CANCELADO";
+export type PrioridadPedido = "NORMAL" | "PRIORITARIO_4" | "PRIORITARIO_3" | "PRIORITARIO_2" | "PRIORITARIO_1";
+export type EstadoComando = "ACEPTADO" | "APLICADO" | "RECHAZADO";
+
+export interface ConfiguracionOperacion {
+  zonaHoraria: string;
+  saltoMinutos: number;
+  algoritmo: string;
+  semilla: number;
+  presupuestoPlanificacionMs: number;
+}
+
+export interface ParametrosOperacionInstantanea {
+  /** Indexado por el ordinal de TipoUnidad: AUTO, MOTO, BICICLETA. */
+  velocidadKmH: number[];
+  minutosAcondicionamiento: number;
+  minutosAlimentacion: number;
+  minutosSeparacionCambioTurno: number;
+  minutosTrasvase: number;
+  umbralSemaforoAmbar: number;
+  umbralSemaforoVerde: number;
+  version: number;
+}
+
+export interface VistaPedidoOperacion {
+  id: number;
+  codigoCliente: string;
+  nombreCliente: string;
+  telefonoCliente: string;
+  direccion: string;
+  x: number;
+  y: number;
+  cantidad: number;
+  pendiente: number;
+  prioridad: PrioridadPedido;
+  estado: EstadoPedido;
+  incumplido: boolean;
+  registro: string;
+  limite: string;
+  transiciones: { estado: EstadoPedido; fechaHora: string }[];
+}
+
+export interface IncidenteOperacion {
+  comandoId: string;
+  placa: string;
+  tipo: number;
+  inicio: string;
+  reincorporacion: string | null;
+  resuelto: boolean;
+}
+
+export interface VistaOperacion {
+  contextoId: string;
+  revision: number;
+  estado: EstadoOperacion;
+  zonaHoraria: string;
+  horaServidor: string;
+  fechaHoraOperativa: string;
+  configuracion: ConfiguracionOperacion;
+  instantanea: InstantaneaSimulacion;
+  parametros: ParametrosOperacionInstantanea;
+  pedidos: VistaPedidoOperacion[];
+  incidentes: IncidenteOperacion[];
+  avisos: string[];
+  calculando: boolean;
+  planesDescartados: number;
+  error: string | null;
+}
+
+export interface ResultadoComando {
+  comandoId: string;
+  estado: EstadoComando;
+  aceptado: string;
+  aplicado: string | null;
+  pedidoId: number | null;
+  error: string | null;
+}
+
+export interface PaginaPedidosOperacion {
+  contextoId: string;
+  revision: number;
+  pedidos: VistaPedidoOperacion[];
+  pagina: number;
+  tamanoPagina: number;
+  totalPedidos: number;
+  totalPaginas: number;
+}
+
+export type SolicitudOperacion = Partial<ConfiguracionOperacion>;
+
+export interface SolicitudPedidoOperacion {
+  solicitudId: string;
+  codigoCliente: string;
+  nombreCliente: string;
+  telefonoCliente: string;
+  direccion: string;
+  x: number;
+  y: number;
+  cantidad: number;
+  prioridad: PrioridadPedido;
+}
+
+export interface SolicitudAveriaOperacion {
+  solicitudId: string;
+  placa: string;
+  tipo: 1 | 2 | 3;
+}
+
+export interface SolicitudParametrosOperacion {
+  solicitudId: string;
+  velocidades?: Partial<Record<TipoUnidad, number>>;
+  ambar?: number;
+  verde?: number;
+}
+
+// ---- Clientes (/api/clientes) ----------------------------------------------
+
+export type TipoCliente = "PERSONA" | "EMPRESA";
+
+export interface Cliente {
+  tipo: TipoCliente;
+  /** DNI (8 dígitos) o RUC (11). Es el codigoCliente de sus pedidos. */
+  documento: string;
+  nombre: string;
+  telefono: string;
+  contacto: string | null;
+  direccion: string;
+  x: number;
+  y: number;
+  registrado: string;
+  actualizado: string;
+}
+
+export type SolicitudCliente = Omit<Cliente, "registrado" | "actualizado">;
+
 export interface ErrorBackend {
   codigo: number;
   codigoError: string;

@@ -7,7 +7,7 @@ import { ErrorMessage, NumberInput } from "@/components/ui/form";
 import { useToast } from "@/components/ui/Toast";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { DEFAULT_TRAFFIC_LIGHT, TRAFFIC_LIGHT_MAX } from "@/lib/constants";
-import { saveTrafficLight } from "@/lib/data/actions";
+import { saveOperationTrafficLight } from "@/lib/data/actions";
 import { sameTrafficLight, setLimit, validateTrafficLight, type TrafficLightKey } from "@/lib/traffic-light";
 import type { TrafficLight } from "@/lib/types";
 
@@ -78,7 +78,7 @@ export function TrafficLightPanel({ saved, onClose, width }: { saved: TrafficLig
 
   const save = async () => {
     setBusy(true);
-    const res = await saveTrafficLight(draft);
+    const res = await saveOperationTrafficLight(draft);
     setBusy(false);
     if (!res.ok) return toast.error(res.message);
     toast.success("Los rangos del semáforo se guardaron correctamente.");

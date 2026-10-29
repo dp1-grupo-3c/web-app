@@ -3,29 +3,26 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
-import { esFinal } from "@/lib/backend/estado";
-import { useDailyRun } from "@/lib/data/hooks";
-import { arrancarDia, cancelarDia } from "@/lib/data/store";
-import { toISODate } from "@/lib/format";
+import { startOperation, stopOperation } from "@/lib/data/actions";
+import { formatoFechaOperativa } from "@/lib/data/adapters";
+import { useOperacion } from "@/lib/data/hooks";
 
 export function DailyRunControl() {
-  const { corrida, occupied } = useDailyRun();
-  const [date, setDate] = useState(() => toISODate(new Date()));
+  const { vista, cargado, running } = useOperacion();
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const toast = useToast();
-  const running = corrida && !esFinal(corrida.estado);
 
   const start = async () => {
     setBusy(true);
-    const result = await arrancarDia(date);
+    const result = await startOperation();
     setBusy(false);
     if (!result.ok) toast.error(result.message);
   };
   const stop = async () => {
-    if (!corrida) return;
+    if (!vista) return;
     setBusy(true);
-    const result = await cancelarDia(corrida.id);
+    const result = await stopOperation(vista.contextoId);
     setBusy(false);
     setConfirm(false);
     if (!result.ok) toast.error(result.message);
@@ -33,9 +30,13 @@ export function DailyRunControl() {
 
   return (
     <section aria-label="Control de operación diaria" className="max-w-xl rounded-xl border border-line bg-panel/95 p-3 text-sm text-white shadow-lg">
-      {running ? (
+      {running && vista ? (
         <>
-          <p role="status">Operación diaria · ritmo real 1× · {corrida.fechaHoraSimulada.replace("T", " ")}</p>
+          <p role="status">
+            Operación diaria · {formatoFechaOperativa(vista.fechaHoraOperativa)} ({vista.zonaHoraria}) · {vista.configuracion.algoritmo}
+            {vista.calculando && " · planificando…"}
+          </p>
+          {vista.error && <p className="mt-1 text-xs text-critic">{vista.error}</p>}
           {confirm ? (
             <div className="mt-2 flex items-center gap-2">
               <span>¿Detener la operación para todas las sesiones?</span>
@@ -44,18 +45,11 @@ export function DailyRunControl() {
             </div>
           ) : <Button className="mt-2" size="xs" variant="outline" onClick={() => setConfirm(true)}>Detener operación</Button>}
         </>
-      ) : occupied ? (
-        <p role="status">Hay otra corrida activa. Finalízala desde su pantalla antes de iniciar la operación diaria.</p>
       ) : (
         <>
-          {corrida && <p role="status">Operación {corrida.estado.toLowerCase()}. {corrida.error}</p>}
-          <div className="flex items-end gap-3">
-            <label className="flex flex-col gap-1">Fecha de operación
-              <input className="rounded border border-line bg-field p-2" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
-            </label>
-            <Button size="sm" loading={busy} disabled={!date} onClick={start}>Iniciar día a día</Button>
-          </div>
-          <p className="mt-2 text-xs text-n500">La jornada inicia a las 00:00 de la fecha elegida y avanza a ritmo real con los pedidos cargados. El registro de nuevos pedidos todavía no está disponible.</p>
+          {vista && <p role="status">Operación {vista.estado.toLowerCase()}.{vista.error ? ` ${vista.error}` : ""}</p>}
+          <Button className={vista ? "mt-2" : undefined} size="sm" loading={busy} disabled={!cargado} onClick={start}>Iniciar operación</Button>
+          <p className="mt-2 text-xs text-n500">La operación inicia en la hora actual del servidor, sin pedidos, con toda la flota en el almacén central. Registra pedidos desde el panel Pedidos mientras está en curso.</p>
         </>
       )}
     </section>

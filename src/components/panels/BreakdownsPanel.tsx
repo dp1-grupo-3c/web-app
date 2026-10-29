@@ -11,15 +11,16 @@ import { useToast } from "@/components/ui/Toast";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { cn } from "@/lib/cn";
 import { BREAKDOWN_TYPES, breakdownInfo } from "@/lib/constants";
-import { registerBreakdown, uploadBreakdownFile } from "@/lib/data/actions";
+import { registerBreakdown, registerOperationBreakdown, uploadBreakdownFile } from "@/lib/data/actions";
 import type { BreakdownRecord, BreakdownType, VehiclePlates } from "@/lib/types";
 
 const MAX_FILE_MB = 5;
 const ACCEPTED = /\.(txt|csv)$/i;
 
-type Props = { plates: VehiclePlates; recent: BreakdownRecord[]; onClose: () => void; width: number };
+/** `live`: operación diaria. Registra en /api/operaciones, que no ofrece carga masiva. */
+type Props = { plates: VehiclePlates; recent: BreakdownRecord[]; onClose: () => void; width: number; live?: boolean };
 
-export function BreakdownsPanel({ plates, recent, onClose, width }: Props) {
+export function BreakdownsPanel({ plates, recent, onClose, width, live = false }: Props) {
   const toast = useToast();
   const [tab, setTab] = useState<"individual" | "masiva">("individual");
   const [plate, setPlate] = useState("");
@@ -37,7 +38,7 @@ export function BreakdownsPanel({ plates, recent, onClose, width }: Props) {
     setErrors(e);
     if (e.plate || e.type) return;
     setBusy(true);
-    const res = await registerBreakdown({ plate, type: type as BreakdownType });
+    const res = await (live ? registerOperationBreakdown : registerBreakdown)({ plate, type: type as BreakdownType });
     setBusy(false);
     if (!res.ok) return toast.error(res.message);
     toast.success(`Registramos la avería ${type} de ${plate}. Sus pedidos se reasignarán automáticamente.`);
@@ -79,7 +80,7 @@ export function BreakdownsPanel({ plates, recent, onClose, width }: Props) {
         )
       }
     >
-      <SegmentedControl label="Tipo de registro" value={tab} onChange={setTab} options={[{ value: "individual", label: "Individual" }, { value: "masiva", label: "Carga masiva" }]} />
+      {!live && <SegmentedControl label="Tipo de registro" value={tab} onChange={setTab} options={[{ value: "individual", label: "Individual" }, { value: "masiva", label: "Carga masiva" }]} />}
 
       {tab === "individual" ? (
         <PanelSection title="Nueva avería" icon={<Wrench className="size-[18px]" aria-hidden />}>
