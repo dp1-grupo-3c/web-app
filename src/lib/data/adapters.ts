@@ -133,14 +133,14 @@ export function vistaBloqueoToBlockage(b: VistaBloqueo, index: number): Blockage
 
 // ---- Fotografía → MapSnapshot -------------------------------------------
 
-export function instantaneaToMapSnapshot(i: InstantaneaSimulacion | null, almacenes: VistaAlmacen[], runId: string | null = null): MapSnapshot {
+export function instantaneaToMapSnapshot(i: InstantaneaSimulacion | null, almacenes: VistaAlmacen[], runId: string | null = null, durationMs?: number): MapSnapshot {
   const warehouses = almacenes.map(vistaAlmacenToWarehouse);
   return {
     warehouses,
     // Mantener también la flota en almacenes: puede estar alimentándose o abasteciendo.
     vehicles: i ? i.unidades.map(vistaUnidadToVehicle) : [],
     blockages: i ? i.bloqueosVigentes.map(vistaBloqueoToBlockage) : [],
-    sample: i ? { runId, simulatedMinute: i.minutoSimulado, realMilliseconds: i.milisegundosReales } : undefined,
+    sample: i ? { runId, simulatedMinute: i.minutoSimulado, realMilliseconds: i.milisegundosReales, durationMs } : undefined,
   };
 }
 

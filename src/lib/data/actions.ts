@@ -28,7 +28,13 @@ export type NewBreakdownInput = { plate: string; type: BreakdownType };
 
 export type StartSimulationInput = { mode: SimulationMode; startDate: string; trafficLight: TrafficLight };
 
-/** Sin endpoint en el backend: los pedidos vienen fijos del escenario de la corrida. */
+/**
+ * Sin endpoint en el backend: los pedidos vienen fijos del escenario de la corrida.
+ * TODO(backend): cuando exista, registrar el cambio en store.cambiosPendientes
+ * igual que registrarAveria (indicador "Aplicando cambios…" y alcance del
+ * buffer). Para saber qué foto lo incluye se necesita que la respuesta y la
+ * instantánea traigan un `revision`/versión de plan.
+ */
 export async function registerOrder(input: NewOrderInput): Promise<ActionResult<{ orderId: string }>> {
   void input;
   return { ok: false, message: "El registro de pedidos aún no está disponible. El pedido no se ha guardado." };

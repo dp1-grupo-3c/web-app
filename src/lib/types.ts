@@ -54,7 +54,8 @@ export type Blockage = {
   endMinute?: number;
 };
 
-export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number };
+/** `durationMs`: duración de la transición que fijó el buffer de reproducción (si la hay). */
+export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number; durationMs?: number };
 export type MapSnapshot = { warehouses: Warehouse[]; vehicles: Vehicle[]; blockages: Blockage[]; sample?: MotionSample };
 
 export type OrderStatus = "por_asignar" | "en_almacen" | "en_ruta" | "entregado";

@@ -4,6 +4,7 @@ import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, Truck } f
 import { useState } from "react";
 import { SimHud } from "@/components/hud/SimHud";
 import { GridMap } from "@/components/map/GridMap";
+import { PendingChangeChip } from "@/components/map/PendingChangeChip";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
 import { FleetPanel } from "@/components/panels/FleetPanel";
@@ -13,6 +14,7 @@ import { MetricsPanel } from "@/components/panels/MetricsPanel";
 import { EMPTY_DRAFT, OrdersPanel } from "@/components/panels/OrdersPanel";
 import { SectionsPanel } from "@/components/panels/SectionsPanel";
 import { SimConfigPanel } from "@/components/panels/SimConfigPanel";
+import { BufferingDialog } from "@/components/simulation/BufferingDialog";
 import { ConfirmCancelDialog } from "@/components/simulation/ConfirmCancelDialog";
 import { OtherRunNotice, RUN_TITLE } from "@/components/simulation/OtherRunNotice";
 import { SimOnboarding } from "@/components/simulation/SimOnboarding";
@@ -26,7 +28,7 @@ import { DEFAULT_TRAFFIC_LIGHT, PANEL_WIDTH } from "@/lib/constants";
 import { esFinal } from "@/lib/backend/estado";
 import { cancelSimulation, forgetSimulation, startSimulation } from "@/lib/data/actions";
 import { TIPO_POR_MODO } from "@/lib/data/adapters";
-import { useActiveRun, useBreakdowns, useFleetSettings, useMapSnapshot, useMetrics, useOrders, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
+import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrders, usePlayback, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
@@ -61,6 +63,8 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const active = useActiveRun();
   const savedTrafficLight = useSavedTrafficLight();
   const fleet = useFleetSettings();
+  const bufferVariant = useBufferVariant();
+  const play = usePlayback(mode);
 
   const [cancelledId, setCancelledId] = useState<string | null>(null);
   const [dismissedId, setDismissedId] = useState<string | null>(null);
@@ -170,6 +174,12 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             onSelect={setSelected}
             highlight={highlightFor(orders, orderId)}
             emptyMessage={idle && !syncing ? undefined : WAITING_MESSAGE}
+            status={!idle && (
+              <>
+                <PendingChangeChip pending={play.pending} />
+                {process.env.NODE_ENV === "development" && <span className="rounded bg-panel/80 px-1.5 text-[11px] text-n500">buffer: {bufferVariant} ({play.target})</span>}
+              </>
+            )}
           />
           {other && !section && <OtherRunNotice tipo={other.tipo} primerDia={other.primerDia} onStop={() => setConfirming(other.id)} />}
           {idle && !other && !syncing && !section && <SimOnboarding mode={mode} onConfigure={() => setPanel("config")} />}
@@ -183,6 +193,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             clock={feed.clock}
             ended={ended}
             compact={!!shown}
+            lagSeconds={play.lagSeconds}
             onCancel={() => own && setConfirming(own.id)}
           />
         )
@@ -203,6 +214,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
               />
             ) : <ConfirmCancelDialog busy={cancelling} onKeep={() => setConfirming(null)} onConfirm={confirmCancel} />
           )}
+          {effectivePhase === "running" && play.phase === "llenando" && <BufferingDialog queued={play.queued} target={play.target} />}
           {ended && outcome && dismissedId !== own?.id && (
             <SimulationSummaryModal
               mode={mode}
