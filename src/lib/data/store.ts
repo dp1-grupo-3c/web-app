@@ -30,7 +30,7 @@ import {
   type BufferVariant,
 } from "@/config/simulacion";
 import * as playback from "@/lib/data/playback";
-import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO, trafficLightToSemaforoBody } from "@/lib/data/adapters";
+import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO } from "@/lib/data/adapters";
 import { SIMULATION_DAYS_5D } from "@/lib/constants";
 import { addDays, parseISODate, toISODate } from "@/lib/format";
 import type { FirstLateOrder, FleetCount, FleetSettings, SimulationMode, TrafficLight, VehicleKind } from "@/lib/types";
@@ -385,17 +385,6 @@ export async function cargarAveriasMasivo(archivo: File): Promise<Result<{ regis
   }
 }
 
-export async function guardarSemaforo(t: TrafficLight): Promise<Result> {
-  try {
-    const body = trafficLightToSemaforoBody(t);
-    const parametros = await api.cambiarSemaforo(body.ambar, body.verde);
-    set({ parametros });
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, message: msg(e) };
-  }
-}
-
 /**
  * Guarda la flota por tipo. Las velocidades usan PUT /parametros/velocidad
  * (existe); las cantidades, el endpoint propuesto PUT /parametros/flota
@@ -421,30 +410,4 @@ export async function guardarFlota(next: FleetSettings, prev: FleetSettings): Pr
     const motivo = pendiente ? "el cambio de cantidad aún no está disponible en el servidor." : msg(e);
     return { ok: false, message: speeds.length ? `Guardamos las velocidades, pero no la cantidad: ${motivo}` : `No se guardó la cantidad: ${motivo}` };
   }
-}
-
-/** Arranque explícito del día a día. El servidor fija K=1 y reloj acompasado. */
-export async function arrancarDia(primerDia: string): Promise<Result<{ id: string }>> {
-  ensureStarted();
-  if (state.estado.idActual && !esFinal(state.estado.corrida?.estado)) {
-    return { ok: false, message: "Ya hay una corrida activa. No se ha iniciado otra operación." };
-  }
-  try {
-    const r = await api.arrancarCorrida({
-      tipo: "DIA_A_DIA", primerDia, ultimoDia: primerDia,
-      generarAverias: false, minutosEntreFotografias: 1,
-    });
-    dispatch({ t: "ws", m: { tipo: "corrida", corrida: r.id, carga: r } });
-    return { ok: true, data: { id: r.id } };
-  } catch (e) {
-    return { ok: false, message: msg(e) };
-  }
-}
-
-/** Evita que un control diario rezagado cancele una simulación recién iniciada. */
-export async function cancelarDia(id: string): Promise<Result> {
-  if (state.estado.idActual !== id || state.estado.corrida?.tipo !== "DIA_A_DIA") {
-    return { ok: false, message: "La operación seleccionada ya no es la corrida actual." };
-  }
-  return cancelar(id);
 }

@@ -1,4 +1,4 @@
-import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, SlidersVertical, type LucideIcon } from "lucide-react";
+import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, SlidersVertical, Users, type LucideIcon } from "lucide-react";
 import { Alert, Tile } from "@/components/ui/feedback";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 
@@ -8,8 +8,9 @@ const ITEMS: Record<Audience, [LucideIcon, string, string][]> = {
   operador: [
     [SlidersVertical, "Semáforo", "Ajusta los rangos de ocupación de los almacenes."],
     [Activity, "Métricas", "Revisa tiempos de entrega y costos del día."],
-    [Package, "Pedidos", "Registra pedidos y busca los activos."],
-    [CircleAlert, "Averías", "Reporta una avería o varias con un archivo."],
+    [Users, "Clientes", "Registra personas naturales (DNI) y empresas (RUC)."],
+    [Package, "Pedidos", "Registra pedidos con el DNI o RUC del cliente y busca los activos."],
+    [CircleAlert, "Averías", "Reporta la avería de un vehículo."],
     [Layers, "Leyenda", "Consulta los íconos y oculta capas del mapa."],
   ],
   cliente: [

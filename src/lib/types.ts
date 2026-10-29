@@ -58,6 +58,19 @@ export type Blockage = {
 export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number; durationMs?: number };
 export type MapSnapshot = { warehouses: Warehouse[]; vehicles: Vehicle[]; blockages: Blockage[]; sample?: MotionSample };
 
+export type ClientKind = "persona" | "empresa";
+
+/** Cliente registrado. `document` (DNI o RUC) lo identifica; `location` es su nodo de entrega habitual. */
+export type Client = {
+  kind: ClientKind;
+  document: string;
+  name: string;
+  phone: string;
+  contact?: string;
+  address: string;
+  location: Coord;
+};
+
 export type OrderStatus = "por_asignar" | "en_almacen" | "en_ruta" | "entregado";
 
 export type Order = {
