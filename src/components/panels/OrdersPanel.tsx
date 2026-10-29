@@ -12,10 +12,12 @@ import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { DefinitionList } from "@/components/map/EntityPopover";
 import { cn } from "@/lib/cn";
 import { GRID, PRIORITIES, priorityInfo } from "@/lib/constants";
+import { ADDRESS_MAX_LENGTH, MAX_PACKAGES_PER_ORDER } from "@/config/simulacion";
 import { findClient, registerOrder } from "@/lib/data/actions";
 import { DOCUMENT_LABEL, documentError, kindForDocument } from "@/lib/documento";
 import { formatCoord, formatDuration } from "@/lib/format";
 import type { Client, Order, OrderStatus, PriorityCode } from "@/lib/types";
+import { integerInRange, textMax } from "@/lib/validation";
 
 /**
  * `client` es el cliente registrado que corresponde a `document`; sin él no se
@@ -38,19 +40,18 @@ export type OrdersTab = "lista" | "nuevo";
 type Errors = Partial<Record<keyof OrderDraft, string>>;
 
 function validate(d: OrderDraft): Errors {
-  const e: Errors = {};
-  const required = "Completa este campo para continuar.";
-  // Longitudes máximas de SolicitudPedidoOperacion en el backend.
-  const text = (v: string, max: number) => (!v.trim() ? required : v.trim().length > max ? `Usa como máximo ${max} caracteres.` : undefined);
-  if (!d.document) e.document = required;
-  else if (d.client?.document !== d.document) e.document = "Este documento no corresponde a un cliente registrado.";
-  e.address = text(d.address, 300);
-  const coord = (v: string, max: number) => (v === "" ? required : !Number.isInteger(Number(v)) || +v < 0 || +v > max ? `Debe ser un entero de 0 a ${max}.` : undefined);
-  e.x = coord(d.x, GRID.width);
-  e.y = coord(d.y, GRID.height);
-  if (d.packages === "") e.packages = required;
-  else if (!Number.isInteger(+d.packages) || +d.packages < 1) e.packages = "Debe ser un número entero mayor que 0.";
-  if (!d.priority) e.priority = "Elige una prioridad.";
+  const e: Partial<Record<keyof OrderDraft, string | null>> = {
+    document: !d.document
+      ? "Completa este campo para continuar."
+      : d.client?.document !== d.document
+        ? "Este documento no corresponde a un cliente registrado."
+        : null,
+    address: textMax(d.address, ADDRESS_MAX_LENGTH),
+    x: integerInRange(d.x, 0, GRID.width),
+    y: integerInRange(d.y, 0, GRID.height),
+    packages: integerInRange(d.packages, 1, MAX_PACKAGES_PER_ORDER),
+    priority: d.priority ? null : "Elige una prioridad.",
+  };
   return Object.fromEntries(Object.entries(e).filter(([, v]) => v)) as Errors;
 }
 
@@ -214,7 +215,7 @@ function OrderForm({ draft, errors, change, onDraftChange, picking, onTogglePick
         </Field>
         {client && <ClientCard client={client} />}
         {current?.state === "no_registrado" && (
-          <Alert tone="warn"icon={<UserPlus className="size-5" aria-hidden />}>
+          <Alert tone="warn" icon={<UserPlus className="size-5" aria-hidden />}>
             <span className="block">No hay un cliente registrado con el {DOCUMENT_LABEL[kindForDocument(current.document) ?? "persona"]} {current.document}.</span>
             {onRegisterClient && <Button className="mt-2" size="xs" variant="outline" onClick={() => onRegisterClient(current.document)}>Registrar cliente</Button>}
           </Alert>
@@ -233,7 +234,7 @@ function OrderForm({ draft, errors, change, onDraftChange, picking, onTogglePick
           error={errors.address}
           help={client ? (custom ? "Distinta de la habitual del cliente: solo aplica a este pedido." : "Precargada del cliente. Puedes cambiarla para este pedido.") : undefined}
         >
-          <TextInput id="o-address" value={draft.address} onChange={(e) => change({ address: e.target.value })} placeholder="Av. Universitaria 1801" error={!!errors.address} autoComplete="street-address" />
+          <TextInput id="o-address" maxLength={ADDRESS_MAX_LENGTH} value={draft.address} onChange={(e) => change({ address: e.target.value })} placeholder="Av. Universitaria 1801" error={!!errors.address} autoComplete="street-address" />
         </Field>
         {custom && client && (
           <Button className="self-start" size="xs" variant="text" onClick={() => onDraftChange((d) => draftForClient(d, client))}>Usar la entrega habitual del cliente</Button>
@@ -251,7 +252,7 @@ function OrderForm({ draft, errors, change, onDraftChange, picking, onTogglePick
 
       <PanelSection title="Pedido" icon={<Package className="size-[18px]" aria-hidden />}>
         <Field label="Cantidad de paquetes" htmlFor="o-pk" required error={errors.packages}>
-          <NumberInput id="o-pk" value={draft.packages} onValueChange={(packages) => change({ packages })} min={1} placeholder="Ej. 12" error={!!errors.packages} />
+          <NumberInput id="o-pk" value={draft.packages} onValueChange={(packages) => change({ packages })} min={1} max={MAX_PACKAGES_PER_ORDER} placeholder={`1 – ${MAX_PACKAGES_PER_ORDER}`} error={!!errors.packages} />
         </Field>
         <Field label="Prioridad" required>
           <RadioCardGroup

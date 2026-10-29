@@ -22,6 +22,8 @@ npm run lint
 | `/simulacion/5-dias` | Simulación de 5 días |
 | `/simulacion/colapso` | Simulación hasta el colapso |
 
+En las simulaciones, el mapa reproduce las fotografías con un pequeño buffer para que el movimiento sea uniforme. Hay dos variantes para comparar: `?buffer=pequeno` (por defecto) y `?buffer=grande` (por ejemplo, `/simulacion/5-dias?buffer=grande`); también se puede fijar al compilar con `NEXT_PUBLIC_BUFFER_VARIANT=grande`. Los valores ajustables (tamaños, tiempos máximos, parpadeo de bloqueos, límites de validación) están en `src/config/simulacion.ts`.
+
 El panel lateral abierto se guarda en la URL con `?panel=` (por ejemplo, `/operaciones/diarias?panel=pedidos`), así que los enlaces se pueden compartir.
 
 ## Estructura

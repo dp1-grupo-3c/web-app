@@ -14,6 +14,7 @@ import type {
   Client,
   Coord,
   FirstLateOrder,
+  FleetSettings,
   MapSnapshot,
   Metrics,
   Order,
@@ -42,6 +43,7 @@ import type {
   PrioridadPedido,
   ResultadoSimulacion,
   ResumenCorrida,
+  SolicitudFlota,
   SolicitudCliente,
   TipoEscenario,
   TipoUnidad,
@@ -71,6 +73,7 @@ export const outcomePorEstado = (e: EstadoCorrida): SimulationOutcome | null => 
 // ---- Vehículos -------------------------------------------------------------
 
 const KIND_POR_TIPO: Record<TipoUnidad, VehicleKind> = { AUTO: "auto", MOTO: "moto", BICICLETA: "bicicleta" };
+export const TIPO_POR_KIND: Record<VehicleKind, TipoUnidad> = { auto: "AUTO", moto: "MOTO", bicicleta: "BICICLETA" };
 
 /** Conserva las pausas operativas; mantenimiento continúa fuera de servicio. */
 const STATUS_POR_ESTADO: Record<VistaUnidad["estado"], VehicleStatus> = {
@@ -133,19 +136,19 @@ export function vistaAlmacenToWarehouse(a: VistaAlmacen): Warehouse {
 
 export function vistaBloqueoToBlockage(b: VistaBloqueo, index: number): Blockage {
   const path = pairsToCoords(b.nodos);
-  return { id: String(index), from: path[0], to: path[path.length - 1], path };
+  return { id: String(index), from: path[0], to: path[path.length - 1], path, startMinute: b.minutoInicio, endMinute: b.minutoFin };
 }
 
 // ---- Fotografía → MapSnapshot -------------------------------------------
 
-export function instantaneaToMapSnapshot(i: InstantaneaSimulacion | null, almacenes: VistaAlmacen[], runId: string | null = null): MapSnapshot {
+export function instantaneaToMapSnapshot(i: InstantaneaSimulacion | null, almacenes: VistaAlmacen[], runId: string | null = null, durationMs?: number): MapSnapshot {
   const warehouses = almacenes.map(vistaAlmacenToWarehouse);
   return {
     warehouses,
     // Mantener también la flota en almacenes: puede estar alimentándose o abasteciendo.
     vehicles: i ? i.unidades.map(vistaUnidadToVehicle) : [],
     blockages: i ? i.bloqueosVigentes.map(vistaBloqueoToBlockage) : [],
-    sample: i ? { runId, simulatedMinute: i.minutoSimulado, realMilliseconds: i.milisegundosReales } : undefined,
+    sample: i ? { runId, simulatedMinute: i.minutoSimulado, realMilliseconds: i.milisegundosReales, durationMs } : undefined,
   };
 }
 
@@ -223,6 +226,31 @@ export function metricasToMetrics(m: MetricasSimulacion): Metrics {
     avgDeliveryByPriority: avgDeliveryByPriority(m.minutosEntregaPorPlazo, m.entregasPorPlazo),
   };
 }
+
+// ---- Flota ------------------------------------------------------------------
+
+/**
+ * Velocidades vigentes del backend y cantidades de la corrida (unidades
+ * activas por tipo). Sin corrida, o sin parámetros aún, se usan los valores
+ * del enunciado: el backend todavía no expone la cantidad configurada.
+ */
+export function fleetSettings(p: VistaParametros | null, c: ResumenCorrida | null, defaults: FleetSettings): FleetSettings {
+  const out = {} as FleetSettings;
+  for (const [kind, tipo] of Object.entries(TIPO_POR_KIND) as [VehicleKind, TipoUnidad][]) {
+    out[kind] = {
+      quantity: c?.unidadesActivasPorTipo?.[tipo] ?? defaults[kind].quantity,
+      speed: p?.velocidades?.[tipo] ?? defaults[kind].speed,
+    };
+  }
+  return out;
+}
+
+/** Cuerpo del endpoint de flota propuesto (ver cambiarFlota en src/lib/backend/api.ts). */
+export const fleetToFlotaBody = (f: FleetSettings): SolicitudFlota => ({
+  unidades: Object.fromEntries(
+    (Object.entries(TIPO_POR_KIND) as [VehicleKind, TipoUnidad][]).map(([kind, tipo]) => [tipo, { cantidad: f[kind].quantity, kmPorHora: f[kind].speed }]),
+  ) as SolicitudFlota["unidades"],
+});
 
 // ---- Semáforo (umbral global) --------------------------------------------
 

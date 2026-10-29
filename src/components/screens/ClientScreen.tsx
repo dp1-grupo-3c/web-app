@@ -27,7 +27,7 @@ const STATUS: Record<OrderStatus, { label: string; tone: BadgeTone }> = {
 /**
  * Vista del cliente: primero pide su ID y luego lista sus pedidos con el estado
  * actual. SIMULADA mientras el backend no filtre pedidos por cliente: la lista
- * son 10 pedidos al azar de la corrida en curso (ver useClientDemoOrders).
+ * son DEMO_ORDERS pedidos al azar de la corrida en curso (ver useClientDemoOrders).
  */
 export function ClientScreen() {
   const params = useSearchParams();
@@ -93,9 +93,11 @@ function ClientOrders({ clientId, onChangeId }: { clientId: string; onChangeId: 
         </div>
         <Button variant="outline" size="sm" onClick={onChangeId}>Cambiar número de cliente</Button>
       </div>
-      <Alert icon={<FlaskConical className="size-5" aria-hidden />} className="mt-8 max-w-[960px]">
-        <b>Vista de demostración.</b> Mientras terminamos el seguimiento por cliente, mostramos 10 pedidos tomados al azar de la simulación en curso.
-      </Alert>
+      {(running || orders.length > 0) && (
+        <Alert icon={<FlaskConical className="size-5" aria-hidden />} className="mt-8 max-w-[960px]">
+          <b>Simulación.</b> Los pedidos que ves son de ejemplo, tomados de la simulación en curso.
+        </Alert>
+      )}
       <div className="mt-5 max-w-[960px] overflow-hidden rounded-xl border border-line bg-panel">
         {orders.length === 0 ? (
           <EmptyState icon={<Package className="size-8" aria-hidden />} title={loading ? "Buscando tus pedidos…" : running ? "Todavía no hay pedidos" : "No hay una simulación en curso"} className="py-12">
