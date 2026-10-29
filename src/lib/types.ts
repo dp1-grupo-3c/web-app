@@ -72,6 +72,9 @@ export type ConnectionState = "live" | "reconnecting" | "offline" | "waiting";
 
 export type FleetCount = Record<VehicleKind, number>;
 
+/** Cantidad de vehículos y velocidad (km/h) configuradas para cada tipo. */
+export type FleetSettings = Record<VehicleKind, { quantity: number; speed: number }>;
+
 export type OpsKpis = { fleet: FleetCount; activeOrders: number; deliveredToday: number; alerts: number };
 
 export type PriorityAverage = { priority: PriorityCode; avgMinutes: number };

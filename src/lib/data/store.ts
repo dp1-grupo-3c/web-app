@@ -15,10 +15,10 @@ import { ErrorServicio } from "@/lib/backend/api";
 import { abrirCanal, type EstadoCanal } from "@/lib/backend/canal";
 import { esFinal, inicial, reducir, type Accion, type EstadoSim } from "@/lib/backend/estado";
 import type { RespuestaAveria, RespuestaSalud, VistaAlmacen, VistaParametros } from "@/lib/backend/types";
-import { filaPedidoToFirstLate, TIPO_POR_MODO, trafficLightToSemaforoBody } from "@/lib/data/adapters";
+import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO, trafficLightToSemaforoBody } from "@/lib/data/adapters";
 import { SIMULATION_DAYS_5D } from "@/lib/constants";
 import { addDays, parseISODate, toISODate } from "@/lib/format";
-import type { FirstLateOrder, SimulationMode, TrafficLight } from "@/lib/types";
+import type { FirstLateOrder, FleetCount, FleetSettings, SimulationMode, TrafficLight, VehicleKind } from "@/lib/types";
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; message: string };
 
@@ -31,6 +31,8 @@ export interface Store {
   averiasSesion: RespuestaAveria[];
   firstLateOrder: FirstLateOrder | null;
   firstLateOrderFor: string | null;
+  /** Cantidades aceptadas por PUT /parametros/flota (null mientras el backend no lo implemente). */
+  cantidadesFlota: FleetCount | null;
 }
 
 const initialStore: Store = {
@@ -42,6 +44,7 @@ const initialStore: Store = {
   averiasSesion: [],
   firstLateOrder: null,
   firstLateOrderFor: null,
+  cantidadesFlota: null,
 };
 
 let state: Store = initialStore;
@@ -241,6 +244,33 @@ export async function guardarSemaforo(t: TrafficLight): Promise<Result> {
     return { ok: true };
   } catch (e) {
     return { ok: false, message: msg(e) };
+  }
+}
+
+/**
+ * Guarda la flota por tipo. Las velocidades usan PUT /parametros/velocidad
+ * (existe); las cantidades, el endpoint propuesto PUT /parametros/flota
+ * (TODO backend, ver api.cambiarFlota). Solo se envía lo que cambió.
+ */
+export async function guardarFlota(next: FleetSettings, prev: FleetSettings): Promise<Result> {
+  const kinds = Object.keys(TIPO_POR_KIND) as VehicleKind[];
+  const speeds = kinds.filter((k) => next[k].speed !== prev[k].speed);
+  const quantities = kinds.some((k) => next[k].quantity !== prev[k].quantity);
+  try {
+    for (const k of speeds) set({ parametros: await api.cambiarVelocidad(TIPO_POR_KIND[k], next[k].speed) });
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+  if (!quantities) return { ok: true };
+  try {
+    const parametros = await api.cambiarFlota(fleetToFlotaBody(next));
+    set({ parametros, cantidadesFlota: Object.fromEntries(kinds.map((k) => [k, next[k].quantity])) as FleetCount });
+    return { ok: true };
+  } catch (e) {
+    // TODO(backend): 404/405 = PUT /parametros/flota aún no existe.
+    const pendiente = e instanceof ErrorServicio && (e.codigo === 404 || e.codigo === 405);
+    const motivo = pendiente ? "el cambio de cantidad aún no está disponible en el servidor." : msg(e);
+    return { ok: false, message: speeds.length ? `Guardamos las velocidades, pero no la cantidad: ${motivo}` : `No se guardó la cantidad: ${motivo}` };
   }
 }
 

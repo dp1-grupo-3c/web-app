@@ -17,6 +17,7 @@ import type { FilaPedido } from "@/lib/backend/types";
 import {
   buildSummary,
   filaPedidoToOrder,
+  fleetSettings,
   instantaneaToClock,
   instantaneaToMapSnapshot,
   metricasToMetrics,
@@ -27,13 +28,14 @@ import {
 } from "@/lib/data/adapters";
 import * as store from "@/lib/data/store";
 import { esFinal } from "@/lib/backend/estado";
-import { DEMO_ORDERS } from "@/config/simulacion";
+import { DEMO_ORDERS, FLEET_DEFAULTS } from "@/config/simulacion";
 import { DEFAULT_TRAFFIC_LIGHT } from "@/lib/constants";
 import type {
   BreakdownRecord,
   BreakdownType,
   ConnectionState,
   DataScope,
+  FleetSettings,
   MapSnapshot,
   Metrics,
   OpsKpis,
@@ -206,6 +208,20 @@ export function useVehiclePlates(scope: DataScope): VehiclePlates {
 export function useSavedTrafficLight(): TrafficLight {
   const s = useStoreState();
   return s.parametros ? parametrosToTrafficLight(s.parametros) : DEFAULT_TRAFFIC_LIGHT;
+}
+
+/**
+ * Flota vigente por tipo: velocidades del backend y cantidades de la corrida
+ * (o las ya aceptadas por el servidor, o las del enunciado si no hay datos).
+ * `version` cambia cuando el backend confirma parámetros nuevos.
+ */
+export function useFleetSettings(): { value: FleetSettings; version: string } {
+  const s = useStoreState();
+  return useMemo(() => {
+    const value = fleetSettings(s.parametros, s.estado.corrida, FLEET_DEFAULTS);
+    if (s.cantidadesFlota) for (const k of Object.keys(value) as (keyof FleetSettings)[]) value[k].quantity = s.cantidadesFlota[k];
+    return { value, version: `${s.parametros?.version ?? "-"}:${s.estado.idActual ?? "-"}:${JSON.stringify(s.cantidadesFlota)}` };
+  }, [s.parametros, s.estado.corrida, s.estado.idActual, s.cantidadesFlota]);
 }
 
 /**
