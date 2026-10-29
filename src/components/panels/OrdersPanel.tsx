@@ -1,10 +1,10 @@
 "use client";
 
-import { Clock, Crosshair, MapPin, Package, Search, Users } from "lucide-react";
-import { useState } from "react";
+import { Building2, Clock, Crosshair, MapPin, Package, Search, UserPlus, UserRound, Users } from "lucide-react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Chip, RadioCardGroup, SegmentedControl } from "@/components/ui/choice";
-import { Badge, EmptyState } from "@/components/ui/feedback";
+import { Alert, Badge, EmptyState } from "@/components/ui/feedback";
 import { ErrorMessage, Field, NumberInput, SearchInput, TextInput } from "@/components/ui/form";
 import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/components/ui/Toast";
@@ -12,22 +12,39 @@ import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { DefinitionList } from "@/components/map/EntityPopover";
 import { cn } from "@/lib/cn";
 import { GRID, PRIORITIES, priorityInfo } from "@/lib/constants";
-import { registerOrder } from "@/lib/data/actions";
+import { findClient, registerOrder } from "@/lib/data/actions";
+import { DOCUMENT_LABEL, documentError, kindForDocument } from "@/lib/documento";
 import { formatCoord, formatDuration } from "@/lib/format";
-import type { Order, OrderStatus, PriorityCode } from "@/lib/types";
+import type { Client, Order, OrderStatus, PriorityCode } from "@/lib/types";
 
-export type OrderDraft = { clientCode: string; clientPhone: string; clientName: string; x: string; y: string; packages: string; priority: PriorityCode | "" };
-export const EMPTY_DRAFT: OrderDraft = { clientCode: "", clientPhone: "", clientName: "", x: "", y: "", packages: "", priority: "" };
+/**
+ * `client` es el cliente registrado que corresponde a `document`; sin él no se
+ * puede registrar el pedido. Dirección y destino se precargan del cliente y
+ * pueden cambiarse solo para este pedido.
+ */
+export type OrderDraft = { document: string; client: Client | null; address: string; x: string; y: string; packages: string; priority: PriorityCode | "" };
+export const EMPTY_DRAFT: OrderDraft = { document: "", client: null, address: "", x: "", y: "", packages: "", priority: "" };
+
+/** Borrador para un cliente ya elegido; conserva paquetes y prioridad si ya se habían indicado. */
+export const draftForClient = (d: OrderDraft, c: Client): OrderDraft =>
+  ({ ...d, document: c.document, client: c, address: c.address, x: String(c.location.x), y: String(c.location.y) });
+
+/** La entrega del borrador ya no es la habitual del cliente: se cambió para este pedido. */
+const hasCustomDelivery = (d: OrderDraft, c: Client) =>
+  d.address !== c.address || d.x !== String(c.location.x) || d.y !== String(c.location.y);
+
+export type OrdersTab = "lista" | "nuevo";
 
 type Errors = Partial<Record<keyof OrderDraft, string>>;
 
 function validate(d: OrderDraft): Errors {
   const e: Errors = {};
   const required = "Completa este campo para continuar.";
-  if (!d.clientCode.trim()) e.clientCode = required;
-  if (!d.clientName.trim()) e.clientName = required;
-  if (!d.clientPhone.trim()) e.clientPhone = required;
-  else if (!/^[\d\s+]{7,15}$/.test(d.clientPhone.trim())) e.clientPhone = "Usa solo dígitos (de 7 a 15).";
+  // Longitudes máximas de SolicitudPedidoOperacion en el backend.
+  const text = (v: string, max: number) => (!v.trim() ? required : v.trim().length > max ? `Usa como máximo ${max} caracteres.` : undefined);
+  if (!d.document) e.document = required;
+  else if (d.client?.document !== d.document) e.document = "Este documento no corresponde a un cliente registrado.";
+  e.address = text(d.address, 300);
   const coord = (v: string, max: number) => (v === "" ? required : !Number.isInteger(Number(v)) || +v < 0 || +v > max ? `Debe ser un entero de 0 a ${max}.` : undefined);
   e.x = coord(d.x, GRID.width);
   e.y = coord(d.y, GRID.height);
@@ -50,17 +67,24 @@ type OrdersPanelProps = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   draft: OrderDraft;
-  onDraftChange: (d: OrderDraft) => void;
+  onDraftChange: Dispatch<SetStateAction<OrderDraft>>;
   picking: boolean;
   onTogglePick: () => void;
   onClose: () => void;
   width: number;
+  /** Pestaña controlada por la pantalla; sin ella, el panel la gestiona solo. */
+  tab?: OrdersTab;
+  onTabChange?: (t: OrdersTab) => void;
+  /** Documento sin cliente registrado: la pantalla abre el registro de clientes. */
+  onRegisterClient?: (document: string) => void;
 };
 
-export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onDraftChange, picking, onTogglePick, onClose, width }: OrdersPanelProps) {
+export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onDraftChange, picking, onTogglePick, onClose, width, tab: controlledTab, onTabChange, onRegisterClient }: OrdersPanelProps) {
   const toast = useToast();
   const canRegister = audience === "operador";
-  const [tab, setTab] = useState<"lista" | "nuevo">("lista");
+  const [ownTab, setOwnTab] = useState<OrdersTab>("lista");
+  const tab = controlledTab ?? ownTab;
+  const setTab = onTabChange ?? setOwnTab;
   // Un error se muestra solo mientras el campo conserve el valor que se validó
   // (así desaparece al editarlo o al elegir el destino en el mapa).
   const [checked, setChecked] = useState<{ errors: Errors; draft: OrderDraft }>({ errors: {}, draft: EMPTY_DRAFT });
@@ -70,24 +94,26 @@ export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onD
     Object.entries(checked.errors).filter(([k]) => draft[k as keyof OrderDraft] === checked.draft[k as keyof OrderDraft]),
   ) as Errors;
 
-  const change = (patch: Partial<OrderDraft>) => onDraftChange({ ...draft, ...patch });
+  const change = (patch: Partial<OrderDraft>) => onDraftChange((d) => ({ ...d, ...patch }));
 
   const submit = async () => {
     const e = validate(draft);
     setChecked({ errors: e, draft });
     if (Object.keys(e).length) return toast.error("Faltan algunos datos. Revisa los campos marcados.");
+    const client = draft.client as Client;
     setSubmitting(true);
     const res = await registerOrder({
-      clientCode: draft.clientCode.trim(),
-      clientName: draft.clientName.trim(),
-      clientPhone: draft.clientPhone.trim(),
+      clientCode: client.document,
+      clientName: client.name,
+      clientPhone: client.phone,
+      address: draft.address.trim(),
       destination: { x: +draft.x, y: +draft.y },
       packages: +draft.packages,
       priority: draft.priority as PriorityCode,
     });
     setSubmitting(false);
     if (!res.ok) return toast.error(res.message);
-    toast.success(res.data?.orderId ? `¡Listo! El pedido ${res.data.orderId} se registró correctamente.` : "¡Listo! Registramos el pedido correctamente.");
+    toast.success(res.data?.orderId ? `¡Listo! El pedido ${res.data.orderId} se registró correctamente.` : "Recibimos el pedido. Aparecerá en la lista en cuanto el servidor lo registre.");
     onDraftChange(EMPTY_DRAFT);
     setTab("lista");
   };
@@ -114,7 +140,7 @@ export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onD
         />
       )}
       {formMode ? (
-        <OrderForm draft={draft} errors={errors} change={change} picking={picking} onTogglePick={onTogglePick} />
+        <OrderForm draft={draft} errors={errors} change={change} onDraftChange={onDraftChange} picking={picking} onTogglePick={onTogglePick} onRegisterClient={onRegisterClient} />
       ) : (
         <OrdersList audience={audience} orders={orders} selectedId={selectedId} onSelect={onSelect} />
       )}
@@ -122,28 +148,96 @@ export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onD
   );
 }
 
-function OrderForm({ draft, errors, change, picking, onTogglePick }: { draft: OrderDraft; errors: Errors; change: (p: Partial<OrderDraft>) => void; picking: boolean; onTogglePick: () => void }) {
+type Lookup = { document: string; state: "buscando" | "no_registrado" | "error"; message?: string } | null;
+
+/** Espera tras el último dígito: con 8 dígitos aún puede estar escribiéndose un RUC. */
+const LOOKUP_DELAY_MS = 350;
+
+type OrderFormProps = {
+  draft: OrderDraft;
+  errors: Errors;
+  change: (p: Partial<OrderDraft>) => void;
+  onDraftChange: Dispatch<SetStateAction<OrderDraft>>;
+  picking: boolean;
+  onTogglePick: () => void;
+  onRegisterClient?: (document: string) => void;
+};
+
+function OrderForm({ draft, errors, change, onDraftChange, picking, onTogglePick, onRegisterClient }: OrderFormProps) {
+  const [lookup, setLookup] = useState<Lookup>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const onDocument = (raw: string) => {
+    const document = raw.replace(/\D/g, "").slice(0, 11);
+    // Otro documento invalida el cliente elegido. Su entrega precargada se quita; una escrita a mano se conserva.
+    onDraftChange((d) => {
+      if (!d.client || d.client.document === document) return { ...d, document };
+      const prefilled = !hasCustomDelivery(d, d.client);
+      return { ...d, document, client: null, ...(prefilled ? { address: "", x: "", y: "" } : {}) };
+    });
+    clearTimeout(timer.current);
+    const kind = kindForDocument(document);
+    const invalid = kind && documentError(kind, document);
+    if (!kind || invalid) return setLookup(invalid ? { document, state: "error", message: invalid } : null);
+    if (draft.client?.document === document) return setLookup(null);
+    setLookup({ document, state: "buscando" });
+    timer.current = setTimeout(async () => {
+      const res = await findClient(document);
+      // Solo aplica si el documento sigue siendo el que se buscó.
+      setLookup((l) => {
+        if (l?.document !== document) return l;
+        if (!res.ok) return { document, state: "error", message: res.message };
+        return res.data ? null : { document, state: "no_registrado" };
+      });
+      if (res.ok && res.data) {
+        const client = res.data;
+        onDraftChange((d) => (d.document === document ? draftForClient(d, client) : d));
+      }
+    }, LOOKUP_DELAY_MS);
+  };
+
+  const client = draft.client?.document === draft.document ? draft.client : null;
+  const current = lookup?.document === draft.document ? lookup : null;
+  const custom = client && hasCustomDelivery(draft, client);
   return (
     <form id="order-form" noValidate onSubmit={(e) => e.preventDefault()} className="contents">
       <PanelSection title="Cliente" icon={<Users className="size-[18px]" aria-hidden />}>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Código" htmlFor="o-code" required error={errors.clientCode}>
-            <TextInput id="o-code" value={draft.clientCode} onChange={(e) => change({ clientCode: e.target.value })} placeholder="CLI-00231" error={!!errors.clientCode} autoComplete="off" />
-          </Field>
-          <Field label="Teléfono" htmlFor="o-phone" required error={errors.clientPhone}>
-            <TextInput id="o-phone" type="tel" value={draft.clientPhone} onChange={(e) => change({ clientPhone: e.target.value })} placeholder="987 654 321" error={!!errors.clientPhone} />
-          </Field>
-        </div>
-        <Field label="Nombre completo" htmlFor="o-name" required error={errors.clientName}>
-          <TextInput id="o-name" value={draft.clientName} onChange={(e) => change({ clientName: e.target.value })} placeholder="María Quispe" error={!!errors.clientName} />
+        <Field
+          label="DNI o RUC"
+          htmlFor="o-doc"
+          required
+          error={errors.document && !current ? errors.document : current?.state === "error" ? current.message : undefined}
+          help={current?.state === "buscando" ? "Buscando cliente…" : !client && !current ? "Escribe el documento del cliente registrado." : undefined}
+        >
+          <TextInput id="o-doc" inputMode="numeric" autoComplete="off" maxLength={11} value={draft.document} onChange={(e) => onDocument(e.target.value)} placeholder="8 dígitos (DNI) u 11 (RUC)" error={!!errors.document || current?.state === "error"} />
         </Field>
+        {client && <ClientCard client={client} />}
+        {current?.state === "no_registrado" && (
+          <Alert tone="warn"icon={<UserPlus className="size-5" aria-hidden />}>
+            <span className="block">No hay un cliente registrado con el {DOCUMENT_LABEL[kindForDocument(current.document) ?? "persona"]} {current.document}.</span>
+            {onRegisterClient && <Button className="mt-2" size="xs" variant="outline" onClick={() => onRegisterClient(current.document)}>Registrar cliente</Button>}
+          </Alert>
+        )}
       </PanelSection>
 
       <PanelSection
-        title="Destino en la retícula"
+        title="Entrega"
         icon={<MapPin className="size-[18px]" aria-hidden />}
         action={<Button variant="outline" size="xs" icon={<Crosshair className="size-4" aria-hidden />} onClick={onTogglePick} aria-pressed={picking}>{picking ? "Eligiendo…" : "Elegir en el mapa"}</Button>}
       >
+        <Field
+          label="Dirección de entrega"
+          htmlFor="o-address"
+          required
+          error={errors.address}
+          help={client ? (custom ? "Distinta de la habitual del cliente: solo aplica a este pedido." : "Precargada del cliente. Puedes cambiarla para este pedido.") : undefined}
+        >
+          <TextInput id="o-address" value={draft.address} onChange={(e) => change({ address: e.target.value })} placeholder="Av. Universitaria 1801" error={!!errors.address} autoComplete="street-address" />
+        </Field>
+        {custom && client && (
+          <Button className="self-start" size="xs" variant="text" onClick={() => onDraftChange((d) => draftForClient(d, client))}>Usar la entrega habitual del cliente</Button>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Coordenada X" htmlFor="o-x" required error={errors.x}>
             <NumberInput id="o-x" value={draft.x} onValueChange={(x) => change({ x })} min={0} max={GRID.width} placeholder={`0 – ${GRID.width}`} error={!!errors.x} />
@@ -173,6 +267,20 @@ function OrderForm({ draft, errors, change, picking, onTogglePick }: { draft: Or
         </Field>
       </PanelSection>
     </form>
+  );
+}
+
+function ClientCard({ client: c }: { client: Client }) {
+  const Icon = c.kind === "empresa" ? Building2 : UserRound;
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl border border-line bg-night p-3">
+      <Icon className="mt-0.5 size-5 shrink-0 text-pink" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <b className="block truncate text-sm font-semibold text-white" title={c.name}>{c.name}</b>
+        <small className="block text-xs text-n500">{DOCUMENT_LABEL[c.kind]} {c.document} · {c.phone}{c.contact ? ` · ${c.contact}` : ""}</small>
+      </div>
+      <Badge tone="ok">{c.kind === "empresa" ? "Empresa" : "Persona"}</Badge>
+    </div>
   );
 }
 
