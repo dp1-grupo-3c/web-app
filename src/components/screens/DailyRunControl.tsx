@@ -2,15 +2,20 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { DateInput, ErrorMessage } from "@/components/ui/form";
 import { useToast } from "@/components/ui/Toast";
 import { esFinal } from "@/lib/backend/estado";
 import { useDailyRun } from "@/lib/data/hooks";
 import { arrancarDia, cancelarDia } from "@/lib/data/store";
+import { DATA_DATE_RANGE } from "@/config/simulacion";
 import { toISODate } from "@/lib/format";
+import { isoDateInRange } from "@/lib/validation";
 
 export function DailyRunControl() {
   const { corrida, occupied } = useDailyRun();
   const [date, setDate] = useState(() => toISODate(new Date()));
+  const [problem, setProblem] = useState<string | null>(null);
+  const dateError = problem ?? (date ? isoDateInRange(date, DATA_DATE_RANGE) : null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const toast = useToast();
@@ -51,10 +56,11 @@ export function DailyRunControl() {
           {corrida && <p role="status">Operación {corrida.estado.toLowerCase()}. {corrida.error}</p>}
           <div className="flex items-end gap-3">
             <label className="flex flex-col gap-1">Fecha de operación
-              <input className="rounded border border-line bg-field p-2" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
+              <span className="w-40"><DateInput value={date} error={!!dateError} onChange={(v, p) => { setDate(v); setProblem(p); }} /></span>
             </label>
-            <Button size="sm" loading={busy} disabled={!date} onClick={start}>Iniciar día a día</Button>
+            <Button size="sm" loading={busy} disabled={!date || !!dateError} onClick={start}>Iniciar día a día</Button>
           </div>
+          {dateError && <div className="mt-2"><ErrorMessage>{dateError}</ErrorMessage></div>}
           <p className="mt-2 text-xs text-n500">La jornada inicia a las 00:00 de la fecha elegida y avanza a ritmo real con los pedidos cargados. El registro de nuevos pedidos todavía no está disponible.</p>
         </>
       )}

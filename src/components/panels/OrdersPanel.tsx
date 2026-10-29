@@ -12,9 +12,11 @@ import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { DefinitionList } from "@/components/map/EntityPopover";
 import { cn } from "@/lib/cn";
 import { GRID, PRIORITIES, priorityInfo } from "@/lib/constants";
+import { CLIENT_CODE_MAX_LENGTH, CLIENT_NAME_MAX_LENGTH, MAX_PACKAGES_PER_ORDER, PHONE_LENGTH } from "@/config/simulacion";
 import { registerOrder } from "@/lib/data/actions";
 import { formatCoord, formatDuration } from "@/lib/format";
 import type { Order, OrderStatus, PriorityCode } from "@/lib/types";
+import { integerInRange, phone, textMax } from "@/lib/validation";
 
 export type OrderDraft = { clientCode: string; clientPhone: string; clientName: string; x: string; y: string; packages: string; priority: PriorityCode | "" };
 export const EMPTY_DRAFT: OrderDraft = { clientCode: "", clientPhone: "", clientName: "", x: "", y: "", packages: "", priority: "" };
@@ -22,18 +24,15 @@ export const EMPTY_DRAFT: OrderDraft = { clientCode: "", clientPhone: "", client
 type Errors = Partial<Record<keyof OrderDraft, string>>;
 
 function validate(d: OrderDraft): Errors {
-  const e: Errors = {};
-  const required = "Completa este campo para continuar.";
-  if (!d.clientCode.trim()) e.clientCode = required;
-  if (!d.clientName.trim()) e.clientName = required;
-  if (!d.clientPhone.trim()) e.clientPhone = required;
-  else if (!/^[\d\s+]{7,15}$/.test(d.clientPhone.trim())) e.clientPhone = "Usa solo dígitos (de 7 a 15).";
-  const coord = (v: string, max: number) => (v === "" ? required : !Number.isInteger(Number(v)) || +v < 0 || +v > max ? `Debe ser un entero de 0 a ${max}.` : undefined);
-  e.x = coord(d.x, GRID.width);
-  e.y = coord(d.y, GRID.height);
-  if (d.packages === "") e.packages = required;
-  else if (!Number.isInteger(+d.packages) || +d.packages < 1) e.packages = "Debe ser un número entero mayor que 0.";
-  if (!d.priority) e.priority = "Elige una prioridad.";
+  const e: Partial<Record<keyof OrderDraft, string | null>> = {
+    clientCode: textMax(d.clientCode, CLIENT_CODE_MAX_LENGTH),
+    clientName: textMax(d.clientName, CLIENT_NAME_MAX_LENGTH),
+    clientPhone: phone(d.clientPhone, PHONE_LENGTH.min, PHONE_LENGTH.max),
+    x: integerInRange(d.x, 0, GRID.width),
+    y: integerInRange(d.y, 0, GRID.height),
+    packages: integerInRange(d.packages, 1, MAX_PACKAGES_PER_ORDER),
+    priority: d.priority ? null : "Elige una prioridad.",
+  };
   return Object.fromEntries(Object.entries(e).filter(([, v]) => v)) as Errors;
 }
 
@@ -128,14 +127,14 @@ function OrderForm({ draft, errors, change, picking, onTogglePick }: { draft: Or
       <PanelSection title="Cliente" icon={<Users className="size-[18px]" aria-hidden />}>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Código" htmlFor="o-code" required error={errors.clientCode}>
-            <TextInput id="o-code" value={draft.clientCode} onChange={(e) => change({ clientCode: e.target.value })} placeholder="CLI-00231" error={!!errors.clientCode} autoComplete="off" />
+            <TextInput id="o-code" maxLength={CLIENT_CODE_MAX_LENGTH} value={draft.clientCode} onChange={(e) => change({ clientCode: e.target.value })} placeholder="CLI-00231" error={!!errors.clientCode} autoComplete="off" />
           </Field>
           <Field label="Teléfono" htmlFor="o-phone" required error={errors.clientPhone}>
             <TextInput id="o-phone" type="tel" value={draft.clientPhone} onChange={(e) => change({ clientPhone: e.target.value })} placeholder="987 654 321" error={!!errors.clientPhone} />
           </Field>
         </div>
         <Field label="Nombre completo" htmlFor="o-name" required error={errors.clientName}>
-          <TextInput id="o-name" value={draft.clientName} onChange={(e) => change({ clientName: e.target.value })} placeholder="María Quispe" error={!!errors.clientName} />
+          <TextInput id="o-name" maxLength={CLIENT_NAME_MAX_LENGTH} value={draft.clientName} onChange={(e) => change({ clientName: e.target.value })} placeholder="María Quispe" error={!!errors.clientName} />
         </Field>
       </PanelSection>
 
@@ -157,7 +156,7 @@ function OrderForm({ draft, errors, change, picking, onTogglePick }: { draft: Or
 
       <PanelSection title="Pedido" icon={<Package className="size-[18px]" aria-hidden />}>
         <Field label="Cantidad de paquetes" htmlFor="o-pk" required error={errors.packages}>
-          <NumberInput id="o-pk" value={draft.packages} onValueChange={(packages) => change({ packages })} min={1} placeholder="Ej. 12" error={!!errors.packages} />
+          <NumberInput id="o-pk" value={draft.packages} onValueChange={(packages) => change({ packages })} min={1} max={MAX_PACKAGES_PER_ORDER} placeholder={`1 – ${MAX_PACKAGES_PER_ORDER}`} error={!!errors.packages} />
         </Field>
         <Field label="Prioridad" required>
           <RadioCardGroup
