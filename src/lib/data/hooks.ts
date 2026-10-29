@@ -27,6 +27,7 @@ import {
 } from "@/lib/data/adapters";
 import * as store from "@/lib/data/store";
 import { esFinal } from "@/lib/backend/estado";
+import { DEMO_ORDERS } from "@/config/simulacion";
 import { DEFAULT_TRAFFIC_LIGHT } from "@/lib/constants";
 import type {
   BreakdownRecord,
@@ -229,8 +230,6 @@ export function useSimulationFeed(mode: SimulationMode): {
   }, [s, mode]);
 }
 
-const DEMO_ORDERS = 10;
-
 /** Orden pseudoaleatorio estable para un cliente (FNV-1a): la muestra no cambia entre consultas. */
 function demoRank(clientId: string, orderId: number) {
   let h = 2166136261;
@@ -243,7 +242,7 @@ function demoRank(clientId: string, orderId: number) {
 
 /**
  * Pedidos del cliente — SIMULADO. El backend aún no relaciona pedidos con el
- * cliente que consulta, así que se toman 10 pedidos al azar de la corrida en
+ * cliente que consulta, así que se toman DEMO_ORDERS pedidos al azar de la corrida en
  * curso (fijos para cada ID) y se sigue su estado con cada consulta.
  */
 export function useClientDemoOrders(clientId: string): { orders: Order[]; running: boolean; loading: boolean } {
