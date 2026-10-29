@@ -1,9 +1,11 @@
 "use client";
 
-import { Crosshair, Flag, Focus, MapPin as MapPinIcon, Minus, Package, Plus, Utensils } from "lucide-react";
+import { Crosshair, Flag, Focus, Hourglass, MapPin as MapPinIcon, Minus, Package, Plus, Utensils } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Button, ControlButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { BLOCKAGE_BLINK_PERIOD_MS } from "@/config/simulacion";
+import { endingIn } from "@/lib/blockage";
 import { GRID } from "@/lib/constants";
 import { formatCoord } from "@/lib/format";
 import type { Coord, EntityRef, MapSnapshot, Order, TrafficLight, Vehicle } from "@/lib/types";
@@ -49,6 +51,8 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
   const destinations = selectedVehicle ? assignedDestinations(selectedVehicle, orders) : [];
   const finalDestination = selectedVehicle?.route?.pending.at(-1);
   const blockageAnchor = (b: MapSnapshot["blockages"][number]) => polylineMidpoint(b.path?.length ? b.path : [b.from, b.to]);
+  const blink = { animationDuration: `${BLOCKAGE_BLINK_PERIOD_MS}ms` };
+  const endingSoon = (b: MapSnapshot["blockages"][number]) => endingIn(b, snapshot.sample?.simulatedMinute);
 
   // Tamaño del contenedor
   useEffect(() => {
@@ -131,7 +135,7 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
       if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
     } else {
       const b = snapshot.blockages.find((x) => x.id === selected.id);
-      if (b && !idle) popover = <BlockagePopover blockage={b} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
+      if (b && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
     }
   }
 
@@ -165,9 +169,14 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
             ))}
           </g>
 
-          {!idle && layers.bloqueos && snapshot.blockages.map((b) => (
-            <path key={`bl-${b.id}`} d={toPath(g, b.path ?? [b.from, b.to])} fill="none" stroke="var(--color-critic)" strokeWidth={Math.max(5, g.cell * 0.3)} strokeLinecap="round" strokeLinejoin="round" />
-          ))}
+          {!idle && layers.bloqueos && snapshot.blockages.map((b) => {
+            const ending = endingSoon(b) != null;
+            const width = Math.max(5, g.cell * 0.3);
+            return (
+              <path key={`bl-${b.id}`} d={toPath(g, b.path ?? [b.from, b.to])} fill="none" stroke="var(--color-critic)" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round"
+                strokeDasharray={ending ? `${width * 1.6} ${width * 1.4}` : undefined} className={ending ? "blockage-ending" : undefined} style={ending ? blink : undefined} />
+            );
+          })}
 
           {!idle && layers.rutas && [...snapshot.vehicles].sort((a, b) => Number(a.id === selectedVehicle?.id) - Number(b.id === selectedVehicle?.id)).map((v) => {
             if (!v.route) return null;
@@ -191,7 +200,9 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
 
           {!idle && layers.bloqueos && snapshot.blockages.map((b) => {
             const [x, y] = project(g, blockageAnchor(b));
-            return <MapPin key={`bp-${b.id}`} x={x} y={y} centered scale={0.72} color="var(--color-critic)" Icon={BlockageIcon} label="Vía bloqueada" onActivate={() => onSelect({ type: "blockage", id: b.id })} />;
+            const left = endingSoon(b);
+            const pin = <MapPin x={x} y={y} centered scale={0.72} color="var(--color-critic)" Icon={left != null ? Hourglass : BlockageIcon} label={left != null ? `Vía bloqueada, se libera en ~${left} min` : "Vía bloqueada"} onActivate={() => onSelect({ type: "blockage", id: b.id })} />;
+            return left != null ? <g key={`bp-${b.id}`} className="blockage-ending" style={blink}>{pin}</g> : <g key={`bp-${b.id}`}>{pin}</g>;
           })}
 
           {!idle && layers.flota && selectedVehicle && <g aria-label={`Destinos de ${selectedVehicle.plate}`}>

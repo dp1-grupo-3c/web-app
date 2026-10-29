@@ -128,7 +128,7 @@ export function vistaAlmacenToWarehouse(a: VistaAlmacen): Warehouse {
 
 export function vistaBloqueoToBlockage(b: VistaBloqueo, index: number): Blockage {
   const path = pairsToCoords(b.nodos);
-  return { id: String(index), from: path[0], to: path[path.length - 1], path };
+  return { id: String(index), from: path[0], to: path[path.length - 1], path, startMinute: b.minutoInicio, endMinute: b.minutoFin };
 }
 
 // ---- Fotografía → MapSnapshot -------------------------------------------

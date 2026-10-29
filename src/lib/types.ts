@@ -49,6 +49,9 @@ export type Blockage = {
   until?: string;
   /** Polilínea completa (nodo a nodo). `from`/`to` son su primer y último punto. */
   path?: Coord[];
+  /** Inicio y fin programados, en minutos simulados de la corrida. */
+  startMinute?: number;
+  endMinute?: number;
 };
 
 export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number };

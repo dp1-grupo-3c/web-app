@@ -1,31 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
-import ts from "typescript";
-
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-// Mismo cargador que actions.test.mjs: transpila los módulos reales con TypeScript.
-function load(entry) {
-  const cache = new Map();
-  function req(file) {
-    if (cache.has(file)) return cache.get(file);
-    const exports = {};
-    cache.set(file, exports);
-    const { outputText } = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-      fileName: file,
-    });
-    const requireLocal = (name) => req(
-      (name.startsWith("@/") ? resolve(root, "src", name.slice(2)) : resolve(dirname(file), name)) + ".ts",
-    );
-    new Function("require", "exports", outputText)(requireLocal, exports);
-    return exports;
-  }
-  return req(resolve(root, entry));
-}
+import { load } from "./load.mjs";
 
 const v = load("src/lib/validation.ts");
 const tl = load("src/lib/traffic-light.ts");
