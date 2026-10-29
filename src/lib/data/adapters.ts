@@ -9,7 +9,9 @@ import { PRIORITIES } from "@/lib/constants";
 import { parseISODate } from "@/lib/format";
 import type {
   Blockage,
+  BreakdownRecord,
   BreakdownType,
+  Client,
   Coord,
   FirstLateOrder,
   FleetSettings,
@@ -31,18 +33,24 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import type {
+  Cliente,
   EstadoCorrida,
   FilaPedido,
+  IncidenteOperacion,
   InstantaneaSimulacion,
   MetricasSimulacion,
+  ParametrosOperacionInstantanea,
+  PrioridadPedido,
   ResultadoSimulacion,
   ResumenCorrida,
   SolicitudFlota,
+  SolicitudCliente,
   TipoEscenario,
   TipoUnidad,
   VistaAlmacen,
   VistaBloqueo,
   VistaParametros,
+  VistaPedidoOperacion,
   VistaUnidad,
 } from "@/lib/backend/types";
 
@@ -255,6 +263,94 @@ export function parametrosToTrafficLight(p: VistaParametros): TrafficLight {
   return { redTo: p.umbralSemaforoAmbar, amberFrom: p.umbralSemaforoAmbar, amberTo: p.umbralSemaforoVerde, greenFrom: p.umbralSemaforoVerde };
 }
 export const trafficLightToSemaforoBody = (t: TrafficLight) => ({ ambar: t.redTo, verde: t.amberTo });
+
+// ---- Operaciones diarias ---------------------------------------------------
+
+export const PRIORIDAD_POR_CODIGO: Record<PriorityCode, PrioridadPedido> = {
+  P1: "PRIORITARIO_1", P2: "PRIORITARIO_2", P3: "PRIORITARIO_3", P4: "PRIORITARIO_4", N: "NORMAL",
+};
+const CODIGO_POR_PRIORIDAD = Object.fromEntries(
+  Object.entries(PRIORIDAD_POR_CODIGO).map(([codigo, prioridad]) => [prioridad, codigo]),
+) as Record<PrioridadPedido, PriorityCode>;
+
+/**
+ * Las fechas operativas son LocalDateTime de la zona de la operación. Se leen
+ * como UTC solo para restarlas entre sí: así la zona del navegador (y sus
+ * cambios de horario) no altera la diferencia.
+ */
+const instanteLocal = (fecha: string) => Date.parse(fecha.slice(0, 19) + "Z");
+export const minutosEntre = (desde: string, hasta: string) => Math.floor((instanteLocal(hasta) - instanteLocal(desde)) / 60_000);
+
+/** "2026-10-28T14:05:00" → "28/10 14:05", sin pasar por la zona del navegador. */
+export const formatoFechaOperativa = (fecha: string) => `${fecha.slice(8, 10)}/${fecha.slice(5, 7)} ${fecha.slice(11, 16)}`;
+
+/** Un pedido sigue activo mientras le quede cantidad por entregar; los incumplidos conservan su remanente. */
+export const pedidoActivo = (p: VistaPedidoOperacion) => p.pendiente > 0 && p.estado !== "ENTREGADO" && p.estado !== "CANCELADO";
+
+/**
+ * A diferencia de la simulación, el backend operativo sí informa el estado.
+ * PLANIFICADO tiene ruta pero aún no sale cargado, así que se muestra "en
+ * almacén". En replanificación se muestra en ruta solo si alguna unidad lo
+ * lleva a bordo. CANCELADO no llega a la lista: se filtra con pedidoActivo.
+ */
+export function pedidoOperacionToOrder(p: VistaPedidoOperacion, vehicles: Vehicle[], fechaHoraOperativa: string): Order {
+  const carrier = vehicles.find((v) => v.orders.some((o) => o.orderId === String(p.id)));
+  const status: OrderStatus =
+    p.estado === "ENTREGADO" ? "entregado"
+    : p.estado === "EN_TRANSITO" || p.estado === "ENTREGADO_PARCIALMENTE" || carrier ? "en_ruta"
+    : p.estado === "PLANIFICADO" ? "en_almacen"
+    : "por_asignar";
+  return {
+    id: String(p.id),
+    packages: p.cantidad,
+    destination: { x: p.x, y: p.y },
+    priority: CODIGO_POR_PRIORIDAD[p.prioridad] ?? "N",
+    minutesLeft: minutosEntre(fechaHoraOperativa, p.limite),
+    status,
+    vehiclePlate: carrier?.plate,
+  };
+}
+
+/** El historial de incidentes es compartido: incluye las averías registradas desde cualquier sesión. */
+export function incidenteToBreakdown(i: IncidenteOperacion, unidades: VistaUnidad[]): BreakdownRecord {
+  const unidad = unidades.find((u) => u.codigo === i.placa);
+  return {
+    id: i.comandoId,
+    plate: i.placa,
+    vehicleKind: unidad ? KIND_POR_TIPO[unidad.tipo] : "auto",
+    type: BREAKDOWN_POR_TIPO[i.tipo] ?? "T1",
+    status: i.resuelto ? "resuelta" : "activa",
+    when: `Desde ${formatoFechaOperativa(i.inicio)}${i.reincorporacion ? ` · vuelve ${formatoFechaOperativa(i.reincorporacion)}` : ""}`,
+  };
+}
+
+export const parametrosOperacionToTrafficLight = (p: ParametrosOperacionInstantanea): TrafficLight =>
+  ({ redTo: p.umbralSemaforoAmbar, amberFrom: p.umbralSemaforoAmbar, amberTo: p.umbralSemaforoVerde, greenFrom: p.umbralSemaforoVerde });
+
+// ---- Clientes ----------------------------------------------------------------
+
+export function clienteToClient(c: Cliente): Client {
+  return {
+    kind: c.tipo === "EMPRESA" ? "empresa" : "persona",
+    document: c.documento,
+    name: c.nombre,
+    phone: c.telefono,
+    contact: c.contacto ?? undefined,
+    address: c.direccion,
+    location: { x: c.x, y: c.y },
+  };
+}
+
+export const clientToSolicitud = (c: Client): SolicitudCliente => ({
+  tipo: c.kind === "empresa" ? "EMPRESA" : "PERSONA",
+  documento: c.document,
+  nombre: c.name,
+  telefono: c.phone,
+  contacto: c.kind === "empresa" ? c.contact ?? null : null,
+  direccion: c.address,
+  x: c.location.x,
+  y: c.location.y,
+});
 
 // ---- Resultado / resumen --------------------------------------------------
 

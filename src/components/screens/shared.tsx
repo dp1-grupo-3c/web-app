@@ -1,10 +1,9 @@
 import { LoaderCircle } from "lucide-react";
 import { GRID } from "@/lib/constants";
 import type { Coord, Order } from "@/lib/types";
-import type { OrderDraft } from "@/components/panels/OrdersPanel";
 
-/** Destino a destacar en el mapa: el pedido seleccionado o el del borrador de registro. */
-export function highlightFor(orders: Order[], selectedOrderId: string | null, draft?: OrderDraft): Coord | null {
+/** Destino a destacar en el mapa: el pedido seleccionado o el del borrador de registro (pedido o cliente). */
+export function highlightFor(orders: Order[], selectedOrderId: string | null, draft?: { x: string; y: string }): Coord | null {
   const order = selectedOrderId ? orders.find((o) => o.id === selectedOrderId) : undefined;
   if (order) return order.destination;
   if (!draft || draft.x === "" || draft.y === "") return null;

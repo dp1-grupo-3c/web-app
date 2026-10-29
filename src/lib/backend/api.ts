@@ -6,8 +6,18 @@
  */
 
 import type {
+  Cliente,
   DetalleCorrida,
+  SolicitudCliente,
+  MetricasSimulacion,
   PaginaPedidos,
+  PaginaPedidosOperacion,
+  ResultadoComando,
+  SolicitudAveriaOperacion,
+  SolicitudOperacion,
+  SolicitudParametrosOperacion,
+  SolicitudPedidoOperacion,
+  VistaOperacion,
   ResultadoCargaAverias,
   ResultadoSimulacion,
   ResumenCorrida,
@@ -89,3 +99,34 @@ export const cambiarFlota = (s: SolicitudFlota) =>
   api<VistaParametros>("/parametros/flota", { metodo: "PUT", cuerpo: s });
 export const cambiarSemaforo = (ambar: number, verde: number) =>
   api<VistaParametros>("/parametros/semaforo", { metodo: "PUT", cuerpo: { ambar, verde } });
+
+// ---- Operaciones diarias -----------------------------------------------------
+
+const op = (id: string) => `/operaciones/${encodeURIComponent(id)}`;
+
+export const iniciarOperacion = (s?: SolicitudOperacion) =>
+  api<VistaOperacion>("/operaciones", { metodo: "POST", cuerpo: s ?? {} });
+export const operacionActual = () => api<VistaOperacion>("/operaciones/actual");
+export const detalleOperacion = (id: string) => api<VistaOperacion>(op(id));
+export const detenerOperacion = (id: string) => api<VistaOperacion>(`${op(id)}/detener`, { metodo: "POST" });
+export const altaPedidoOperacion = (id: string, s: SolicitudPedidoOperacion) =>
+  api<ResultadoComando>(`${op(id)}/pedidos`, { metodo: "POST", cuerpo: s });
+export const averiaOperacion = (id: string, s: SolicitudAveriaOperacion) =>
+  api<ResultadoComando>(`${op(id)}/averias`, { metodo: "POST", cuerpo: s });
+export const parametrosOperacion = (id: string, s: SolicitudParametrosOperacion) =>
+  api<ResultadoComando>(`${op(id)}/parametros`, { metodo: "PUT", cuerpo: s });
+export const comandoOperacion = (id: string, comandoId: string) =>
+  api<ResultadoComando>(`${op(id)}/comandos/${encodeURIComponent(comandoId)}`);
+export const paginaPedidosOperacion = (id: string, q: { pagina?: number; tamano?: number; busqueda?: string; soloActivos?: boolean }) =>
+  api<PaginaPedidosOperacion>(`${op(id)}/pedidos?` + new URLSearchParams(
+    Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]),
+  ));
+export const metricasOperacion = (id: string) => api<MetricasSimulacion>(`${op(id)}/metricas`);
+
+// ---- Clientes ------------------------------------------------------------------
+
+export const listarClientes = () => api<Cliente[]>("/clientes");
+export const buscarCliente = (documento: string) => api<Cliente>(`/clientes/${encodeURIComponent(documento)}`);
+export const registrarCliente = (s: SolicitudCliente) => api<Cliente>("/clientes", { metodo: "POST", cuerpo: s });
+export const actualizarCliente = (s: SolicitudCliente) =>
+  api<Cliente>(`/clientes/${encodeURIComponent(s.documento)}`, { metodo: "PUT", cuerpo: s });
