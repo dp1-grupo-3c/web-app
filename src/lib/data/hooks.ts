@@ -162,13 +162,16 @@ export function useSimulationRows(scope: DataScope, settings: Pick<SimSettings, 
   }, [foto, trips, vehicleOccupancy, fillBands]);
 }
 
-/** Pedidos con los vehículos que los llevan, punto actual, salida y llegada estimadas. */
-export function useOrderRows(scope: DataScope, orders: Order[]): OrderRow[] {
+/**
+ * Pedidos con los vehículos que los llevan, punto actual, salida y llegada
+ * estimadas, más la hora de la foto mostrada (para formatear los minutos).
+ */
+export function useOrderRows(scope: DataScope, orders: Order[]): { rows: OrderRow[]; simTime: string | null; minute: number | null } {
   const { foto, trips } = useShownSim(scope);
-  return useMemo(
-    () => selectOrderRows(orders, foto?.unidades.map(vistaUnidadToVehicle) ?? [], trips, foto?.minutoSimulado ?? null),
-    [orders, foto, trips],
-  );
+  return useMemo(() => {
+    const minute = foto?.minutoSimulado ?? null;
+    return { rows: selectOrderRows(orders, foto?.unidades.map(vistaUnidadToVehicle) ?? [], trips, minute), simTime: foto?.fechaHoraSimulada ?? null, minute };
+  }, [orders, foto, trips]);
 }
 
 /** Variante del buffer elegida con ?buffer=pequeno|grande (o la de NEXT_PUBLIC_BUFFER_VARIANT). */

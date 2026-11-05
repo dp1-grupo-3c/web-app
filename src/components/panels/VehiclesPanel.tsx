@@ -13,7 +13,7 @@ import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { cn } from "@/lib/cn";
 import { TONE_COLOR, TONE_LABEL } from "@/lib/constants";
 import { useSimulationRows } from "@/lib/data/hooks";
-import { clockAt, type VehicleRow } from "@/lib/data/selectors";
+import { formatSimClock as simClock, type VehicleRow } from "@/lib/data/selectors";
 import { formatDuration } from "@/lib/format";
 import { filterBy, inSet, sortBy, toggleIn, type SortDir } from "@/lib/list-tools";
 import { DISTANCE_BAND_LABEL, DISTANCE_BANDS, distanceBand } from "@/lib/occupancy";
@@ -31,12 +31,6 @@ const PAGE_SIZE = 8;
 
 const km = (n: number | null) => (n == null ? "—" : `${Math.round(n)} km`);
 
-/** Hora simulada de un minuto; con otra fecha, también el día ("03/03 10:05"). */
-function simClock(simTime: string | null, now: number | null, m: number | null) {
-  if (m == null || simTime == null || now == null) return "—";
-  const c = clockAt(simTime, now, m);
-  return c.day === simTime.slice(0, 10) ? c.time : `${c.day.slice(8, 10)}/${c.day.slice(5, 7)} ${c.time}`;
-}
 
 /**
  * Listado de vehículos durante la simulación: ocupación con semáforo, carga,
