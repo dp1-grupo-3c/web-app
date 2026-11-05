@@ -198,3 +198,30 @@ export function SearchInput({ value, onChange, placeholder, label }: SearchInput
     </div>
   );
 }
+
+/**
+ * Hora del día "HH:MM" (24 h) con máscara propia: el `<input type="time">`
+ * nativo usa el formato de 12 h del sistema en muchos navegadores. Devuelve
+ * el texto tal como está; la validación la hace quien lo usa.
+ */
+export function TimeInput({ value, onChange, error, className, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & { value: string; onChange: (value: string) => void; error?: boolean }) {
+  const handleChange = (raw: string) => {
+    if (raw.includes(":")) return onChange(raw.replace(/[^\d:]/g, "").slice(0, 5));
+    const digits = raw.replace(/\D/g, "").slice(0, 4);
+    onChange(digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits);
+  };
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      placeholder="hh:mm"
+      maxLength={5}
+      {...rest}
+      value={value}
+      aria-invalid={error || undefined}
+      onChange={(e) => handleChange(e.target.value)}
+      className={cn(fieldClass(error), "tabular-nums", className)}
+    />
+  );
+}

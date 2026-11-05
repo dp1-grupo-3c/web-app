@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Clock, Crosshair, MapPin, Package, Search, UserPlus, UserRound, Users } from "lucide-react";
+import { Building2, Clock, Crosshair, MapPin, Package, Search, Truck, UserPlus, UserRound, Users } from "lucide-react";
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Chip, RadioCardGroup, SegmentedControl } from "@/components/ui/choice";
@@ -16,7 +16,7 @@ import { ADDRESS_MAX_LENGTH, MAX_PACKAGES_PER_ORDER } from "@/config/simulacion"
 import { findClient, registerOrder } from "@/lib/data/actions";
 import { DOCUMENT_LABEL, documentError, kindForDocument } from "@/lib/documento";
 import { formatCoord, formatDuration } from "@/lib/format";
-import type { Client, Order, OrderStatus, PriorityCode } from "@/lib/types";
+import type { Client, Coord, Order, OrderStatus, PriorityCode } from "@/lib/types";
 import { integerInRange, textMax } from "@/lib/validation";
 
 /**
@@ -62,6 +62,18 @@ const STATUS: Record<OrderStatus, { label: string; tone: "ok" | "warn" | "neutra
   entregado: { label: "Entregado", tone: "ok" },
 };
 
+/** Seguimiento que la simulación agrega a cada pedido (opcional). Horas ya formateadas. */
+export type OrderTracking = {
+  /** Vehículos que lo entregan; `loaded` = ya va a bordo (si no, tras una recarga). */
+  carriers: { plate: string; loaded: boolean; packages: number }[];
+  currentPoint: Coord | null;
+  departure: string;
+  arrival: string;
+};
+
+/** Pedidos que entrega el vehículo elegido en el mapa. */
+export type OrdersHighlight = { vehicle: string; ids: ReadonlySet<string> };
+
 type OrdersPanelProps = {
   audience: "operador" | "cliente" | "simulacion";
   orders: Order[];
@@ -78,9 +90,11 @@ type OrdersPanelProps = {
   onTabChange?: (t: OrdersTab) => void;
   /** Documento sin cliente registrado: la pantalla abre el registro de clientes. */
   onRegisterClient?: (document: string) => void;
+  tracking?: ReadonlyMap<string, OrderTracking>;
+  highlight?: OrdersHighlight | null;
 };
 
-export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onDraftChange, picking, onTogglePick, onClose, width, tab: controlledTab, onTabChange, onRegisterClient }: OrdersPanelProps) {
+export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onDraftChange, picking, onTogglePick, onClose, width, tab: controlledTab, onTabChange, onRegisterClient, tracking, highlight }: OrdersPanelProps) {
   const toast = useToast();
   const canRegister = audience === "operador";
   const [ownTab, setOwnTab] = useState<OrdersTab>("lista");
@@ -143,7 +157,7 @@ export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onD
       {formMode ? (
         <OrderForm draft={draft} errors={errors} change={change} onDraftChange={onDraftChange} picking={picking} onTogglePick={onTogglePick} onRegisterClient={onRegisterClient} />
       ) : (
-        <OrdersList audience={audience} orders={orders} selectedId={selectedId} onSelect={onSelect} />
+        <OrdersList audience={audience} orders={orders} selectedId={selectedId} onSelect={onSelect} tracking={tracking} highlight={highlight ?? null} />
       )}
     </SidePanel>
   );
@@ -287,9 +301,13 @@ function ClientCard({ client: c }: { client: Client }) {
 
 const PAGE_SIZES = [6, 10, 15];
 
-function OrdersList({ audience, orders, selectedId, onSelect }: { audience: OrdersPanelProps["audience"]; orders: Order[]; selectedId: string | null; onSelect: (id: string | null) => void }) {
+function OrdersList({ audience, orders, selectedId, onSelect, tracking, highlight }: {
+  audience: OrdersPanelProps["audience"]; orders: Order[]; selectedId: string | null; onSelect: (id: string | null) => void;
+  tracking?: ReadonlyMap<string, OrderTracking>; highlight: OrdersHighlight | null;
+}) {
   const [query, setQuery] = useState("");
   const [urgentOnly, setUrgentOnly] = useState(false);
+  const [onlyVehicle, setOnlyVehicle] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(PAGE_SIZES[0]);
   const client = audience === "cliente";
@@ -297,8 +315,19 @@ function OrdersList({ audience, orders, selectedId, onSelect }: { audience: Orde
   const q = query.trim().toLowerCase().replace(/[()\s]/g, "");
   const rows = orders
     .filter((o) => !urgentOnly || o.minutesLeft < 60)
+    .filter((o) => !onlyVehicle || !highlight || highlight.ids.has(o.id))
     .filter((o) => !q || o.id.toLowerCase().includes(q) || `${o.destination.x},${o.destination.y}`.startsWith(q));
   const pageCount = Math.max(1, Math.ceil(rows.length / perPage));
+  // Al elegir otro vehículo en el mapa, la lista salta a la página de su primer pedido.
+  const [followed, setFollowed] = useState<string | null>(null);
+  const vehicle = highlight?.vehicle ?? null;
+  if (vehicle !== followed) {
+    setFollowed(vehicle);
+    if (!vehicle) setOnlyVehicle(false);
+    const first = highlight ? rows.findIndex((o) => highlight.ids.has(o.id)) : -1;
+    if (first >= 0) setPage(Math.floor(first / perPage) + 1);
+  }
+  const highlightedCount = highlight ? orders.filter((o) => highlight.ids.has(o.id)).length : 0;
   const current = Math.min(page, pageCount);
   const slice = rows.slice((current - 1) * perPage, current * perPage);
   const selected = orders.find((o) => o.id === selectedId) ?? null;
@@ -317,6 +346,17 @@ function OrdersList({ audience, orders, selectedId, onSelect }: { audience: Orde
         <div className="flex gap-1.5">
           <Chip on={!urgentOnly} onClick={() => { setUrgentOnly(false); setPage(1); }}>Todos</Chip>
           <Chip on={urgentOnly} onClick={() => { setUrgentOnly(true); setPage(1); }}><Clock className="size-3.5 text-warning" aria-hidden />Vencen en menos de 1 h</Chip>
+        </div>
+      )}
+      {highlight && (
+        <div role="status" className="flex items-center gap-2 rounded-[10px] border border-warning/35 bg-warning/8 px-3 py-2 text-[13px] text-n50">
+          <Truck className="size-4 shrink-0 text-warning" aria-hidden />
+          <span className="flex-1">
+            {highlightedCount
+              ? <><b>{highlight.vehicle}</b> entrega {highlightedCount === 1 ? "1 pedido" : `${highlightedCount} pedidos`} de esta lista.</>
+              : <><b>{highlight.vehicle}</b> no entrega pedidos de esta lista.</>}
+          </span>
+          {highlightedCount > 0 && <Chip on={onlyVehicle} onClick={() => { setOnlyVehicle((v) => !v); setPage(1); }}>Ver solo estos</Chip>}
         </div>
       )}
       <div className="shrink-0 overflow-hidden rounded-xl border border-line bg-night">
@@ -341,17 +381,23 @@ function OrdersList({ audience, orders, selectedId, onSelect }: { audience: Orde
               slice.map((o) => {
                 const on = o.id === selectedId;
                 const urgent = o.minutesLeft < 60;
+                const marked = !!highlight?.ids.has(o.id);
+                const plates = tracking?.get(o.id)?.carriers.map((c) => c.plate) ?? (o.vehiclePlate ? [o.vehiclePlate] : []);
                 return (
                   <tr
                     key={o.id}
                     tabIndex={0}
                     aria-selected={on}
+                    aria-label={marked ? `Pedido ${o.id}, lo entrega ${highlight!.vehicle}` : undefined}
                     onClick={() => onSelect(on ? null : o.id)}
                     onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect(on ? null : o.id))}
-                    className={cn("h-16 cursor-pointer border-t border-line tabular-nums first:border-t-0 hover:bg-field [&>td]:overflow-hidden [&>td]:px-2 [&>td]:py-0 [&>td]:whitespace-nowrap", on && "bg-pink/10 [&>td:first-child]:shadow-[inset_3px_0_0_var(--color-pink)]")}
+                    className={cn("h-16 cursor-pointer border-t border-line tabular-nums first:border-t-0 hover:bg-field [&>td]:overflow-hidden [&>td]:px-2 [&>td]:py-0 [&>td]:whitespace-nowrap", marked && !on && "bg-warning/8 [&>td:first-child]:shadow-[inset_3px_0_0_var(--color-warning)]", on && "bg-pink/10 [&>td:first-child]:shadow-[inset_3px_0_0_var(--color-pink)]")}
                   >
                     <td title={`${o.id} · ${o.packages} paquetes`}><b className="block truncate text-white">{o.id}</b><span className="block truncate text-xs text-n500">{o.packages} paq.</span></td>
-                    <td className="text-white" title={formatCoord(o.destination)}><span className="block truncate">{formatCoord(o.destination)}</span></td>
+                    <td className="text-white" title={`${formatCoord(o.destination)}${plates.length ? ` · ${plates.join(", ")}` : ""}`}>
+                      <span className="block truncate">{formatCoord(o.destination)}</span>
+                      {plates.length > 0 && <span className="flex items-center gap-1 truncate text-xs text-n500">{marked && <Truck className="size-3 text-warning" aria-hidden />}{plates[0]}{plates.length > 1 ? ` +${plates.length - 1}` : ""}</span>}
+                    </td>
                     <td className="px-3 py-2.5"><Badge>{o.priority} · {priorityInfo(o.priority).hours} h</Badge></td>
                     <td className={cn("text-right", urgent ? "text-warning" : "text-white")} title={formatDuration(o.minutesLeft)}>
                       <span className="block truncate">{urgent ? `${o.minutesLeft} min` : formatDuration(o.minutesLeft)}</span>
@@ -379,14 +425,17 @@ function OrdersList({ audience, orders, selectedId, onSelect }: { audience: Orde
           <Pagination page={current} pageCount={pageCount} onChange={setPage} />
         </div>
       </div>
-      {selected && <OrderDetail order={selected} />}
+      {selected && <OrderDetail order={selected} tracking={tracking?.get(selected.id)} />}
     </>
   );
 }
 
-function OrderDetail({ order: o }: { order: Order }) {
+function OrderDetail({ order: o, tracking: t }: { order: Order; tracking?: OrderTracking }) {
   const st = STATUS[o.status];
   const p = priorityInfo(o.priority);
+  const carriers = t?.carriers.length
+    ? t.carriers.map((c) => `${c.plate} (${c.packages} paq.${c.loaded ? "" : ", tras recarga"})`).join(", ")
+    : o.vehiclePlate ?? "Por asignar";
   return (
     <div className="grid gap-3 rounded-xl border border-line bg-night p-4">
       <div className="flex items-center gap-2.5">
@@ -395,12 +444,14 @@ function OrderDetail({ order: o }: { order: Order }) {
       </div>
       <DefinitionList
         items={[
-          ...(o.etaMinutes != null ? ([["Llegada estimada", `~${o.etaMinutes} min`]] as [string, string][]) : []),
+          ...(t ? ([["Hora de salida", t.departure], ["Llegada estimada", t.arrival]] as [string, string][]) : []),
+          ...(!t && o.etaMinutes != null ? ([["Llegada estimada", `~${o.etaMinutes} min`]] as [string, string][]) : []),
           ["Vence en", formatDuration(o.minutesLeft)],
           ["Destino", formatCoord(o.destination)],
+          ...(t ? ([["Punto actual", t.currentPoint ? formatCoord(t.currentPoint) : "En almacén"]] as [string, string][]) : []),
           ["Prioridad", `${p.name} · ${p.hours} h`],
-          ["Paquetes", o.packages],
-          ["Vehículo", o.vehiclePlate ?? "Por asignar"],
+          [t ? "Cantidad de productos" : "Paquetes", o.packages],
+          [t && t.carriers.length > 1 ? "Vehículos" : "Vehículo", carriers],
         ]}
       />
       <p className="flex items-center gap-1.5 text-xs text-n600"><MapPin className="size-3.5" aria-hidden /> Lo marcamos en el mapa con un indicador rosado.</p>

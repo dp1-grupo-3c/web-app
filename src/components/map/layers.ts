@@ -1,8 +1,9 @@
 import { CircleX, House, Package, PackageCheck, Utensils } from "lucide-react";
 import { VEHICLE_META } from "@/components/domain/vehicle";
 import { TONE_COLOR } from "@/lib/constants";
+import { percentTone, warehouseOccupancy } from "@/lib/occupancy";
 import { warehouseTone } from "@/lib/traffic-light";
-import type { TrafficLight, Vehicle, VehicleStatus, Warehouse } from "@/lib/types";
+import type { PercentBands, TrafficLight, Vehicle, VehicleStatus, Warehouse } from "@/lib/types";
 
 export type MapLayer = "almacenes" | "flota" | "rutas" | "bloqueos";
 export type MapLayers = Record<MapLayer, boolean>;
@@ -19,11 +20,16 @@ export const VEHICLE_STATUS_LABEL: Record<VehicleStatus, string> = {
   abasteciendo: "Abasteciendo",
 };
 
-export function warehouseAppearance(w: Warehouse, t: TrafficLight, neutral: boolean) {
+/**
+ * Color del almacén. Con `fillBands` (simulación) usa el llenado en % de la
+ * configuración, igual que el listado y las métricas; sin ellos, el semáforo
+ * en paquetes (operación diaria).
+ */
+export function warehouseAppearance(w: Warehouse, t: TrafficLight, neutral: boolean, fillBands?: PercentBands) {
   if (w.kind === "principal") return { color: PINK, Icon: House, tone: null };
   if (neutral || w.stock == null) return { color: PINK, Icon: Package, tone: null };
-  const tone = warehouseTone(w.stock, t);
-  return { color: TONE_COLOR[tone], Icon: Package, tone };
+  const tone = fillBands ? percentTone(warehouseOccupancy(w), fillBands, "highIsGreen") : warehouseTone(w.stock, t);
+  return { color: tone ? TONE_COLOR[tone] : PINK, Icon: Package, tone };
 }
 
 export function vehicleAppearance(v: Vehicle) {

@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rutas en el mapa</title>
+<meta name="description" content="Demostración interactiva (datos simulados) de cuatro alternativas para mantener legibles las rutas de la flota en el mapa de KindBox.">
+<style>
+  :root {
+    --night: #1e2833; --canvas: #161d25; --panel: #171f28; --field: #232b35; --raised: #1b242e;
+    --line: #2a3441; --line-strong: #384351; --pink: #f7bfce; --critic: #fd4576; --warning: #fdc045; --success: #27e040;
+    --n50: #dddedf; --n200: #c1c4c9; --n400: #a6abb2; --n500: #8c939c; --n600: #999fa7; --n900: #626c7a;
+    --truck: #62e06e; --bike: #2ec4d6; --moto: #b47af5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--n50); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 16px 16px 8px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; }
+  h1 { margin: 0; font-size: 24px; color: var(--pink); letter-spacing: -.01em; }
+  header p { margin: 2px 0 0; color: var(--n400); max-width: 70ch; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--night); margin: 0 16px; }
+  .tabs button { flex: 1 1 auto; min-height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--n200); font: 600 13px system-ui, sans-serif; padding: 0 12px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--field); color: #fff; box-shadow: 0 1px 2px #0005; }
+  .tabs button:focus-visible, .chip:focus-visible, .btn:focus-visible { outline: 2px solid var(--warning); outline-offset: 2px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 12px 16px 24px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .maps { display: grid; gap: 12px; min-width: 0; align-content: start; }
+  .maps.compare { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 700px) { .maps.compare { grid-template-columns: 1fr; } }
+  figure { margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--night); overflow: hidden; }
+  figcaption { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--raised); font-size: 13px; }
+  figcaption b { color: #fff; } figcaption span { color: var(--n500); font-variant-numeric: tabular-nums; }
+  svg.map { display: block; width: 100%; height: auto; max-height: calc(100vh - 230px); cursor: crosshair; }
+  .maps.compare svg.map { max-height: calc((100vh - 290px) / 2); }
+  aside { display: grid; gap: 12px; align-content: start; }
+  .card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px; display: grid; gap: 10px; }
+  .card h2 { margin: 0; font-size: 16px; color: #fff; }
+  .card h3 { margin: 4px 0 0; font-size: 13px; color: var(--n400); font-weight: 600; }
+  .card ul { margin: 0; padding-left: 18px; color: var(--n200); }
+  .card li + li { margin-top: 3px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  label.slider { display: grid; gap: 4px; color: var(--n400); font-size: 12px; }
+  input[type=range] { width: 100%; accent-color: var(--warning); }
+  .chip { height: 30px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--n200); padding: 0 12px; font: 500 13px system-ui, sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .chip[aria-pressed="true"] { border-color: var(--pink); background: #f7bfce1f; color: var(--pink); }
+  .btn { height: 32px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--field); color: #fff; padding: 0 12px; font: 600 13px system-ui, sans-serif; cursor: pointer; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; background: var(--night); padding: 8px 10px; }
+  .stat span { display: block; color: var(--n500); font-size: 11px; } .stat b { font-size: 18px; color: #fff; font-variant-numeric: tabular-nums; }
+  .meter { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; font-size: 13px; }
+  .meter dt { color: var(--n500); } .meter dd { margin: 0; color: #fff; }
+  .legend { display: grid; gap: 4px; font-size: 12px; color: var(--n400); }
+  .legend i { display: inline-block; width: 26px; height: 0; vertical-align: middle; margin-right: 6px; border-top: 3px solid; }
+  .hint { color: var(--n500); font-size: 12px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .ctrl-d[hidden] { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Rutas en el mapa: 4 alternativas</h1>
+    <p>Datos simulados con la retícula de 70 × 50 de KindBox. Pasa el cursor sobre un vehículo o haz clic para seleccionarlo; clic en el fondo para soltarlo. Los números de la derecha miden el costo de dibujar cada alternativa.</p>
+  </div>
+</header>
+<div class="tabs" role="tablist" aria-label="Alternativa">
+  <button role="tab" data-mode="actual">Hoy (referencia)</button>
+  <button role="tab" data-mode="a">A · Bajo demanda</button>
+  <button role="tab" data-mode="b">B · Pendiente y recorrido atenuado</button>
+  <button role="tab" data-mode="c">C · Opacidad y grosor por estado</button>
+  <button role="tab" data-mode="d">D · Filtro, zona y tope</button>
+  <button role="tab" data-mode="compare">Comparar A–D</button>
+</div>
+<main>
+  <div class="maps" id="maps"></div>
+  <aside>
+    <section class="card" aria-label="Controles">
+      <label class="slider">Vehículos: <b id="nLabel"></b><input id="n" type="range" min="60" max="300" step="20"></label>
+      <div class="row">
+        <button class="btn" id="play">Pausar</button>
+        <button class="btn" id="reseed">Otra ciudad</button>
+      </div>
+      <div class="ctrl-d" id="ctrlD">
+        <h3>Filtro de la alternativa D</h3>
+        <div class="row" id="kindChips"></div>
+        <div class="row" id="zoneChips" style="margin-top:6px"></div>
+        <label class="slider" style="margin-top:6px">Tope de rutas: <b id="capLabel"></b><input id="cap" type="range" min="5" max="60" step="5"></label>
+      </div>
+    </section>
+    <section class="card" aria-label="Costo de dibujo" aria-live="off">
+      <div class="stats">
+        <div class="stat"><span>Rutas dibujadas</span><b id="sRoutes">0</b></div>
+        <div class="stat"><span>Nodos SVG de ruta</span><b id="sNodes">0</b></div>
+        <div class="stat"><span>Cuadros/s</span><b id="sFps">0</b></div>
+      </div>
+      <p class="hint" id="statsHint"></p>
+    </section>
+    <section class="card" id="info" aria-live="polite"></section>
+  </aside>
+</main>
+<script>
+"use strict";
+// ---- Datos simulados (deterministas) ----------------------------------------
+const W = 70, H = 50;
+const KINDS = { auto: { color: "var(--truck)", label: "Auto", cap: 160, speed: 2.2 }, moto: { color: "var(--moto)", label: "Moto", cap: 40, speed: 3.2 }, bicicleta: { color: "var(--bike)", label: "Bici", cap: 20, speed: 1.6 } };
+const WAREHOUSES = [{ name: "Central", x: 12, y: 8 }, { name: "Norte", x: 42, y: 42 }, { name: "Este", x: 63, y: 3 }];
+let seed = 7;
+const params = new URLSearchParams(location.search);
+if (params.get("seed")) seed = +params.get("seed");
+function rng() { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+const ri = (a, b) => a + Math.floor(rng() * (b - a + 1));
+
+function manhattan(a, b) { // camino unitario por calles (primero x, luego y, o al revés)
+  const out = []; let x = a.x, y = a.y; const xFirst = rng() < .5;
+  const stepX = () => { while (x !== b.x) { x += Math.sign(b.x - x); out.push({ x, y }); } };
+  const stepY = () => { while (y !== b.y) { y += Math.sign(b.y - y); out.push({ x, y }); } };
+  if (xFirst) { stepX(); stepY(); } else { stepY(); stepX(); }
+  return out;
+}
+function newTrip(v, from) {
+  // Paradas a una distancia razonable del punto de partida (no en cualquier lugar de la ciudad).
+  const near = (c, r, max) => Math.max(0, Math.min(max, c + ri(-r, r)));
+  const stops = Array.from({ length: ri(1, 3) }, () => ({ x: near(from.x, 22, W), y: near(from.y, 16, H) }));
+  const home = WAREHOUSES[ri(0, WAREHOUSES.length - 1)];
+  const route = [{ ...from }]; let cur = from;
+  for (const s of stops) { route.push(...manhattan(cur, s)); cur = s; }
+  v.returnAt = route.length - 1; // a partir de aquí vuelve vacío al almacén
+  route.push(...manhattan(cur, home));
+  v.route = route; v.i = 0; v.stops = stops.length; v.load = Math.round(KINDS[v.kind].cap * (0.25 + rng() * 0.75));
+}
+let vehicles = [];
+function build(n) {
+  vehicles = Array.from({ length: n }, (_, k) => {
+    const kind = k % 7 < 3 ? "auto" : k % 7 < 5 ? "moto" : "bicicleta";
+    const v = { id: `${kind[0].toUpperCase()}${String(k + 1).padStart(3, "0")}`, kind, broken: 0 };
+    newTrip(v, WAREHOUSES[k % 3]);
+    v.i = rng() * (v.route.length - 1); // cada uno en un punto distinto de su viaje
+    return v;
+  });
+}
+function step(dt) {
+  for (const v of vehicles) {
+    if (v.broken > 0) { v.broken -= dt; continue; }
+    if (rng() < dt * 0.004) { v.broken = 6; continue; } // averías esporádicas
+    v.i += KINDS[v.kind].speed * dt;
+    if (v.i >= v.route.length - 1) newTrip(v, v.route[v.route.length - 1]);
+  }
+}
+const status = (v) => (v.broken > 0 ? "averiado" : v.i >= v.returnAt ? "regreso" : "en_ruta");
+function posOf(v) { const a = v.route[Math.floor(v.i)], b = v.route[Math.min(v.route.length - 1, Math.floor(v.i) + 1)], f = v.i % 1; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; }
+const compact = (pts) => pts.filter((p, k) => k === 0 || k === pts.length - 1 || !((pts[k - 1].x === p.x && p.x === pts[k + 1].x) || (pts[k - 1].y === p.y && p.y === pts[k + 1].y)));
+const toD = (pts) => pts.length < 2 ? "" : "M" + compact(pts).map((p) => `${p.x.toFixed(2)} ${(H - p.y).toFixed(2)}`).join("L");
+function pending(v) { const p = posOf(v); return [p, ...v.route.slice(Math.floor(v.i) + 1)]; }
+function traveled(v) { return [...v.route.slice(0, Math.floor(v.i) + 1), posOf(v)]; }
+
+// ---- Estado de la UI ----------------------------------------------------------
+const state = { mode: params.get("mode") || "actual", n: +(params.get("n") || 180), playing: true, hovered: null, selected: null,
+  kinds: new Set(), zone: "todas", cap: 20 };
+const ZONES = { todas: null, NO: [0, 35, 25, 50], NE: [35, 70, 25, 50], SO: [0, 35, 0, 25], SE: [35, 70, 0, 25] };
+const inZone = (p) => { const z = ZONES[state.zone]; return !z || (p.x >= z[0] && p.x <= z[1] && p.y >= z[2] && p.y <= z[3]); };
+
+// ---- Estilo de cada alternativa -------------------------------------------------
+// Devuelve, por vehículo: tramo recorrido, tramo pendiente, destino y opacidad del marcador.
+const NONE = null;
+const focus = (v) => v === state.selected || v === state.hovered;
+const MODES = {
+  actual: {
+    title: "Hoy (referencia)",
+    style(v, ctx) {
+      const sel = state.selected; const on = v === sel;
+      return { pending: { w: on ? 6 : 4, op: sel && !on ? 0.35 : 1, dash: "8 7" }, traveled: NONE, dest: true, marker: 1 };
+    },
+    info: { summary: "Comportamiento actual: el tramo pendiente de todas las unidades, punteado, con destino. Al seleccionar una, las demás bajan a 35 %.",
+      pros: ["Se ve todo sin interactuar."], cons: ["Con más de ~60 vehículos el mapa se vuelve una maraña de punteados.", "Las rutas que comparten calle se tapan entre sí."], cost: "—", perf: "N rutas punteadas + N destinos; el punteado es lo más caro de pintar." },
+  },
+  a: {
+    title: "A · Bajo demanda",
+    style(v) {
+      if (!focus(v)) return { pending: NONE, traveled: NONE, dest: false, marker: state.selected ? 0.6 : 1 };
+      return { pending: { w: 5, op: 1, dash: "8 7" }, traveled: { w: 3, op: 0.45 }, dest: true, marker: 1 };
+    },
+    info: { summary: "Solo se dibuja la ruta del vehículo bajo el cursor o seleccionado (y la de los vehículos de un pedido elegido). Las demás no aparecen.",
+      pros: ["Mapa limpio siempre, con cualquier tamaño de flota.", "La ruta mostrada se lee completa: recorrido y pendiente.", "Encaja con la selección y los anillos ya hechos (Fases 3, 5 y 7)."],
+      cons: ["Sin interactuar no se ve hacia dónde va la flota.", "En pantallas táctiles no hay hover: hay que tocar."],
+      cost: "Bajo (~0,5 día). GridMap ya conoce el vehículo bajo el cursor y el seleccionado; se condiciona la capa de rutas a esos ids.",
+      perf: "El mejor: 1–3 rutas sin importar N. Elimina el mayor costo de pintado del mapa." },
+  },
+  b: {
+    title: "B · Pendiente y recorrido atenuado",
+    style(v) {
+      const on = focus(v);
+      return { pending: { w: on ? 5 : 2.2, op: on ? 1 : 0.5 }, traveled: { w: on ? 3 : 1.6, op: on ? 0.45 : 0.1 }, dest: on, marker: 1 };
+    },
+    info: { summary: "Todas las rutas, pero finas y sólidas: el tramo pendiente al 50 % y el ya recorrido casi transparente. El vehículo enfocado se dibuja grueso.",
+      pros: ["Se conserva la vista de conjunto de toda la flota.", "Se entiende el avance de cada unidad (recorrido vs. pendiente).", "El trazo sólido y fino satura menos que el punteado."],
+      cons: ["Con 200+ vehículos sigue habiendo mucha tinta en las avenidas.", "Dibuja el doble de trazos que hoy (recorrido + pendiente)."],
+      cost: "Bajo–medio (~1 día). El tramo recorrido ya llega en la foto; se ajustan estilos y el orden de capas.",
+      perf: "El peor: 2N trazos. Sin punteado se pinta más rápido por trazo, pero hay el doble de nodos." },
+  },
+  c: {
+    title: "C · Opacidad y grosor por estado",
+    style(v) {
+      const s = status(v), on = focus(v);
+      if (on) return { pending: { w: 5, op: 1, dash: s === "regreso" ? "3 5" : null }, traveled: { w: 3, op: 0.4 }, dest: true, marker: 1 };
+      if (s === "averiado") return { pending: NONE, traveled: NONE, dest: false, marker: 1, ring: "var(--critic)" };
+      if (s === "regreso") return { pending: { w: 1.4, op: 0.22, dash: "3 5" }, traveled: NONE, dest: false, marker: 0.8 };
+      return { pending: { w: 3, op: 0.8 }, traveled: NONE, dest: true, marker: 1 };
+    },
+    info: { summary: "El estado define cuánto pesa cada ruta: en reparto, sólida y visible; regresando vacío al almacén, fina y tenue; averiado, sin ruta y con un anillo rojo.",
+      pros: ["Lo importante (entregas en curso) destaca sin interactuar.", "Reduce ~30–40 % de la tinta: los regresos casi desaparecen.", "Comunica el estado sin abrir la ficha."],
+      cons: ["Hay que aprender una leyenda nueva.", "Con flota grande en reparto, el mapa sigue cargado."],
+      cost: "Medio (~1–1,5 días). El estado ya existe; «regresando» se deduce de que no lleva carga a bordo. Requiere actualizar la leyenda.",
+      perf: "≈ N rutas, pero más finas y sin destino en los regresos; las averiadas no dibujan ruta." },
+    legend: [["var(--truck)", 3, 0.8, "", "En reparto"], ["var(--truck)", 1.4, 0.3, "dashed", "Regresando vacío"], ["var(--critic)", 0, 1, "", "Averiado: sin ruta, anillo rojo"]],
+  },
+  d: {
+    title: "D · Filtro, zona y tope",
+    style(v, ctx) {
+      if (focus(v)) return { pending: { w: 5, op: 1, dash: "8 7" }, traveled: { w: 3, op: 0.45 }, dest: true, marker: 1 };
+      if (!ctx.visible.has(v)) return { pending: NONE, traveled: NONE, dest: false, marker: ctx.match.has(v) ? 1 : 0.35 };
+      return { pending: { w: 3, op: 0.85, dash: "8 7" }, traveled: NONE, dest: true, marker: 1 };
+    },
+    info: { summary: "Solo se dibujan las rutas que pasan el filtro activo (tipo de vehículo y zona) y, de ellas, como máximo un tope, priorizando las unidades con mayor ocupación. Se avisa cuántas quedan ocultas.",
+      pros: ["El usuario decide qué ver; el tope garantiza un máximo de trazos.", "Reutiliza los filtros del panel Vehículos (color, distancia).", "Escala a cualquier flota."],
+      cons: ["Más controles en pantalla.", "Puede ocultar justo la ruta que interesa si no se ajusta el filtro.", "La regla del tope debe explicarse."],
+      cost: "Medio–alto (~2 días). Estado de filtros compartido entre panel y mapa, selector de zona, tope y aviso de rutas ocultas.",
+      perf: "Acotado por el tope (p. ej. 20 rutas) sin importar N; el filtrado cuesta O(N) por foto, no por cuadro." },
+  },
+};
+
+// ---- Dibujo -----------------------------------------------------------------------
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; };
+const maps = [];
+function makeMap(mode, compareMode) {
+  const fig = document.createElement("figure");
+  const cap = document.createElement("figcaption");
+  cap.innerHTML = `<b>${MODES[mode].title}</b><span></span>`;
+  fig.appendChild(cap);
+  const svg = el("svg", { viewBox: `-1 -1 ${W + 2} ${H + 2}`, class: "map", role: "img", "aria-label": `Mapa: ${MODES[mode].title}` });
+  fig.appendChild(svg);
+  el("rect", { x: -1, y: -1, width: W + 2, height: H + 2, fill: "#1e2833" }, svg);
+  const grid = el("g", { "stroke-width": 0.06 }, svg);
+  for (let i = 0; i <= W; i++) el("line", { x1: i, y1: 0, x2: i, y2: H, stroke: i % 10 ? "#2c3845" : "#3f4c5c" }, grid);
+  for (let j = 0; j <= H; j++) el("line", { x1: 0, y1: j, x2: W, y2: j, stroke: j % 10 ? "#2c3845" : "#3f4c5c" }, grid);
+  const zone = el("rect", { fill: "#fdc04512", stroke: "#fdc04566", "stroke-width": 0.15, "stroke-dasharray": "0.6 0.4", display: "none" }, svg);
+  const gTrav = el("g", { fill: "none", "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  const gPend = el("g", { fill: "none", "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  const gDest = el("g", {}, svg);
+  const gWh = el("g", {}, svg);
+  for (const w of WAREHOUSES) { el("rect", { x: w.x - 0.9, y: H - w.y - 0.9, width: 1.8, height: 1.8, rx: 0.4, fill: "var(--pink)", stroke: "#10161c", "stroke-width": 0.2 }, gWh); }
+  const gVeh = el("g", {}, svg);
+  const m = { mode, svg, cap: cap.querySelector("span"), zone, gTrav, gPend, gDest, gVeh, items: new Map(), compareMode };
+  svg.addEventListener("click", (e) => { if (e.target === svg || e.target.tagName === "line" || e.target.tagName === "rect") { state.selected = null; } });
+  svg.addEventListener("mouseleave", () => { state.hovered = null; });
+  maps.push(m);
+  return fig;
+}
+function itemFor(m, v) {
+  let it = m.items.get(v);
+  if (it) return it;
+  const trav = el("path", { "vector-effect": "non-scaling-stroke" }, m.gTrav);
+  const pend = el("path", { "vector-effect": "non-scaling-stroke" }, m.gPend);
+  const dest = el("circle", { r: 0.55, stroke: "#161d25", "stroke-width": 0.18 }, m.gDest);
+  const g = el("g", { tabindex: 0, role: "button", "aria-label": `${KINDS[v.kind].label} ${v.id}` }, m.gVeh);
+  const ring = el("circle", { r: 1.25, fill: "none", "stroke-width": 0.25 }, g);
+  el("circle", { r: 0.85, fill: KINDS[v.kind].color, stroke: "#10161c", "stroke-width": 0.2 }, g);
+  g.style.cursor = "pointer";
+  g.addEventListener("mouseenter", () => { state.hovered = v; });
+  g.addEventListener("mouseleave", () => { if (state.hovered === v) state.hovered = null; });
+  g.addEventListener("focus", () => { state.hovered = v; });
+  g.addEventListener("click", (e) => { e.stopPropagation(); state.selected = state.selected === v ? null : v; });
+  it = { trav, pend, dest, g, ring };
+  m.items.set(v, it);
+  return it;
+}
+function applyStroke(path, s, color, pts) {
+  if (!s || pts.length < 2) { path.setAttribute("display", "none"); return 0; }
+  path.removeAttribute("display");
+  path.setAttribute("d", toD(pts));
+  path.setAttribute("stroke", color);
+  path.setAttribute("stroke-width", s.w);
+  path.setAttribute("opacity", s.op);
+  if (s.dash) path.setAttribute("stroke-dasharray", s.dash); else path.removeAttribute("stroke-dasharray");
+  return 1;
+}
+function contextFor(mode) {
+  if (mode !== "d") return {};
+  const match = new Set(vehicles.filter((v) => (!state.kinds.size || state.kinds.has(v.kind)) && inZone(posOf(v)) && status(v) !== "averiado"));
+  // Tope: primero las unidades más cargadas (más paquetes en juego).
+  const visible = new Set([...match].sort((a, b) => b.load / KINDS[b.kind].cap - a.load / KINDS[a.kind].cap).slice(0, state.cap));
+  return { match, visible };
+}
+function draw() {
+  let routes = 0, nodes = 0;
+  for (const m of maps) {
+    const ctx = contextFor(m.mode);
+    let mr = 0;
+    const z = ZONES[state.zone];
+    if (m.mode === "d" && z) { m.zone.removeAttribute("display"); m.zone.setAttribute("x", z[0]); m.zone.setAttribute("y", H - z[3]); m.zone.setAttribute("width", z[1] - z[0]); m.zone.setAttribute("height", z[3] - z[2]); }
+    else m.zone.setAttribute("display", "none");
+    for (const [v, it] of m.items) if (!vehicles.includes(v)) { it.trav.remove(); it.pend.remove(); it.dest.remove(); it.g.remove(); m.items.delete(v); }
+    for (const v of vehicles) {
+      const it = itemFor(m, v);
+      const st = MODES[m.mode].style(v, ctx);
+      const color = KINDS[v.kind].color;
+      const pend = pending(v);
+      const a = applyStroke(it.trav, st.traveled, color, st.traveled ? traveled(v) : []);
+      const b = applyStroke(it.pend, st.pending, color, st.pending ? pend : []);
+      mr += b; nodes += a + b;
+      if (st.dest && st.pending && pend.length > 1) {
+        const d = pend[pend.length - 1]; it.dest.removeAttribute("display"); it.dest.setAttribute("cx", d.x); it.dest.setAttribute("cy", H - d.y); it.dest.setAttribute("fill", color); it.dest.setAttribute("opacity", st.pending.op); nodes++;
+      } else it.dest.setAttribute("display", "none");
+      const p = posOf(v);
+      it.g.setAttribute("transform", `translate(${p.x.toFixed(2)} ${(H - p.y).toFixed(2)})`);
+      it.g.setAttribute("opacity", st.marker);
+      const ringColor = v === state.selected ? "var(--warning)" : st.ring;
+      if (ringColor) { it.ring.removeAttribute("display"); it.ring.setAttribute("stroke", ringColor); } else it.ring.setAttribute("display", "none");
+    }
+    routes += mr;
+    const hidden = m.mode === "d" ? Math.max(0, ctx.match.size - ctx.visible.size) : 0;
+    m.cap.textContent = `${mr} rutas${hidden ? ` · ${hidden} ocultas por el tope` : ""}`;
+  }
+  sRoutes.textContent = routes; sNodes.textContent = nodes;
+}
+
+// ---- Panel lateral ------------------------------------------------------------------
+function renderInfo() {
+  const box = document.getElementById("info");
+  const list = state.mode === "compare" ? ["a", "b", "c", "d"] : [state.mode];
+  box.innerHTML = list.map((k) => {
+    const i = MODES[k].info;
+    const legend = MODES[k].legend ? `<div class="legend">${MODES[k].legend.map(([c, w, op, dash, t]) => `<span><i style="border-top-color:${c};border-top-width:${Math.max(2, w)}px;opacity:${op};border-top-style:${dash || "solid"}"></i>${t}</span>`).join("")}</div>` : "";
+    return `<h2>${MODES[k].title}</h2><p style="margin:0;color:var(--n200)">${i.summary}</p>${legend}
+      <h3>Ventajas</h3><ul>${i.pros.map((x) => `<li>${x}</li>`).join("")}</ul>
+      <h3>Desventajas</h3><ul>${i.cons.map((x) => `<li>${x}</li>`).join("")}</ul>
+      <dl class="meter"><dt>Implementación</dt><dd>${i.cost}</dd><dt>Rendimiento</dt><dd>${i.perf}</dd></dl>`;
+  }).join('<hr style="border:0;border-top:1px solid var(--line);margin:4px 0">');
+  document.getElementById("ctrlD").hidden = !(state.mode === "d" || state.mode === "compare");
+  statsHint.textContent = state.mode === "compare" ? "En «Comparar» los totales suman los cuatro mapas." : "";
+}
+function renderMaps() {
+  const host = document.getElementById("maps");
+  host.innerHTML = ""; maps.length = 0;
+  host.classList.toggle("compare", state.mode === "compare");
+  for (const mode of state.mode === "compare" ? ["a", "b", "c", "d"] : [state.mode]) host.appendChild(makeMap(mode, state.mode === "compare"));
+}
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === mode)));
+  renderMaps(); renderInfo(); draw();
+}
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+const nInput = document.getElementById("n");
+nInput.value = state.n; nLabel.textContent = state.n;
+nInput.addEventListener("input", () => { state.n = +nInput.value; nLabel.textContent = state.n; state.selected = state.hovered = null; build(state.n); renderMaps(); draw(); });
+play.addEventListener("click", () => { state.playing = !state.playing; play.textContent = state.playing ? "Pausar" : "Reanudar"; });
+reseed.addEventListener("click", () => { seed = Math.floor(Math.random() * 1e6); state.selected = state.hovered = null; build(state.n); renderMaps(); draw(); });
+const capInput = document.getElementById("cap");
+capInput.value = state.cap; capLabel.textContent = state.cap;
+capInput.addEventListener("input", () => { state.cap = +capInput.value; capLabel.textContent = state.cap; });
+for (const [k, meta] of Object.entries(KINDS)) {
+  const c = document.createElement("button"); c.className = "chip"; c.setAttribute("aria-pressed", "false");
+  c.innerHTML = `<span class="dot" style="background:${meta.color}"></span>${meta.label}`;
+  c.addEventListener("click", () => { state.kinds.has(k) ? state.kinds.delete(k) : state.kinds.add(k); c.setAttribute("aria-pressed", String(state.kinds.has(k))); });
+  kindChips.appendChild(c);
+}
+for (const z of Object.keys(ZONES)) {
+  const c = document.createElement("button"); c.className = "chip"; c.textContent = z === "todas" ? "Toda la ciudad" : `Zona ${z}`;
+  c.setAttribute("aria-pressed", String(state.zone === z));
+  c.addEventListener("click", () => { state.zone = z; zoneChips.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", String(x === c))); });
+  zoneChips.appendChild(c);
+}
+
+// ---- Bucle -------------------------------------------------------------------------
+let last = performance.now(), frames = 0, fpsAt = last;
+function loop(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (state.playing) step(dt);
+  draw();
+  frames++;
+  if (now - fpsAt > 500) { sFps.textContent = Math.round((frames * 1000) / (now - fpsAt)); frames = 0; fpsAt = now; }
+  requestAnimationFrame(loop);
+}
+build(state.n);
+setMode(state.mode);
+// ?select=1 elige un vehículo al empezar (para las grabaciones).
+if (params.get("select")) state.selected = vehicles[+params.get("select")];
+if (params.get("zone")) { state.zone = params.get("zone"); }
+window.__demo = { state, vehicles: () => vehicles };
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

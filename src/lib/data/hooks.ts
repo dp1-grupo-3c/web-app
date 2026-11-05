@@ -30,11 +30,14 @@ import {
   pedidoActivo,
   pedidoOperacionToOrder,
   TIPO_POR_MODO,
+  vistaAlmacenToWarehouse,
   vistaUnidadToVehicle,
 } from "@/lib/data/adapters";
 import * as clientes from "@/lib/data/clientes";
 import * as operacion from "@/lib/data/operacion";
 import * as store from "@/lib/data/store";
+import { fleetOccupancy, selectOrderRows, selectVehicleRows, selectWarehouseRows, warehouseFill, type OrderRow, type VehicleRow, type WarehouseRow } from "@/lib/data/selectors";
+import { emptyTripLog } from "@/lib/data/trips";
 import { esFinal } from "@/lib/backend/estado";
 import { acumularVistos, ordersAtShownTime, type PedidoVisto } from "./sync";
 import { BUFFER_SIZE, DEFAULT_BUFFER_VARIANT, DEMO_ORDERS, FLEET_DEFAULTS, type BufferVariant } from "@/config/simulacion";
@@ -51,6 +54,7 @@ import type {
   Metrics,
   OpsKpis,
   Order,
+  SimSettings,
   SimulationClock,
   SimulationMode,
   SimulationOutcome,
@@ -113,6 +117,61 @@ export function useMapSnapshot(scope: DataScope): MapSnapshot {
     const i = active ? (buffered ? s.reproduccion.instantanea : s.estado.instantanea) : null;
     return instantaneaToMapSnapshot(i, active ? (i?.almacenes ?? s.almacenes) : s.almacenes, active ? s.estado.idActual : null, buffered ? s.reproduccion.duracionMs : undefined);
   }, [scope, s]);
+}
+
+const EMPTY_TRIPS = emptyTripLog();
+
+export type SimulationRows = {
+  /** Minuto y hora simulados de la foto mostrada (null sin datos). */
+  minute: number | null;
+  simTime: string | null;
+  vehicles: VehicleRow[];
+  warehouses: WarehouseRow[];
+  /** % global (NaN sin datos). */
+  fleetOccupancy: number;
+  warehouseFill: number;
+};
+
+/** Foto que muestra el mapa de la simulación y registro de recorridos que la acompaña. */
+function useShownSim(scope: DataScope) {
+  const s = useStoreState();
+  const active = scope.kind === "sim" && matchesScope(s, scope);
+  return { foto: active ? s.reproduccion.instantanea : null, trips: active ? s.recorridos : EMPTY_TRIPS };
+}
+
+/**
+ * Filas derivadas por vehículo y por almacén, más los indicadores globales.
+ * Se recalculan solo cuando cambia la foto reproducida o los umbrales, no
+ * con cada cuadro de la animación ni con cambios ajenos del store.
+ */
+export function useSimulationRows(scope: DataScope, settings: Pick<SimSettings, "vehicleOccupancy" | "warehouseFill">): SimulationRows {
+  const { foto, trips } = useShownSim(scope);
+  const { vehicleOccupancy, warehouseFill: fillBands } = settings;
+  return useMemo(() => {
+    const vehicles = foto?.unidades.map(vistaUnidadToVehicle) ?? [];
+    const warehouses = (foto?.almacenes ?? []).map(vistaAlmacenToWarehouse);
+    const minute = foto?.minutoSimulado ?? null;
+    return {
+      minute,
+      simTime: foto?.fechaHoraSimulada ?? null,
+      vehicles: selectVehicleRows(vehicles, trips, minute, vehicleOccupancy),
+      warehouses: selectWarehouseRows(warehouses, vehicles, trips, fillBands),
+      fleetOccupancy: fleetOccupancy(vehicles),
+      warehouseFill: warehouseFill(warehouses),
+    };
+  }, [foto, trips, vehicleOccupancy, fillBands]);
+}
+
+/**
+ * Pedidos con los vehículos que los llevan, punto actual, salida y llegada
+ * estimadas, más la hora de la foto mostrada (para formatear los minutos).
+ */
+export function useOrderRows(scope: DataScope, orders: Order[]): { rows: OrderRow[]; simTime: string | null; minute: number | null } {
+  const { foto, trips } = useShownSim(scope);
+  return useMemo(() => {
+    const minute = foto?.minutoSimulado ?? null;
+    return { rows: selectOrderRows(orders, foto?.unidades.map(vistaUnidadToVehicle) ?? [], trips, minute), simTime: foto?.fechaHoraSimulada ?? null, minute };
+  }, [orders, foto, trips]);
 }
 
 /** Variante del buffer elegida con ?buffer=pequeno|grande (o la de NEXT_PUBLIC_BUFFER_VARIANT). */
@@ -250,6 +309,12 @@ export function useVehiclePlates(scope: DataScope): VehiclePlates {
     }
     return plates;
   }, [scope, s]);
+}
+
+/** Configuración que el usuario eligió al iniciar la corrida `runId` (null si no se conoce). */
+export function useRunSettings(runId: string | null | undefined): store.AjustesCorrida | null {
+  const s = useStoreState();
+  return runId && s.ajustesCorrida?.runId === runId ? s.ajustesCorrida : null;
 }
 
 /** Rangos del semáforo guardados (global, PUT /api/parametros/semaforo). */
