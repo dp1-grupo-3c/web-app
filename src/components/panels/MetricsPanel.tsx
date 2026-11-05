@@ -1,11 +1,13 @@
 import { Clock } from "lucide-react";
+import type { ReactNode } from "react";
 import { EmptyState, StatCard } from "@/components/ui/feedback";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import type { Metrics } from "@/lib/types";
 import { PriorityBars } from "./PriorityBars";
 
-export function MetricsPanel({ metrics, simulation, onClose, width }: { metrics: Metrics | null; simulation: boolean; onClose: () => void; width: number }) {
+/** `occupancy`: sección opcional de ocupación global (solo la simulación la usa). */
+export function MetricsPanel({ metrics, simulation, onClose, width, occupancy }: { metrics: Metrics | null; simulation: boolean; onClose: () => void; width: number; occupancy?: ReactNode }) {
   const m = metrics;
   return (
     <SidePanel title="Métricas" subtitle={simulation ? "Indicadores acumulados de la simulación." : "Indicadores del día en curso."} onClose={onClose} width={width}>
@@ -15,6 +17,7 @@ export function MetricsPanel({ metrics, simulation, onClose, width }: { metrics:
         <StatCard label="Costo acumulado" value={m ? formatMoney(m.accumulatedCost) : "—"} detail="rutas y combustible" compactValue centered />
         <StatCard label="Distancia recorrida" value={m ? `${formatNumber(m.distanceKm)} km` : "—"} detail="toda la flota" />
       </div>
+      {occupancy}
       <PanelSection title="Tiempo de entrega promedio por prioridad" icon={<Clock className="size-[18px]" aria-hidden />}>
         {m && m.avgDeliveryByPriority.length ? (
           <>

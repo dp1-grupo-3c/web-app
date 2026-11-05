@@ -11,6 +11,7 @@ import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft } from "@/co
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
+import { OccupancyMetrics } from "@/components/panels/OccupancyMetrics";
 import { EMPTY_DRAFT, OrdersPanel } from "@/components/panels/OrdersPanel";
 import { SectionsPanel } from "@/components/panels/SectionsPanel";
 import { SimConfigPanel, type ConfigTab } from "@/components/panels/SimConfigPanel";
@@ -194,7 +195,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         width={width}
       />
     )
-    : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} />
+    : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} occupancy={<OccupancyMetrics scope={scope} settings={shownSettings} />} />
     : shown === "pedidos" ? (
       <OrdersPanel audience="simulacion" orders={orders} selectedId={orderId} onSelect={setOrderId} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
     )
