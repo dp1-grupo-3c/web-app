@@ -36,6 +36,7 @@ import * as clientes from "@/lib/data/clientes";
 import * as operacion from "@/lib/data/operacion";
 import * as store from "@/lib/data/store";
 import { esFinal } from "@/lib/backend/estado";
+import { acumularVistos, ordersAtShownTime, type PedidoVisto } from "./sync";
 import { BUFFER_SIZE, DEFAULT_BUFFER_VARIANT, DEMO_ORDERS, FLEET_DEFAULTS, type BufferVariant } from "@/config/simulacion";
 import { DEFAULT_TRAFFIC_LIGHT } from "@/lib/constants";
 import type {
@@ -43,6 +44,7 @@ import type {
   BreakdownType,
   Client,
   ConnectionState,
+  Coord,
   DataScope,
   FleetSettings,
   MapSnapshot,
@@ -150,9 +152,19 @@ export function useOpsKpis(): OpsKpis | null {
 
 /** Pedidos activos: sondeo REST independiente (no viajan por WebSocket). */
 export function useOrders(scope: DataScope): Order[] {
+  return useOrdersWithDestinations(scope).orders;
+}
+
+/**
+ * Pedidos y destino de cada pedido visto en la corrida, sincronizados con la
+ * foto que muestra el mapa (ver lib/data/sync.ts). En la simulación el mapa va
+ * por detrás del servidor por el buffer: un pedido ya entregado en el servidor
+ * se sigue mostrando hasta que el vehículo llega en pantalla.
+ */
+export function useOrdersWithDestinations(scope: DataScope): { orders: Order[]; destinations: ReadonlyMap<string, Coord> } {
   const s = useStoreState();
   const id = matchesScope(s, scope) ? s.estado.idActual : null;
-  const [result, setResult] = useState<{ id: string; filas: FilaPedido[] } | null>(null);
+  const [result, setResult] = useState<{ id: string; vistos: ReadonlyMap<number, PedidoVisto> } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -168,7 +180,7 @@ export function useOrders(scope: DataScope): Order[] {
           const next = await api.paginaPedidos(id, { pagina: page, tamano: 500, soloActivos: true });
           filas.push(...next.filas);
         }
-        if (vivo) setResult({ id, filas: [...new Map(filas.map((f) => [f.id, f])).values()] });
+        if (vivo) setResult((prev) => ({ id, vistos: acumularVistos(prev?.id === id ? prev.vistos : new Map(), filas) }));
       } catch {
         // se mantiene la última lista conocida
       } finally {
@@ -179,9 +191,18 @@ export function useOrders(scope: DataScope): Order[] {
     return () => { vivo = false; clearTimeout(timer); };
   }, [id]);
 
-  const vehicles = useMemo(() => s.estado.instantanea?.unidades.map(vistaUnidadToVehicle) ?? [], [s.estado.instantanea]);
-  return useMemo(() => (id && result?.id === id ? result.filas.map((f) => filaPedidoToOrder(f, vehicles)) : EMPTY_ORDERS), [id, result, vehicles]);
+  // La simulación muestra la foto del buffer; la operación diaria, la última.
+  const shown = scope.kind === "sim" ? s.reproduccion.instantanea ?? s.estado.instantanea : s.estado.instantanea;
+  return useMemo(() => {
+    const current = id && result?.id === id ? result : null;
+    if (!current) return { orders: EMPTY_ORDERS, destinations: NO_DESTINATIONS };
+    const destinations = new Map<string, Coord>();
+    for (const [pedido, v] of current.vistos) destinations.set(String(pedido), { x: v.fila.x, y: v.fila.y });
+    return { orders: ordersAtShownTime(current.vistos, shown), destinations };
+  }, [id, result, shown]);
 }
+
+const NO_DESTINATIONS: ReadonlyMap<string, Coord> = new Map();
 
 export function useMetrics(scope: DataScope): Metrics | null {
   const s = useStoreState();
