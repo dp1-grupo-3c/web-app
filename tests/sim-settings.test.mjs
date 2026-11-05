@@ -65,6 +65,17 @@ test("averías vigentes: se leen en las unidades del formulario y solo se reescr
   assert.equal(s.changedBreakdownRequests(vigentes, undefined).length, 3);
 });
 
+test("semáforo de un vehículo: vacío, verde, ámbar, rojo y sin dato", () => {
+  const occ = load("src/lib/occupancy.ts");
+  const bands = { low: 25, high: 75 };
+  assert.equal(occ.vehicleTone({ load: 0, capacity: 24 }, bands), "empty");
+  assert.equal(occ.vehicleTone({ load: 5, capacity: 24 }, bands), "ok");
+  assert.equal(occ.vehicleTone({ load: 6, capacity: 24 }, bands), "warn");
+  assert.equal(occ.vehicleTone({ load: 18, capacity: 24 }, bands), "warn");
+  assert.equal(occ.vehicleTone({ load: 19, capacity: 24 }, bands), "crit");
+  assert.equal(occ.vehicleTone({ load: 3, capacity: 0 }, bands), null);
+});
+
 test("inicio de la corrida: fecha y hora al minuto, sin segundos", () => {
   const d = s.defaultSimSettings();
   assert.deepEqual(s.runStartFields(d, "2026-09-02", { startTime: false }), {});
