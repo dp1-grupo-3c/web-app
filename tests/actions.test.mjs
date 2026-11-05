@@ -367,7 +367,7 @@ test("un conflicto al registrar se informa con el mensaje del servidor", async (
   assert.equal(clientes.getSnapshot().clientes.length, 0);
 });
 
-test("iniciar con configuración ampliada: no envía campos que el servidor aún no acepta y la recuerda por corrida", async () => {
+test("iniciar con configuración ampliada: envía fecha y hora en `inicio` y la recuerda por corrida", async () => {
   const { api, store, actions } = modules();
   let body = null;
   api.cambiarSemaforo = async () => ({});
@@ -375,9 +375,16 @@ test("iniciar con configuración ampliada: no envía campos que el servidor aún
   const settings = { startTime: "08:30", breakdownDurations: { T1: 2, T2: 4, T3: 2 }, vehicleOccupancy: {}, warehouseFill: { low: 25, high: 50 } };
   const fleet = { auto: { quantity: 10, speed: 40 }, moto: { quantity: 15, speed: 25 }, bicicleta: { quantity: 12, speed: 12 } };
   assert.equal((await actions.startSimulation({ mode: "5d", ...input, settings, fleet })).ok, true);
-  assert.equal("horaInicio" in body, false);
-  assert.equal("minutosPorTipoAveria" in body, false);
+  assert.equal(body.inicio, "2026-09-01T08:30");
+  assert.equal(body.primerDia, "2026-09-01");
   assert.deepEqual(store.getSnapshot().ajustesCorrida, { runId: "c-1", settings, fleet });
+});
+
+test("el reloj mide lo transcurrido desde el arranque, no desde las 00:00", () => {
+  const { adapters } = modules();
+  const foto = { fechaHoraSimulada: "2026-09-02T11:00:00", minutoSimulado: 660, milisegundosReales: 2000, metricas: { pedidosEntregados: 0 } };
+  assert.equal(adapters.instantaneaToClock(foto, 630).elapsedMinutes, 30);
+  assert.equal(adapters.instantaneaToClock(foto).elapsedMinutes, 660);
 });
 
 test("iniciar sin configuración ampliada conserva el comportamiento anterior", async () => {

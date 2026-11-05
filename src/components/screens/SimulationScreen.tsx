@@ -271,7 +271,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         !idle && (
           <SimHud
             mode={mode}
-            startDate={runStartDate}
+            start={own?.fechaHoraInicio ?? runStartDate}
             clock={feed.clock}
             ended={ended}
             compact={!!shown}

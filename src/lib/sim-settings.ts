@@ -86,16 +86,9 @@ export function validateSimSettings(s: SimSettings): Partial<Record<"startTime" 
 }
 
 /**
- * Campos propuestos de POST /simulaciones para la configuración ampliada.
- * Solo incluye lo que el servidor ya acepta (BACKEND_ACCEPTS); una hora vacía
- * se envía como 00:00.
+ * Campo `inicio` de POST /simulaciones: fecha y hora al minuto, sin segundos
+ * (el servidor los rechaza). Una hora vacía se envía como 00:00.
  */
-export function proposedRunFields(s: SimSettings, accepts: { startTime: boolean; breakdownDurations: boolean }) {
-  const d = s.breakdownDurations;
-  return {
-    ...(accepts.startTime ? { horaInicio: formatTimeOfDay(parseTimeOfDay(s.startTime) ?? 0) } : {}),
-    ...(accepts.breakdownDurations
-      ? { minutosPorTipoAveria: { "1": breakdownMinutes("T1", d.T1), "2": breakdownMinutes("T2", d.T2), "3": breakdownMinutes("T3", d.T3) } }
-      : {}),
-  };
+export function runStartFields(s: SimSettings, startDate: string, accepts: { startTime: boolean }) {
+  return accepts.startTime ? { inicio: `${startDate}T${formatTimeOfDay(parseTimeOfDay(s.startTime) ?? 0)}` } : {};
 }
