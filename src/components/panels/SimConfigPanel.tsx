@@ -8,10 +8,10 @@ import { SegmentedControl } from "@/components/ui/choice";
 import { Alert } from "@/components/ui/feedback";
 import { DateInput, Field, TextInput, TimeInput } from "@/components/ui/form";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
-import { BACKEND_ACCEPTS, DATA_DATE_RANGE, DEFAULT_START_TIME, FLEET_OCCUPANCY_BANDS } from "@/config/simulacion";
+import { DATA_DATE_RANGE, DEFAULT_START_TIME, FLEET_OCCUPANCY_BANDS } from "@/config/simulacion";
 import { SIMULATION_DAYS_5D, SIMULATION_TITLE } from "@/lib/constants";
 import { addDays, formatDate, formatWeekdayDate, parseISODate } from "@/lib/format";
-import { validateSimSettings } from "@/lib/sim-settings";
+import { formatTimeOfDay, parseTimeOfDay, validateSimSettings } from "@/lib/sim-settings";
 import { validateTrafficLight } from "@/lib/traffic-light";
 import { INCOMPLETE_DATE, simulationStart } from "@/lib/validation";
 import type { SimSettings, SimulationMode, TrafficLight } from "@/lib/types";
@@ -70,6 +70,7 @@ export function SimConfigPanel(p: Props) {
     return simulationStart(startDate, mode === "5d" ? SIMULATION_DAYS_5D : 1, DATA_DATE_RANGE);
   };
   const dateError = check(tried);
+  const startClock = formatTimeOfDay(parseTimeOfDay(settings.startTime) ?? 0);
   const se = readOnly ? {} : validateSimSettings(settings);
 
   const invalidTabs = (attempted: boolean): Record<ConfigTab, boolean> => ({
@@ -142,14 +143,9 @@ export function SimConfigPanel(p: Props) {
           {start && (
             <p className="text-xs text-n600">
               {mode === "5d"
-                ? `Simularás del ${formatWeekdayDate(start)} al ${formatWeekdayDate(end!)} (${SIMULATION_DAYS_5D} días).`
-                : `Empezará el ${formatWeekdayDate(start)} y seguirá hasta que un pedido no llegue a tiempo.`}
+                ? `Simularás ${SIMULATION_DAYS_5D} días desde el ${formatWeekdayDate(start)} a las ${startClock}.`
+                : `Empezará el ${formatWeekdayDate(start)} a las ${startClock} y seguirá hasta que un pedido no llegue a tiempo.`}
             </p>
-          )}
-          {!BACKEND_ACCEPTS.startTime && (
-            <Alert tone="warn" className="text-[13px]">
-              <b>Avance parcial.</b> El servidor todavía no recibe la hora de inicio: por ahora la simulación empieza a las {DEFAULT_START_TIME} del día elegido.
-            </Alert>
           )}
         </PanelSection>
       )}
@@ -193,12 +189,7 @@ export function SimConfigPanel(p: Props) {
 
       {tab === "averias" && (
         <PanelSection title="Duración de las averías" icon={<Wrench className="size-[18px]" aria-hidden />}>
-          <p className="text-xs leading-snug text-n500">Tiempo que un vehículo queda fuera de servicio según el tipo de avería.</p>
-          {!BACKEND_ACCEPTS.breakdownDurations && (
-            <Alert tone="warn" className="text-[13px]">
-              <b>Avance parcial.</b> El servidor todavía no aplica estas duraciones: por ahora los vehículos se reincorporan según la regla actual del servidor. Los valores elegidos se guardan con la simulación.
-            </Alert>
-          )}
+          <p className="text-xs leading-snug text-n500">Tiempo que un vehículo queda fuera de servicio según el tipo de avería. Se muestran los valores vigentes del servidor; al comenzar se guardan allí y rigen para las averías siguientes.</p>
           <BreakdownDurationsEditor value={settings.breakdownDurations} onChange={(d) => set("breakdownDurations", d)} readOnly={readOnly} />
         </PanelSection>
       )}

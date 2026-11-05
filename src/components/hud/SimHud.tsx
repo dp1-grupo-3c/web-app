@@ -1,13 +1,14 @@
 import { Button } from "@/components/ui/Button";
 import { Meter } from "@/components/ui/feedback";
 import { SIMULATION_DAYS_5D, SIMULATION_TITLE } from "@/lib/constants";
-import { addMinutes, formatClock, formatElapsed, formatNumber, formatTime, formatWeekdayDate, parseISODate } from "@/lib/format";
+import { formatClock, formatElapsed, formatNumber, formatTime, formatWeekdayDate, parseISODate } from "@/lib/format";
 import type { SimulationClock, SimulationMode } from "@/lib/types";
 import { HudBar, HudSection, Kpi } from "./Hud";
 
 type SimHudProps = {
   mode: SimulationMode;
-  startDate: string;
+  /** Instante de arranque ("2026-09-02T10:30" o solo la fecha), hasta que llegue la primera foto. */
+  start: string;
   clock: SimulationClock | null;
   ended: boolean;
   compact: boolean;
@@ -21,9 +22,9 @@ type SimHudProps = {
  * No hay control de pausa ni de velocidad: el backend no los soporta
  * (ver GUIA_FLUJO_DATOS.md, "Lo que el backend no ofrece hoy").
  */
-export function SimHud({ mode, startDate, clock, ended, compact, lagSeconds = 0, onCancel }: SimHudProps) {
+export function SimHud({ mode, start, clock, ended, compact, lagSeconds = 0, onCancel }: SimHudProps) {
   const elapsed = clock?.elapsedMinutes ?? 0;
-  const now = clock ? new Date(clock.simTime) : addMinutes(parseISODate(startDate), 0);
+  const now = clock ? new Date(clock.simTime) : start.includes("T") ? new Date(start) : parseISODate(start);
   const day = Math.floor(elapsed / 1440) + 1;
   return (
     <HudBar dimmed={ended}>

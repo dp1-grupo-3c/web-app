@@ -1,12 +1,13 @@
 "use client";
 
-import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, Truck, Warehouse } from "lucide-react";
+import { Activity, CircleAlert, CircleHelp, Database, Layers, Package, Settings, Truck, Warehouse } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { SimHud } from "@/components/hud/SimHud";
 import { GridMap } from "@/components/map/GridMap";
 import { PendingChangeChip } from "@/components/map/PendingChangeChip";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
+import { DataPanel } from "@/components/panels/DataPanel";
 import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft } from "@/components/panels/FleetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
@@ -33,21 +34,22 @@ import { esFinal } from "@/lib/backend/estado";
 import { DEFAULT_START_TIME } from "@/config/simulacion";
 import { cancelSimulation, forgetSimulation, saveFleet, startSimulation } from "@/lib/data/actions";
 import { TIPO_POR_MODO } from "@/lib/data/adapters";
-import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useRunSettings, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
+import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useRunSettings, useSavedTrafficLight, useServerBreakdowns, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import { defaultSimSettings } from "@/lib/sim-settings";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 
-const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
+const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
 const DESCRIPTIONS: Partial<Record<Panel, string>> = {
   config: "Fecha y hora de inicio, flota, semáforos y averías.",
   vehiculos: "Ocupación, carga y avance de cada vehículo.",
-  almacenes: "Stock, ocupación y pedidos de cada almacén.",
+  almacenes: "Stock, ocupación, ubicación y capacidad de cada almacén.",
   metricas: "Indicadores acumulados de la simulación.",
   pedidos: "Pedidos activos y su destino en el mapa.",
   averias: "Registra averías y revisa las recientes.",
+  datos: "Archivos de flota, bloqueos y mantenimiento.",
   ayuda: "Guía rápida de la pantalla.",
   leyenda: "Íconos del mapa y capas visibles.",
 };
@@ -90,6 +92,14 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   // Borrador de la flota: se reinicia cuando el servidor confirma otros valores.
   const [fleetDraft, setFleetDraft] = useState(() => ({ version: fleet.version, draft: toFleetDraft(fleet.value) }));
   if (fleetDraft.version !== fleet.version) setFleetDraft({ version: fleet.version, draft: toFleetDraft(fleet.value) });
+  // Las averías arrancan con lo vigente en el servidor; un cambio allí reemplaza el borrador.
+  const serverBreakdowns = useServerBreakdowns();
+  const breakdownsKey = JSON.stringify(serverBreakdowns);
+  const [seenBreakdowns, setSeenBreakdowns] = useState("null");
+  if (serverBreakdowns && breakdownsKey !== seenBreakdowns) {
+    setSeenBreakdowns(breakdownsKey);
+    setSettings((s) => ({ ...s, breakdownDurations: serverBreakdowns }));
+  }
 
   // La flota ahora es una pestaña de la configuración: ?panel=flota sigue funcionando.
   if (panel === "flota" && configTab !== "flota") setConfigTab("flota");
@@ -155,7 +165,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
 
   const idle = effectivePhase === "idle";
   const items: RailItem<Panel>[] = idle
-    ? [{ id: "config", label: "Configurar", Icon: Settings }]
+    ? [{ id: "config", label: "Configurar", Icon: Settings }, { id: "almacenes", label: "Almacenes", Icon: Warehouse }, { id: "datos", label: "Datos", Icon: Database }]
     : [
         { id: "config", label: "Configurar", Icon: Settings },
         { id: "vehiculos", label: "Vehículos", Icon: Truck },
@@ -163,13 +173,14 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         { id: "metricas", label: "Métricas", Icon: Activity },
         { id: "pedidos", label: "Pedidos", Icon: Package },
         { id: "averias", label: "Averías", Icon: CircleAlert, badge: breakdowns.filter((b) => b.status === "activa").length },
+        { id: "datos", label: "Datos", Icon: Database },
       ];
   const bottom: RailItem<Panel>[] = [
     { id: "ayuda", label: "Ayuda", Icon: CircleHelp },
     { id: "leyenda", label: "Leyenda", Icon: Layers },
   ];
   // Durante la configuración solo se ofrecen los paneles disponibles.
-  const requested = panel === "flota" ? "config" : idle && panel && !["menu", "config", "ayuda", "leyenda"].includes(panel) ? null : panel;
+  const requested = panel === "flota" ? "config" : idle && panel && !["menu", "config", "almacenes", "datos", "ayuda", "leyenda"].includes(panel) ? null : panel;
   // Fijado, el panel no se cierra: sin una sección elegida muestra el menú de secciones.
   const shown = requested ?? (pinned ? "menu" : null);
   const section = shown === "menu" ? null : shown;
@@ -227,13 +238,14 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
       <VehiclesPanel scope={scope} settings={shownSettings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} onClose={close} width={width} />
     )
     : shown === "almacenes" ? (
-      <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} />
+      <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={effectivePhase === "running" || !!other || syncing} />
     )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} occupancy={<OccupancyMetrics scope={scope} settings={shownSettings} />} />
     : shown === "pedidos" ? (
       <SimOrdersPanel scope={scope} orders={orders} selectedId={orderId} onSelect={setOrderId} highlight={ordersHighlight} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
     )
     : shown === "averias" ? <BreakdownsPanel plates={plates} recent={breakdowns} onClose={close} width={width} />
+    : shown === "datos" ? <DataPanel onClose={close} width={width} />
     : shown === "ayuda" ? <HelpPanel audience="simulacion" onClose={close} width={width} />
     : shown === "leyenda" ? <LegendPanel layers={layers} onToggle={(l, on) => setLayers((x) => ({ ...x, [l]: on }))} onClose={close} width={width} />
     : null;
@@ -271,7 +283,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         !idle && (
           <SimHud
             mode={mode}
-            startDate={runStartDate}
+            start={own?.fechaHoraInicio ?? runStartDate}
             clock={feed.clock}
             ended={ended}
             compact={!!shown}

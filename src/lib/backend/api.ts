@@ -6,8 +6,12 @@
  */
 
 import type {
+  ArchivoGuardado,
   Cliente,
   DetalleCorrida,
+  InventarioDatos,
+  SolicitudAtributosAveria,
+  SolicitudBloqueo,
   SolicitudCliente,
   MetricasSimulacion,
   PaginaPedidos,
@@ -24,9 +28,11 @@ import type {
   RespuestaAveria,
   RespuestaSalud,
   SolicitudFlota,
+  SolicitudMundo,
   SolicitudSimulacion,
   TipoUnidad,
   VistaAlmacen,
+  VistaMundo,
   VistaParametros,
 } from "./types";
 
@@ -99,6 +105,21 @@ export const cambiarFlota = (s: SolicitudFlota) =>
   api<VistaParametros>("/parametros/flota", { metodo: "PUT", cuerpo: s });
 export const cambiarSemaforo = (ambar: number, verde: number) =>
   api<VistaParametros>("/parametros/semaforo", { metodo: "PUT", cuerpo: { ambar, verde } });
+export const cambiarAverias = (s: SolicitudAtributosAveria) =>
+  api<VistaParametros>("/parametros/averias", { metodo: "PUT", cuerpo: s });
+export const obtenerMundo = () => api<VistaMundo>("/parametros/mundo");
+export const cambiarMundo = (s: SolicitudMundo) => api<VistaMundo>("/parametros/mundo", { metodo: "PUT", cuerpo: s });
+
+// ---- Datos -----------------------------------------------------------------------
+
+export const obtenerDatos = () => api<InventarioDatos>("/datos");
+export const subirFlota = (archivo: File) => api<ArchivoGuardado>("/datos/flota", { metodo: "POST", archivo });
+export const subirBloqueos = (archivo: File, mes?: string) =>
+  api<ArchivoGuardado>(`/datos/bloqueos${mes ? `?mes=${encodeURIComponent(mes)}` : ""}`, { metodo: "POST", archivo });
+export const subirMantenimiento = (archivo: File) => api<ArchivoGuardado>("/datos/mantenimiento", { metodo: "POST", archivo });
+/** Un bloqueo que cruza de mes se guarda en un archivo por cada mes. */
+export const registrarBloqueo = (s: SolicitudBloqueo) =>
+  api<ArchivoGuardado[]>("/datos/bloqueos/manual", { metodo: "POST", cuerpo: s });
 
 // ---- Operaciones diarias -----------------------------------------------------
 

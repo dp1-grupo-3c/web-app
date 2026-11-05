@@ -14,6 +14,8 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import * as mundo from "@/lib/data/mundo";
+import { breakdownDurationsFrom } from "@/lib/sim-settings";
 import * as api from "@/lib/backend/api";
 import type { FilaPedido, VistaUnidad } from "@/lib/backend/types";
 import {
@@ -31,6 +33,7 @@ import {
   pedidoOperacionToOrder,
   TIPO_POR_MODO,
   vistaAlmacenToWarehouse,
+  vistaOperacionToClock,
   vistaUnidadToVehicle,
 } from "@/lib/data/adapters";
 import * as clientes from "@/lib/data/clientes";
@@ -61,6 +64,7 @@ import type {
   SimulationSummary,
   TrafficLight,
   VehiclePlates,
+  OpsClock,
 } from "@/lib/types";
 
 const EMPTY_ORDERS: Order[] = [];
@@ -337,6 +341,18 @@ export function useFleetSettings(): { value: FleetSettings; version: string } {
   }, [s.parametros, s.estado.corrida, s.estado.idActual, s.cantidadesFlota]);
 }
 
+/** Parámetros del mundo; suscribirse redibuja el mapa si cambia su tamaño. */
+export function useMundo() {
+  useEffect(() => { mundo.asegurarMundo(); }, []);
+  return useSyncExternalStore(mundo.subscribe, mundo.getSnapshot, mundo.getServerSnapshot);
+}
+
+/** Atributos de avería vigentes en el servidor, en las unidades del formulario. */
+export function useServerBreakdowns() {
+  const { parametros } = useStoreState();
+  return useMemo(() => breakdownDurationsFrom(parametros?.averias), [parametros]);
+}
+
 /**
  * Avance de la simulación en curso. `summary` llega cuando el backend envía
  * el resultado; `outcome`/`error` quedan disponibles incluso sin resultado
@@ -353,7 +369,7 @@ export function useSimulationFeed(mode: SimulationMode): {
     if (!matchesSim(s, mode) || !s.estado.corrida) return { clock: null, summary: null, outcome: null, error: null };
     // La hora sigue a la foto reproducida para coincidir con el mapa.
     const shown = s.reproduccion.instantanea ?? s.estado.instantanea;
-    const clock = shown ? instantaneaToClock(shown) : null;
+    const clock = shown ? instantaneaToClock(shown, s.estado.corrida.minutoInicial) : null;
     const trafficLight = s.parametros ? parametrosToTrafficLight(s.parametros) : DEFAULT_TRAFFIC_LIGHT;
     const summary = s.estado.resultado ? buildSummary(s.estado.corrida, s.estado.resultado, trafficLight, s.firstLateOrder ?? undefined) : null;
     const outcome = summary?.outcome ?? (esFinal(s.estado.corrida.estado) ? outcomePorEstado(s.estado.corrida.estado) : null);
@@ -470,6 +486,11 @@ export function useOperacionKpis(): OpsKpis | null {
       alerts: vista.incidentes.filter((i) => !i.resuelto).length,
     };
   }, [vista]);
+}
+
+export function useOperacionClock(): OpsClock | null {
+  const { vista } = useOperacionState();
+  return useMemo(() => (vista ? vistaOperacionToClock(vista) : null), [vista]);
 }
 
 export function useOperacionMetrics(): Metrics | null {

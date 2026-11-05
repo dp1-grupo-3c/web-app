@@ -1,7 +1,10 @@
 import type { BreakdownType, PriorityCode, StatusTone, TrafficLight } from "./types";
 
-/** Retícula de la ciudad: cada intersección (x, y) es una coordenada válida. */
-export const GRID = { width: 70, height: 50 } as const;
+/**
+ * Retícula de la ciudad: cada intersección (x, y) es una coordenada válida.
+ * Parte del valor del enunciado; src/lib/data/mundo.ts la actualiza con el vigente.
+ */
+export const GRID = { width: 70, height: 50 };
 
 export const PRIORITIES: { code: PriorityCode; name: string; hours: number }[] = [
   { code: "P1", name: "Prioritario 1", hours: 4 },
@@ -13,7 +16,7 @@ export const PRIORITIES: { code: PriorityCode; name: string; hours: number }[] =
 export const priorityInfo = (code: PriorityCode) => PRIORITIES.find((p) => p.code === code)!;
 
 export const BREAKDOWN_TYPES: { code: BreakdownType; name: string; description: string }[] = [
-  { code: "T1", name: "Leve", description: "Se repara en ruta. Demora estimada: 2 h." },
+  { code: "T1", name: "Leve", description: "Se repara en ruta y vuelve al servicio en el mismo lugar." },
   { code: "T2", name: "Moderada", description: "Requiere taller. Sale de servicio el resto del turno." },
   { code: "T3", name: "Grave", description: "Vehículo inoperativo. Sus pedidos se reasignan de inmediato." },
 ];

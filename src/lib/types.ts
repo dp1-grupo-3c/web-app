@@ -139,6 +139,14 @@ export type SimulationClock = {
   delivered: number;
 };
 
+/** Relojes de la operación diaria, a nivel de minuto. Las fechas están en la zona de la operación. */
+export type OpsClock = {
+  simTime: Date;
+  simElapsedMinutes: number;
+  now: Date;
+  realElapsedMinutes: number;
+};
+
 /** Marca de tiempo dentro de la simulación: día (1 = primer día) y hora "HH:MM". */
 export type SimStamp = { day: number; time: string };
 
@@ -185,7 +193,8 @@ export type EntityRef = { type: "vehicle" | "warehouse" | "blockage"; id: string
 export type PercentBands = { low: number; high: number };
 
 /** T1 y T2 en horas; T3 en días. */
-export type BreakdownDurations = Record<BreakdownType, number>;
+export type BreakdownDurations = Record<BreakdownType | "T2Shifts" | "T3OnSite", number>;
+export type BreakdownField = keyof BreakdownDurations;
 
 /** Lo que se configura antes de comenzar; todo tiene un valor por defecto (DEFAULT_SIM_SETTINGS). */
 export type SimSettings = {

@@ -104,6 +104,9 @@ export interface ResumenCorrida {
   minutoSimulado: number;
   minutosHorizonte: number;
   fechaHoraSimulada: string;
+  /** Arranque elegido y su minuto: minutoSimulado cuenta desde las 00:00 del primer día. */
+  fechaHoraInicio: string;
+  minutoInicial: number;
   milisegundosReales: number;
   pedidosDelEscenario: number;
   unidadesDeLaFlota: number;
@@ -149,13 +152,8 @@ export interface SolicitudSimulacion {
   algoritmo: "HGS" | "ALNS";
   semilla: number;
   generarAverias: boolean;
-  /**
-   * PROPUESTA — TODO(backend): aún no existen. Hora "HH:MM" del primer día y
-   * minutos de inactividad por tipo de avería (1, 2, 3). Solo se envían si
-   * BACKEND_ACCEPTS lo indica (src/config/simulacion.ts).
-   */
-  horaInicio?: string;
-  minutosPorTipoAveria?: Record<"1" | "2" | "3", number>;
+  /** Fecha y hora de arranque al minuto ("2026-09-02T10:30"); su fecha debe ser primerDia. */
+  inicio?: string;
 }
 
 export interface DetalleCorrida {
@@ -207,14 +205,58 @@ export interface VistaParametros {
   tipos: { tipo: TipoUnidad; prefijo: string; etiqueta: string; capacidad: number; velocidadVigente: number; velocidadDelEnunciado: number; costoPorKm: number }[];
   umbralSemaforoAmbar: number;
   umbralSemaforoVerde: number;
+  umbralOcupacionAmbar: number;
+  umbralOcupacionRojo: number;
   capacidadMinima: number;
   capacidadMaxima: number;
   minutosAcondicionamiento: number;
   minutosAlimentacion: number;
   minutosSeparacionCambioTurno: number;
   minutosTrasvase: number;
+  averias: FichaAveria[];
   version: number;
 }
+
+export interface AtributosAveria {
+  minutosEnElLugar: number;
+  turnosHastaReincorporacion: number;
+  diasMantenimiento: number;
+}
+
+export interface FichaAveria {
+  tipo: number;
+  atributos: AtributosAveria;
+  trasladaAlmacenCentral: boolean;
+  regla: string;
+}
+
+// ---- Parámetros del mundo (/api/parametros/mundo) ------------------------------
+
+export interface AlmacenMundo {
+  id: number;
+  nombre: string;
+  x: number;
+  y: number;
+  central: boolean;
+  /** null en el central, que es ilimitado. */
+  capacidad: number | null;
+}
+
+export interface VistaMundo {
+  version: number;
+  mapa: { largoKm: number; anchoKm: number };
+  almacenes: AlmacenMundo[];
+  /** Tipo de la ejecución en curso, que impide editar. */
+  ejecucionActiva: string | null;
+}
+
+export interface SolicitudMundo {
+  mapa: { largoKm: number; anchoKm: number };
+  almacenes: { id: number; x: number; y: number; capacidad?: number }[];
+}
+
+/** Cuerpo de PUT /api/parametros/averias: lo que no llega conserva su valor vigente. */
+export type SolicitudAtributosAveria = { tipo: 1 | 2 | 3 } & Partial<AtributosAveria>;
 
 /**
  * PROPUESTA — cuerpo de PUT /api/parametros/flota, que el backend aún no
@@ -223,6 +265,29 @@ export interface VistaParametros {
  */
 export interface SolicitudFlota {
   unidades: Record<TipoUnidad, { cantidad: number; kmPorHora: number }>;
+}
+
+// ---- Datos (/api/datos) ------------------------------------------------------
+
+/** `flota` es null si no hay archivo y se usaría la del enunciado. */
+export interface InventarioDatos {
+  flota: string | null;
+  ventas: string[];
+  bloqueos: string[];
+  mantenimiento: string[];
+}
+
+/** Cuerpo de POST /api/datos/bloqueos/manual: fechas al minuto ("2026-09-02T10:30"). */
+export interface SolicitudBloqueo {
+  nodos: { x: number; y: number }[];
+  inicio: string;
+  fin: string;
+}
+
+export interface ArchivoGuardado {
+  ruta: string;
+  registros: number;
+  reemplazado: boolean;
 }
 
 export interface RespuestaAveria {
@@ -306,6 +371,10 @@ export interface VistaOperacion {
   zonaHoraria: string;
   horaServidor: string;
   fechaHoraOperativa: string;
+  /** Arranque de la operación y minutos de reloj real transcurridos desde entonces. */
+  inicio: string;
+  fechaHoraInicio: string;
+  minutosTranscurridos: number;
   configuracion: ConfiguracionOperacion;
   instantanea: InstantaneaSimulacion;
   parametros: ParametrosOperacionInstantanea;

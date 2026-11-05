@@ -43,6 +43,11 @@ export const FLEET_DEFAULTS = {
  */
 export const COLLAPSE_SNAPSHOT_MINUTES = 15;
 
+// ---- Carga de datos ---------------------------------------------------------
+
+/** Tope de cada archivo: spring.servlet.multipart.max-file-size del servidor. */
+export const MAX_DATA_FILE_MB = 1;
+
 // ---- Validación de formularios ----------------------------------------------
 
 /**
@@ -132,17 +137,23 @@ export const PENDING_ERROR_VISIBLE_MS = 6000;
 // ---- Configuración ampliada de la simulación ------------------------------
 
 /**
- * Duración de cada tipo de avería: T1 y T2 en horas, T3 en días.
- * TODO(backend): POST /simulaciones aún no acepta estas duraciones; la UI
- * las recoge y avisa que el avance es parcial (ver arrancar en store.ts).
+ * Atributos de cada tipo de avería, según su regla de reincorporación en el
+ * servidor (TipoAveria). T1, T2 y T3OnSite: horas inmovilizada en el lugar;
+ * T2Shifts: turnos hasta volver; T3: días de mantenimiento. Se envían con
+ * PUT /parametros/averias (ver arrancar en store.ts).
  */
-export const BREAKDOWN_DURATION_DEFAULTS = { T1: 2, T2: 4, T3: 2 } as const;
-export const BREAKDOWN_DURATION_UNIT = { T1: "h", T2: "h", T3: "d" } as const;
-/** Rangos aceptados (enteros). Provisionales: el enunciado no fija un máximo. */
+export const BREAKDOWN_DURATION_DEFAULTS = { T1: 2, T2: 4, T2Shifts: 1, T3OnSite: 4, T3: 2 } as const;
+export const BREAKDOWN_DURATION_UNIT = { T1: "h", T2: "h", T2Shifts: "t", T3OnSite: "h", T3: "d" } as const;
+/**
+ * Rangos enteros que acepta el servidor (AtributosAveria y TipoAveria): hasta
+ * 1440 min en el lugar, y un turno (480 min) en los tipos con traslado al central.
+ */
 export const BREAKDOWN_DURATION_LIMITS = {
-  T1: { min: 1, max: 72 },
-  T2: { min: 1, max: 72 },
-  T3: { min: 1, max: 30 },
+  T1: { min: 1, max: 24 },
+  T2: { min: 1, max: 8 },
+  T2Shifts: { min: 1, max: 9 },
+  T3OnSite: { min: 1, max: 8 },
+  T3: { min: 1, max: 14 },
 } as const;
 
 /** Hora de inicio por defecto: las 00:00 del día elegido. */
@@ -174,9 +185,8 @@ export const DISTANCE_BANDS_KM = [0, 10, 20, 40] as const;
 export const RECENT_DELIVERIES_WINDOW_MIN = 240;
 
 /**
- * Qué parte de la configuración ampliada acepta ya POST /simulaciones.
- * TODO(backend): mientras sea false, la UI la recoge y la muestra, pero no se
- * envía (un campo desconocido podría hacer fallar el inicio) y se avisa que el
- * avance es parcial. Al implementarse en el servidor, basta con poner true.
+ * Qué parte de la configuración ampliada se envía al servidor. startTime viaja
+ * como `inicio` en POST /simulaciones y breakdownDurations con
+ * PUT /parametros/averias antes de iniciar.
  */
-export const BACKEND_ACCEPTS = { startTime: false, breakdownDurations: false } as const;
+export const BACKEND_ACCEPTS = { startTime: true, breakdownDurations: true } as const;

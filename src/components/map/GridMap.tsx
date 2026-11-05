@@ -6,7 +6,9 @@ import { Button, ControlButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { BLOCKAGE_BLINK_PERIOD_MS, VEHICLE_OCCUPANCY_DEFAULTS } from "@/config/simulacion";
 import { endingIn } from "@/lib/blockage";
+import { VEHICLE_META } from "@/components/domain/vehicle";
 import { GRID } from "@/lib/constants";
+import { useMundo } from "@/lib/data/hooks";
 import { formatCoord } from "@/lib/format";
 import type { Coord, EntityRef, MapSnapshot, Order, PercentBands, TrafficLight, Vehicle, VehicleKind } from "@/lib/types";
 import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from "./EntityPopover";
@@ -148,6 +150,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
     return () => window.removeEventListener("keydown", onKey);
   }, [pickMode, onCancelPick]);
 
+  useMundo(); // GRID cambia con el mapa vigente: esto redibuja la retícula.
   const g = computeGeometry(size.w, size.h, view);
   const local = (e: PointerEvent) => {
     const r = svgRef.current!.getBoundingClientRect();
@@ -196,7 +199,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
     };
     if (selected.type === "vehicle") {
       const v = snapshot.vehicles.find((x) => x.id === selected.id);
-      if (v && !idle) popover = <VehiclePopover vehicle={v} anchor={anchorFor(shownAt(v))} onClose={close} mapHeight={size.h} docked />;
+      if (v && !idle) popover = <VehiclePopover vehicle={v} bands={vehicleBands[v.kind]} anchor={anchorFor(shownAt(v))} onClose={close} mapHeight={size.h} docked />;
     } else if (selected.type === "warehouse") {
       const w = snapshot.warehouses.find((x) => x.id === selected.id);
       if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} fillBands={warehouseFillBands} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
@@ -267,7 +270,8 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
 
           {!idle && layers.rutas && [...snapshot.vehicles].sort((a, b) => Number(a.id === selectedVehicle?.id) - Number(b.id === selectedVehicle?.id)).map((v) => {
             if (!v.route) return null;
-            const { color } = vehicleAppearance(v);
+            // La ruta conserva el color del tipo: en rojo se confundiría con un bloqueo.
+            const { color } = VEHICLE_META[v.kind];
             const pending = pendingFromShown(shownAt(v), v, motion.remaining[v.id]);
             const dest = pending.length > 1 ? pending.at(-1) : undefined;
             const [dx, dy] = dest ? project(g, dest) : [0, 0];
@@ -308,7 +312,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
           {!idle && layers.flota && snapshot.vehicles.map((v) => {
             if (atWarehouse(v)) return null;
             if (isWaiting(v) && !isExpanded(nodeKey(shownAt(v)))) return null;
-            const { color, Icon, BadgeIcon, badgeColor, meta } = vehicleAppearance(v);
+            const { color, Icon, BadgeIcon, badgeColor, meta } = vehicleAppearance(v, vehicleBands[v.kind]);
             const [px, y] = project(g, shownAt(v));
             const x = px + fanOffset(v);
             return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id)} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
@@ -324,7 +328,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
               <title>{label}</title>
               {/* Siempre con el número: un punto liso se confundiría con el destino de una ruta. */}
               <circle r={16} fill="transparent" />
-              <WaitingDot colors={group.map((v) => vehicleAppearance(v).color)} r={10} />
+              <WaitingDot colors={group.map((v) => VEHICLE_META[v.kind].color)} r={10} />
               <text y={4.5} textAnchor="middle" fontSize={12} fontWeight={700} fill="#161d25">{group.length}</text>
             </g>;
           })}
