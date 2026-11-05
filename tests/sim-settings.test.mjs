@@ -4,9 +4,9 @@ import { load } from "./load.mjs";
 
 const s = load("src/lib/sim-settings.ts");
 
-test("valores por defecto: averías 2 h / 4 h / 2 días, 00:00 y 25/75 por tipo", () => {
+test("valores por defecto: averías 2 h / 4 h y 1 turno / 4 h y 2 días, 00:00 y 25/75 por tipo", () => {
   const d = s.defaultSimSettings();
-  assert.deepEqual(d.breakdownDurations, { T1: 2, T2: 4, T3: 2 });
+  assert.deepEqual(d.breakdownDurations, { T1: 2, T2: 4, T2Shifts: 1, T3OnSite: 4, T3: 2 });
   assert.equal(d.startTime, "00:00");
   for (const k of ["auto", "moto", "bicicleta"]) assert.deepEqual(d.vehicleOccupancy[k], { low: 25, high: 75 });
   assert.deepEqual(s.validateSimSettings(d), {});
@@ -31,15 +31,38 @@ test("umbrales coherentes y duraciones enteras en rango", () => {
   assert.deepEqual(s.validateBands({ low: -1, high: 101 }).keys, ["low", "high"]);
   assert.equal(s.validateBands({ low: 2.5, high: 50 }).keys[0], "low");
   assert.equal(s.breakdownDuration("T1", "2"), null);
-  assert.match(s.breakdownDuration("T1", "0"), /entre 1 y 72/);
+  assert.match(s.breakdownDuration("T1", "0"), /entre 1 y 24/);
+  assert.match(s.breakdownDuration("T2", "9"), /entre 1 y 8/);
+  assert.match(s.breakdownDuration("T2Shifts", "10"), /entre 1 y 9/);
   assert.match(s.breakdownDuration("T3", "1.5"), /entero/);
-  assert.match(s.breakdownDuration("T3", "31"), /entre 1 y 30/);
-  assert.equal(s.breakdownMinutes("T2", 4), 240);
-  assert.equal(s.breakdownMinutes("T3", 2), 2880);
+  assert.match(s.breakdownDuration("T3", "15"), /entre 1 y 14/);
   const bad = s.defaultSimSettings();
   bad.startTime = "99:99";
   bad.warehouseFill = { low: 60, high: 40 };
   assert.deepEqual(Object.keys(s.validateSimSettings(bad)).sort(), ["startTime", "warehouseFill"]);
+});
+
+const FICHAS = [
+  { tipo: 1, atributos: { minutosEnElLugar: 120, turnosHastaReincorporacion: 1, diasMantenimiento: 2 } },
+  { tipo: 2, atributos: { minutosEnElLugar: 240, turnosHastaReincorporacion: 1, diasMantenimiento: 2 } },
+  { tipo: 3, atributos: { minutosEnElLugar: 240, turnosHastaReincorporacion: 1, diasMantenimiento: 2 } },
+];
+
+test("averías al servidor: cada tipo lleva solo lo que usa su regla, con las horas en minutos", () => {
+  assert.deepEqual(s.breakdownRequests({ T1: 3, T2: 5, T2Shifts: 2, T3OnSite: 6, T3: 4 }), [
+    { tipo: 1, minutosEnElLugar: 180 },
+    { tipo: 2, minutosEnElLugar: 300, turnosHastaReincorporacion: 2 },
+    { tipo: 3, minutosEnElLugar: 360, diasMantenimiento: 4 },
+  ]);
+});
+
+test("averías vigentes: se leen en las unidades del formulario y solo se reescribe lo que cambia", () => {
+  const vigentes = s.breakdownDurationsFrom(FICHAS);
+  assert.deepEqual(vigentes, { T1: 2, T2: 4, T2Shifts: 1, T3OnSite: 4, T3: 2 });
+  assert.equal(s.breakdownDurationsFrom(undefined), null);
+  assert.deepEqual(s.changedBreakdownRequests(vigentes, FICHAS), []);
+  assert.deepEqual(s.changedBreakdownRequests({ ...vigentes, T3: 3 }, FICHAS), [{ tipo: 3, minutosEnElLugar: 240, diasMantenimiento: 3 }]);
+  assert.equal(s.changedBreakdownRequests(vigentes, undefined).length, 3);
 });
 
 test("inicio de la corrida: fecha y hora al minuto, sin segundos", () => {

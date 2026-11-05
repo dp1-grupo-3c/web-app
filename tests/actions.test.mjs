@@ -372,12 +372,24 @@ test("iniciar con configuración ampliada: envía fecha y hora en `inicio` y la 
   let body = null;
   api.cambiarSemaforo = async () => ({});
   api.arrancarCorrida = async (b) => { body = b; return { id: "c-1", estado: "EN_CURSO", tipo: "SIMULACION_5D" }; };
-  const settings = { startTime: "08:30", breakdownDurations: { T1: 2, T2: 4, T3: 2 }, vehicleOccupancy: {}, warehouseFill: { low: 25, high: 50 } };
+  const averias = [];
+  api.cambiarAverias = async (s) => { averias.push(s); return {}; };
+  const settings = { startTime: "08:30", breakdownDurations: { T1: 2, T2: 4, T2Shifts: 1, T3OnSite: 4, T3: 2 }, vehicleOccupancy: {}, warehouseFill: { low: 25, high: 50 } };
   const fleet = { auto: { quantity: 10, speed: 40 }, moto: { quantity: 15, speed: 25 }, bicicleta: { quantity: 12, speed: 12 } };
   assert.equal((await actions.startSimulation({ mode: "5d", ...input, settings, fleet })).ok, true);
+  assert.equal(averias.length, 3);
   assert.equal(body.inicio, "2026-09-01T08:30");
   assert.equal(body.primerDia, "2026-09-01");
   assert.deepEqual(store.getSnapshot().ajustesCorrida, { runId: "c-1", settings, fleet });
+});
+
+test("si el servidor rechaza las averías, la simulación no se inicia", async () => {
+  const { api, actions } = modules();
+  const calls = fakeApi(api);
+  api.cambiarAverias = async () => { throw new api.ErrorServicio(400, "minutosEnElLugar no puede pasar de 480"); };
+  const settings = { startTime: "", breakdownDurations: { T1: 2, T2: 9, T2Shifts: 1, T3OnSite: 4, T3: 2 }, vehicleOccupancy: {}, warehouseFill: { low: 25, high: 50 } };
+  assert.deepEqual(await actions.startSimulation({ mode: "5d", ...input, settings }), { ok: false, message: "minutosEnElLugar no puede pasar de 480" });
+  assert.equal(calls.start, 0);
 });
 
 test("el reloj mide lo transcurrido desde el arranque, no desde las 00:00", () => {

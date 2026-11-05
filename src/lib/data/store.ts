@@ -36,7 +36,7 @@ import * as playback from "@/lib/data/playback";
 import { emptyTripLog, observe, type TripLog } from "@/lib/data/trips";
 import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO, vistaUnidadToVehicle } from "@/lib/data/adapters";
 import { SIMULATION_DAYS_5D } from "@/lib/constants";
-import { runStartFields } from "@/lib/sim-settings";
+import { changedBreakdownRequests, runStartFields } from "@/lib/sim-settings";
 import { addDays, parseISODate, toISODate } from "@/lib/format";
 import type { FirstLateOrder, FleetCount, FleetSettings, SimSettings, SimulationMode, TrafficLight, VehicleKind } from "@/lib/types";
 
@@ -368,6 +368,12 @@ export async function arrancar(
   try {
     const parametros = await api.cambiarSemaforo(input.trafficLight.redTo, input.trafficLight.amberTo);
     set({ parametros });
+    // Rigen para las averías siguientes de todo el servidor, por eso van antes de iniciar.
+    if (input.settings && BACKEND_ACCEPTS.breakdownDurations) {
+      for (const s of changedBreakdownRequests(input.settings.breakdownDurations, parametros?.averias)) {
+        set({ parametros: await api.cambiarAverias(s) });
+      }
+    }
     const start = parseISODate(input.startDate);
     // Un 409 se muestra al usuario. Iniciar nunca autoriza cancelar la corrida
     // compartida, que otra sesión puede haber arrancado mientras tanto.

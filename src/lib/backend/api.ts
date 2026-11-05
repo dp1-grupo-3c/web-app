@@ -8,6 +8,7 @@
 import type {
   Cliente,
   DetalleCorrida,
+  SolicitudAtributosAveria,
   SolicitudCliente,
   MetricasSimulacion,
   PaginaPedidos,
@@ -99,6 +100,8 @@ export const cambiarFlota = (s: SolicitudFlota) =>
   api<VistaParametros>("/parametros/flota", { metodo: "PUT", cuerpo: s });
 export const cambiarSemaforo = (ambar: number, verde: number) =>
   api<VistaParametros>("/parametros/semaforo", { metodo: "PUT", cuerpo: { ambar, verde } });
+export const cambiarAverias = (s: SolicitudAtributosAveria) =>
+  api<VistaParametros>("/parametros/averias", { metodo: "PUT", cuerpo: s });
 
 // ---- Operaciones diarias -----------------------------------------------------
 

@@ -205,14 +205,33 @@ export interface VistaParametros {
   tipos: { tipo: TipoUnidad; prefijo: string; etiqueta: string; capacidad: number; velocidadVigente: number; velocidadDelEnunciado: number; costoPorKm: number }[];
   umbralSemaforoAmbar: number;
   umbralSemaforoVerde: number;
+  umbralOcupacionAmbar: number;
+  umbralOcupacionRojo: number;
   capacidadMinima: number;
   capacidadMaxima: number;
   minutosAcondicionamiento: number;
   minutosAlimentacion: number;
   minutosSeparacionCambioTurno: number;
   minutosTrasvase: number;
+  averias: FichaAveria[];
   version: number;
 }
+
+export interface AtributosAveria {
+  minutosEnElLugar: number;
+  turnosHastaReincorporacion: number;
+  diasMantenimiento: number;
+}
+
+export interface FichaAveria {
+  tipo: number;
+  atributos: AtributosAveria;
+  trasladaAlmacenCentral: boolean;
+  regla: string;
+}
+
+/** Cuerpo de PUT /api/parametros/averias: lo que no llega conserva su valor vigente. */
+export type SolicitudAtributosAveria = { tipo: 1 | 2 | 3 } & Partial<AtributosAveria>;
 
 /**
  * PROPUESTA — cuerpo de PUT /api/parametros/flota, que el backend aún no
