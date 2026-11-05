@@ -7,6 +7,7 @@ export const OUTCOME_LABEL: Record<SimulationOutcome, string> = {
   exito: "Culminó con éxito",
   cancelada: "Cancelada",
   colapso: "Colapso de operaciones",
+  sin_datos: "Sin colapso (datos agotados)",
   fallida: "Error del servidor",
 };
 
@@ -20,6 +21,7 @@ export function summaryHeadline(s: Pick<SimulationSummary, "outcome" | "mode" | 
   if (s.outcome === "exito") return `La ${name}${range} terminó con éxito.`;
   if (s.outcome === "cancelada") return `Cancelaste la ${name}${range}.`;
   if (s.outcome === "fallida") return `La ${name}${range} se detuvo por un error del servidor.`;
+  if (s.outcome === "sin_datos") return `La ${name}${range} no colapsó antes de que se agotaran los datos de ventas.`;
   const late = s.firstLateOrder;
   if (!late) return `La ${name}${range} se detuvo porque las operaciones colapsaron.`;
   const when = formatSimStamp(late.dueAt, s.startDate).date;
@@ -31,6 +33,7 @@ export const OUTCOME_DETAIL: Record<SimulationOutcome, string> = {
   exito: "Todos los pedidos se entregaron dentro de su plazo.",
   cancelada: "Estos son los resultados obtenidos hasta el momento de la cancelación.",
   colapso: "Una simulación colapsa en cuanto el primer pedido supera su plazo de entrega. Este es el detalle de ese pedido.",
+  sin_datos: "No hay archivo de ventas para el mes siguiente y todos los pedidos cargados se entregaron a tiempo. No hay instante de colapso que medir: la flota aguantó al menos hasta aquí.",
   fallida: "El backend interrumpió la corrida por un error interno antes de poder enviar el resumen.",
 };
 

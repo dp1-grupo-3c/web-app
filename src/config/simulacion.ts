@@ -31,6 +31,18 @@ export const FLEET_DEFAULTS = {
   bicicleta: { quantity: 12, speed: 12 },
 } as const;
 
+// ---- Simulación hasta el colapso -----------------------------------------
+
+/**
+ * Minutos simulados entre fotografías en la corrida hasta el colapso. Es el
+ * valor de ConfiguracionEscenario.colapso (el que usan los experimentos); sin
+ * enviarlo, el servicio aplicaría su valor por defecto de 5 min, pensado para
+ * 5D, que con el reloj libre y un horizonte de hasta un año satura el canal.
+ * El colapso no envía fecha de fin ni duración: corre hasta que un pedido
+ * vence o se agotan los datos, y el backend fija K por su cuenta.
+ */
+export const COLLAPSE_SNAPSHOT_MINUTES = 15;
+
 // ---- Validación de formularios ----------------------------------------------
 
 /**

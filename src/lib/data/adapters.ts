@@ -66,6 +66,7 @@ const OUTCOME_POR_ESTADO: Partial<Record<EstadoCorrida, SimulationOutcome>> = {
   CULMINADA: "exito",
   CANCELADA: "cancelada",
   COLAPSADA: "colapso",
+  DATOS_AGOTADOS: "sin_datos",
   FALLIDA: "fallida",
 };
 export const outcomePorEstado = (e: EstadoCorrida): SimulationOutcome | null => OUTCOME_POR_ESTADO[e] ?? null;
@@ -79,7 +80,7 @@ export const TIPO_POR_KIND: Record<VehicleKind, TipoUnidad> = { auto: "AUTO", mo
 const STATUS_POR_ESTADO: Record<VistaUnidad["estado"], VehicleStatus> = {
   DISPONIBLE: "disponible",
   EN_RUTA: "en_ruta",
-  ENTREGANDO: "en_ruta",
+  ENTREGANDO: "entregando",
   EN_ALIMENTACION: "en_alimentacion",
   ABASTECIENDO: "abasteciendo",
   AVERIADA: "averiado",
@@ -112,7 +113,8 @@ export function vistaUnidadToVehicle(u: VistaUnidad): Vehicle {
     destination: u.destinoX >= 0 && u.destinoY >= 0 ? { x: u.destinoX, y: u.destinoY } : undefined,
     breakdownType: BREAKDOWN_POR_TIPO[u.tipoAveria],
     // La exactitud del manifiesto depende del backend: no inferir carga física de la ruta.
-    orders: u.pedidosABordo.filter((p) => p.enLaUnidad > 0).map((p) => ({ orderId: String(p.idPedido), packagesInVehicle: p.enLaUnidad, packagesTotal: p.totalDelPedido })),
+    // Incluye las entregas de viajes posteriores a una recarga; `trip` las distingue de la carga real.
+    orders: u.pedidosABordo.filter((p) => p.enLaUnidad > 0).map((p) => ({ orderId: String(p.idPedido), packagesInVehicle: p.enLaUnidad, packagesTotal: p.totalDelPedido, trip: p.viaje ?? 0 })),
   };
 }
 
@@ -168,14 +170,26 @@ function priorityByHours(hours: number): PriorityCode {
 }
 
 /**
+/**
+ * Vehículo que tiene el pedido en su itinerario y si ya lo lleva cargado.
+ * Se prefiere el que lo lleva a bordo: un pedido partido puede estar en varios.
+ */
+function carrierOf(vehicles: Vehicle[], orderId: string): { carrier?: Vehicle; loaded: boolean } {
+  const loadedBy = vehicles.find((v) => v.orders.some((o) => o.orderId === orderId && o.trip === 0));
+  if (loadedBy) return { carrier: loadedBy, loaded: true };
+  return { carrier: vehicles.find((v) => v.orders.some((o) => o.orderId === orderId)), loaded: false };
+}
+
+/**
  * El backend solo da `entregado`. "en_ruta" se infiere cruzando con los
- * pedidos a bordo de la flota; sin ese cruce, o si no está entregado ni a
- * bordo, se muestra "en_almacen" (no hay forma de distinguir "por_asignar"
- * con los datos disponibles hoy).
+ * pedidos a bordo de la flota: solo cuenta la carga actual (viaje 0), no las
+ * entregas que esperan una recarga. Sin ese cruce, o si no está entregado ni
+ * a bordo, se muestra "en_almacen" (no hay forma de distinguir "por_asignar"
+ * con los datos disponibles hoy). El vehículo se informa en ambos casos.
  */
 export function filaPedidoToOrder(f: FilaPedido, vehicles: Vehicle[]): Order {
-  const carrier = vehicles.find((v) => v.orders.some((o) => o.orderId === String(f.id)));
-  const status: OrderStatus = f.entregado ? "entregado" : carrier ? "en_ruta" : "en_almacen";
+  const { carrier, loaded } = carrierOf(vehicles, String(f.id));
+  const status: OrderStatus = f.entregado ? "entregado" : loaded ? "en_ruta" : "en_almacen";
   return {
     id: String(f.id),
     packages: f.paquetes,
@@ -294,10 +308,10 @@ export const pedidoActivo = (p: VistaPedidoOperacion) => p.pendiente > 0 && p.es
  * lleva a bordo. CANCELADO no llega a la lista: se filtra con pedidoActivo.
  */
 export function pedidoOperacionToOrder(p: VistaPedidoOperacion, vehicles: Vehicle[], fechaHoraOperativa: string): Order {
-  const carrier = vehicles.find((v) => v.orders.some((o) => o.orderId === String(p.id)));
+  const { carrier, loaded } = carrierOf(vehicles, String(p.id));
   const status: OrderStatus =
     p.estado === "ENTREGADO" ? "entregado"
-    : p.estado === "EN_TRANSITO" || p.estado === "ENTREGADO_PARCIALMENTE" || carrier ? "en_ruta"
+    : p.estado === "EN_TRANSITO" || p.estado === "ENTREGADO_PARCIALMENTE" || loaded ? "en_ruta"
     : p.estado === "PLANIFICADO" ? "en_almacen"
     : "por_asignar";
   return {

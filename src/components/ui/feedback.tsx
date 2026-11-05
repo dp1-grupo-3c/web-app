@@ -1,4 +1,4 @@
-import { CircleAlert, Info, TriangleAlert } from "lucide-react";
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
@@ -29,9 +29,10 @@ export function Meter({ value, color, label, className }: { value: number; color
   );
 }
 
-type AlertTone = "info" | "warn" | "crit";
+type AlertTone = "info" | "ok" | "warn" | "crit";
 const ALERT: Record<AlertTone, { box: string; icon: string; Icon: typeof Info }> = {
   info: { box: "border-craft/35 bg-craft/8", icon: "text-craft", Icon: Info },
+  ok: { box: "border-success/35 bg-success/8", icon: "text-success", Icon: CircleCheck },
   warn: { box: "border-warning/35 bg-warning/8", icon: "text-warning", Icon: TriangleAlert },
   crit: { box: "border-critic/40 bg-critic/8", icon: "text-critic", Icon: CircleAlert },
 };

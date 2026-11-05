@@ -7,12 +7,14 @@
 export type Coord = { x: number; y: number };
 
 export type VehicleKind = "auto" | "moto" | "bicicleta";
-export type VehicleStatus = "en_ruta" | "disponible" | "averiado" | "en_alimentacion" | "abasteciendo";
+/** "entregando": detenido en el destino durante la hora de acondicionamiento de la entrega. */
+export type VehicleStatus = "en_ruta" | "disponible" | "averiado" | "en_alimentacion" | "entregando" | "abasteciendo";
 export type BreakdownType = "T1" | "T2" | "T3";
 export type PriorityCode = "P1" | "P2" | "P3" | "P4" | "N";
 export type StatusTone = "ok" | "warn" | "crit";
 
-export type VehicleOrderLoad = { orderId: string; packagesInVehicle: number; packagesTotal: number };
+/** `trip` 0 = va a bordo; 1, 2… = se cargará tras esa cantidad de recargas en almacén. */
+export type VehicleOrderLoad = { orderId: string; packagesInVehicle: number; packagesTotal: number; trip: number };
 
 export type Vehicle = {
   id: string;
@@ -122,8 +124,12 @@ export type BreakdownRecord = {
 export type VehiclePlates = Record<VehicleKind, string[]>;
 
 export type SimulationMode = "5d" | "colapso";
-/** "fallida" = error interno del backend (sin resumen; se muestra el mensaje de la corrida). */
-export type SimulationOutcome = "exito" | "cancelada" | "colapso" | "fallida";
+/**
+ * "fallida" = error interno del backend (sin resumen; se muestra el mensaje de la corrida).
+ * "sin_datos" = el colapso agotó los datos de ventas sin que venciera ningún pedido: no hay
+ * instante de colapso, solo la cota de que la flota aguantó hasta ahí.
+ */
+export type SimulationOutcome = "exito" | "cancelada" | "colapso" | "sin_datos" | "fallida";
 
 export type SimulationClock = {
   /** Fecha y hora simulada (ISO 8601). */
