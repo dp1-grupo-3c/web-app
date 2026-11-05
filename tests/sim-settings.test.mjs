@@ -41,3 +41,14 @@ test("umbrales coherentes y duraciones enteras en rango", () => {
   bad.warehouseFill = { low: 60, high: 40 };
   assert.deepEqual(Object.keys(s.validateSimSettings(bad)).sort(), ["startTime", "warehouseFill"]);
 });
+
+test("campos propuestos al backend: solo los que el servidor ya acepta", () => {
+  const d = s.defaultSimSettings();
+  d.startTime = "";
+  d.breakdownDurations = { T1: 3, T2: 4, T3: 1 };
+  assert.deepEqual(s.proposedRunFields(d, { startTime: false, breakdownDurations: false }), {});
+  assert.deepEqual(s.proposedRunFields(d, { startTime: true, breakdownDurations: true }), {
+    horaInicio: "00:00",
+    minutosPorTipoAveria: { 1: 180, 2: 240, 3: 1440 },
+  });
+});

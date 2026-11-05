@@ -308,6 +308,12 @@ export function useVehiclePlates(scope: DataScope): VehiclePlates {
   }, [scope, s]);
 }
 
+/** Configuración que el usuario eligió al iniciar la corrida `runId` (null si no se conoce). */
+export function useRunSettings(runId: string | null | undefined): store.AjustesCorrida | null {
+  const s = useStoreState();
+  return runId && s.ajustesCorrida?.runId === runId ? s.ajustesCorrida : null;
+}
+
 /** Rangos del semáforo guardados (global, PUT /api/parametros/semaforo). */
 export function useSavedTrafficLight(): TrafficLight {
   const s = useStoreState();
