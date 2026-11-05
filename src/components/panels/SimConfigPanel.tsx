@@ -8,7 +8,7 @@ import { SegmentedControl } from "@/components/ui/choice";
 import { Alert } from "@/components/ui/feedback";
 import { DateInput, Field, TextInput, TimeInput } from "@/components/ui/form";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
-import { BACKEND_ACCEPTS, DATA_DATE_RANGE, DEFAULT_START_TIME, FLEET_OCCUPANCY_BANDS } from "@/config/simulacion";
+import { DATA_DATE_RANGE, DEFAULT_START_TIME, FLEET_OCCUPANCY_BANDS } from "@/config/simulacion";
 import { SIMULATION_DAYS_5D, SIMULATION_TITLE } from "@/lib/constants";
 import { addDays, formatDate, formatWeekdayDate, parseISODate } from "@/lib/format";
 import { formatTimeOfDay, parseTimeOfDay, validateSimSettings } from "@/lib/sim-settings";
@@ -189,12 +189,7 @@ export function SimConfigPanel(p: Props) {
 
       {tab === "averias" && (
         <PanelSection title="Duración de las averías" icon={<Wrench className="size-[18px]" aria-hidden />}>
-          <p className="text-xs leading-snug text-n500">Tiempo que un vehículo queda fuera de servicio según el tipo de avería.</p>
-          {!BACKEND_ACCEPTS.breakdownDurations && (
-            <Alert tone="warn" className="text-[13px]">
-              <b>Avance parcial.</b> El servidor todavía no aplica estas duraciones: por ahora los vehículos se reincorporan según la regla actual del servidor. Los valores elegidos se guardan con la simulación.
-            </Alert>
-          )}
+          <p className="text-xs leading-snug text-n500">Tiempo que un vehículo queda fuera de servicio según el tipo de avería. Se muestran los valores vigentes del servidor; al comenzar se guardan allí y rigen para las averías siguientes.</p>
           <BreakdownDurationsEditor value={settings.breakdownDurations} onChange={(d) => set("breakdownDurations", d)} readOnly={readOnly} />
         </PanelSection>
       )}

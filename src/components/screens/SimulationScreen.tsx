@@ -33,7 +33,7 @@ import { esFinal } from "@/lib/backend/estado";
 import { DEFAULT_START_TIME } from "@/config/simulacion";
 import { cancelSimulation, forgetSimulation, saveFleet, startSimulation } from "@/lib/data/actions";
 import { TIPO_POR_MODO } from "@/lib/data/adapters";
-import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useRunSettings, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
+import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useRunSettings, useSavedTrafficLight, useServerBreakdowns, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import { defaultSimSettings } from "@/lib/sim-settings";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
@@ -90,6 +90,14 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   // Borrador de la flota: se reinicia cuando el servidor confirma otros valores.
   const [fleetDraft, setFleetDraft] = useState(() => ({ version: fleet.version, draft: toFleetDraft(fleet.value) }));
   if (fleetDraft.version !== fleet.version) setFleetDraft({ version: fleet.version, draft: toFleetDraft(fleet.value) });
+  // Las averías arrancan con lo vigente en el servidor; un cambio allí reemplaza el borrador.
+  const serverBreakdowns = useServerBreakdowns();
+  const breakdownsKey = JSON.stringify(serverBreakdowns);
+  const [seenBreakdowns, setSeenBreakdowns] = useState("null");
+  if (serverBreakdowns && breakdownsKey !== seenBreakdowns) {
+    setSeenBreakdowns(breakdownsKey);
+    setSettings((s) => ({ ...s, breakdownDurations: serverBreakdowns }));
+  }
 
   // La flota ahora es una pestaña de la configuración: ?panel=flota sigue funcionando.
   if (panel === "flota" && configTab !== "flota") setConfigTab("flota");
