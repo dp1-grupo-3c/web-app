@@ -1,7 +1,10 @@
 import type { BreakdownType, PriorityCode, StatusTone, TrafficLight } from "./types";
 
-/** Retícula de la ciudad: cada intersección (x, y) es una coordenada válida. */
-export const GRID = { width: 70, height: 50 } as const;
+/**
+ * Retícula de la ciudad: cada intersección (x, y) es una coordenada válida.
+ * Parte del valor del enunciado; src/lib/data/mundo.ts la actualiza con el vigente.
+ */
+export const GRID = { width: 70, height: 50 };
 
 export const PRIORITIES: { code: PriorityCode; name: string; hours: number }[] = [
   { code: "P1", name: "Prioritario 1", hours: 4 },

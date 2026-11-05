@@ -45,7 +45,7 @@ type Panel = (typeof PANELS)[number];
 const DESCRIPTIONS: Partial<Record<Panel, string>> = {
   config: "Fecha y hora de inicio, flota, semáforos y averías.",
   vehiculos: "Ocupación, carga y avance de cada vehículo.",
-  almacenes: "Stock, ocupación y pedidos de cada almacén.",
+  almacenes: "Stock, ocupación, ubicación y capacidad de cada almacén.",
   metricas: "Indicadores acumulados de la simulación.",
   pedidos: "Pedidos activos y su destino en el mapa.",
   averias: "Registra averías y revisa las recientes.",
@@ -165,7 +165,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
 
   const idle = effectivePhase === "idle";
   const items: RailItem<Panel>[] = idle
-    ? [{ id: "config", label: "Configurar", Icon: Settings }, { id: "datos", label: "Datos", Icon: Database }]
+    ? [{ id: "config", label: "Configurar", Icon: Settings }, { id: "almacenes", label: "Almacenes", Icon: Warehouse }, { id: "datos", label: "Datos", Icon: Database }]
     : [
         { id: "config", label: "Configurar", Icon: Settings },
         { id: "vehiculos", label: "Vehículos", Icon: Truck },
@@ -180,7 +180,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     { id: "leyenda", label: "Leyenda", Icon: Layers },
   ];
   // Durante la configuración solo se ofrecen los paneles disponibles.
-  const requested = panel === "flota" ? "config" : idle && panel && !["menu", "config", "datos", "ayuda", "leyenda"].includes(panel) ? null : panel;
+  const requested = panel === "flota" ? "config" : idle && panel && !["menu", "config", "almacenes", "datos", "ayuda", "leyenda"].includes(panel) ? null : panel;
   // Fijado, el panel no se cierra: sin una sección elegida muestra el menú de secciones.
   const shown = requested ?? (pinned ? "menu" : null);
   const section = shown === "menu" ? null : shown;
@@ -238,7 +238,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
       <VehiclesPanel scope={scope} settings={shownSettings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} onClose={close} width={width} />
     )
     : shown === "almacenes" ? (
-      <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} />
+      <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={effectivePhase === "running" || !!other || syncing} />
     )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} occupancy={<OccupancyMetrics scope={scope} settings={shownSettings} />} />
     : shown === "pedidos" ? (

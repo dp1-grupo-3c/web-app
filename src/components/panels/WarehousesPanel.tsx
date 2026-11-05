@@ -6,6 +6,7 @@ import { EmptyState, Meter } from "@/components/ui/feedback";
 import { ToneBadge } from "@/components/ui/ToneBadge";
 import { SidePanel } from "@/components/workspace/SidePanel";
 import { RECENT_DELIVERIES_WINDOW_MIN } from "@/config/simulacion";
+import { WorldEditor } from "./config/WorldEditor";
 import { cn } from "@/lib/cn";
 import { TONE_COLOR } from "@/lib/constants";
 import { useSimulationRows } from "@/lib/data/hooks";
@@ -21,19 +22,21 @@ const HOURS = RECENT_DELIVERIES_WINDOW_MIN / 60;
  * configuración), stock, ocupación y movimiento de pedidos. Elegir uno lo
  * resalta en el mapa; elegirlo en el mapa lo resalta aquí (con scroll).
  */
-export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose, width }: {
+export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose, width, locked }: {
   scope: DataScope; settings: SimSettings; selectedId: string | null; onSelect: (id: string | null) => void; onClose: () => void; width: number;
+  /** Hay una corrida activa: el mapa y los almacenes no se pueden editar. */
+  locked: boolean;
 }) {
   const data = useSimulationRows(scope, settings);
   // El central primero; luego los intermedios por nombre.
   const rows = sortBy(data.warehouses, (w) => `${w.kind === "principal" ? 0 : 1}${w.name}`);
   return (
-    <SidePanel title="Almacenes" subtitle="Stock, ocupación y pedidos de cada almacén." onClose={onClose} width={width}>
+    <SidePanel title="Almacenes" subtitle="Stock, ocupación, ubicación y capacidad de cada almacén." onClose={onClose} width={width}>
       {rows.length === 0 ? (
-        <EmptyState icon={<WarehouseIcon className="size-8" aria-hidden />} title="Aún no hay almacenes">Aparecerán en cuanto el servidor envíe la primera fotografía.</EmptyState>
+        locked && <EmptyState icon={<WarehouseIcon className="size-8" aria-hidden />} title="Aún no hay almacenes">Aparecerán en cuanto el servidor envíe la primera fotografía.</EmptyState>
       ) : (
         <>
-          <ul role="listbox" aria-label="Almacenes (elige uno para resaltarlo en el mapa)" className="grid gap-2">
+          <ul role="listbox" aria-label="Almacenes (elige uno para resaltarlo en el mapa)" className="grid grid-cols-1 gap-2">
             {rows.map((w) => <WarehouseItem key={w.id} row={w} selected={w.id === selectedId} onSelect={onSelect} />)}
           </ul>
           <p className="text-xs leading-snug text-n600">
@@ -41,6 +44,7 @@ export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose
           </p>
         </>
       )}
+      <WorldEditor locked={locked} />
     </SidePanel>
   );
 }
@@ -62,7 +66,7 @@ const WarehouseItem = memo(function WarehouseItem({ row: w, selected, onSelect }
       onClick={toggle}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}
       className={cn(
-        "grid cursor-pointer gap-2 rounded-xl border bg-night p-3 text-[13px] outline-none hover:border-n900 focus-visible:border-warning",
+        "grid cursor-pointer grid-cols-1 gap-2 rounded-xl border bg-night p-3 text-[13px] outline-none hover:border-n900 focus-visible:border-warning",
         selected ? "border-pink shadow-[inset_3px_0_0_var(--color-pink)]" : "border-line",
       )}
     >
@@ -70,7 +74,7 @@ const WarehouseItem = memo(function WarehouseItem({ row: w, selected, onSelect }
         {central ? <House className="size-4 shrink-0 text-pink" aria-hidden /> : <Package className="size-4 shrink-0 text-n300" aria-hidden />}
         <b className="truncate text-white">{w.name}</b>
         <span className="truncate text-xs text-n500">{central ? "Central" : "Intermedio"} · {formatCoord(w.position)}</span>
-        {!central && <span className="ml-auto flex items-center gap-1.5"><b className="text-white tabular-nums">{known ? `${Math.round(w.occupancy)} %` : "—"}</b><ToneBadge tone={w.tone} /></span>}
+        {!central && <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="whitespace-nowrap text-white tabular-nums">{known ? `${Math.round(w.occupancy)} %` : "—"}</b><ToneBadge tone={w.tone} /></span>}
       </div>
       {!central && <Meter value={known ? w.occupancy / 100 : 0} color={w.tone ? TONE_COLOR[w.tone] : "var(--color-line-strong)"} label={`Ocupación de ${w.name}`} />}
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs [&_dd]:text-right [&_dd]:text-white [&_dd]:tabular-nums [&_div]:flex [&_div]:justify-between [&_div]:gap-2 [&_dt]:flex [&_dt]:items-center [&_dt]:gap-1 [&_dt]:text-n500">

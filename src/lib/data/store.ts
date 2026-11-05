@@ -357,6 +357,11 @@ function guardarAjustes(a: AjustesCorrida) {
   }
 }
 
+/** Vuelve a leer los almacenes en reposo tras editar la red. */
+export async function recargarAlmacenes() {
+  set({ almacenes: await api.obtenerAlmacenes() });
+}
+
 /** Vuelve a leer los parámetros tras un cambio hecho fuera de este store. */
 export async function recargarParametros() {
   set({ parametros: await api.obtenerParametros(), cantidadesFlota: null });

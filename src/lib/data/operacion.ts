@@ -51,6 +51,11 @@ export const getServerSnapshot = (): StoreOperacion => inicial;
 const msg = (e: unknown) => (e instanceof ErrorServicio ? e.message : "No se pudo contactar con el servidor.");
 export const enCurso = (v: VistaOperacion | null) => v?.estado === "EN_CURSO";
 
+/** Vuelve a leer los almacenes en reposo tras editar la red. */
+export async function recargarAlmacenes() {
+  set({ almacenes: await api.obtenerAlmacenes() });
+}
+
 // ---- Seguimiento del contexto ------------------------------------------------
 
 let canalCtrl: ReturnType<typeof abrirCanalOperacion> | null = null;

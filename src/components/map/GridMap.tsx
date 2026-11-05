@@ -8,6 +8,7 @@ import { BLOCKAGE_BLINK_PERIOD_MS, VEHICLE_OCCUPANCY_DEFAULTS } from "@/config/s
 import { endingIn } from "@/lib/blockage";
 import { VEHICLE_META } from "@/components/domain/vehicle";
 import { GRID } from "@/lib/constants";
+import { useMundo } from "@/lib/data/hooks";
 import { formatCoord } from "@/lib/format";
 import type { Coord, EntityRef, MapSnapshot, Order, PercentBands, TrafficLight, Vehicle, VehicleKind } from "@/lib/types";
 import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from "./EntityPopover";
@@ -149,6 +150,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
     return () => window.removeEventListener("keydown", onKey);
   }, [pickMode, onCancelPick]);
 
+  useMundo(); // GRID cambia con el mapa vigente: esto redibuja la retícula.
   const g = computeGeometry(size.w, size.h, view);
   const local = (e: PointerEvent) => {
     const r = svgRef.current!.getBoundingClientRect();
