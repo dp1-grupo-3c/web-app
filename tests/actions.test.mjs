@@ -392,6 +392,21 @@ test("si el servidor rechaza las averías, la simulación no se inicia", async (
   assert.equal(calls.start, 0);
 });
 
+test("relojes de la operación: simulado y real por separado, en la zona de la operación y al minuto", () => {
+  const { adapters } = modules();
+  const clock = adapters.vistaOperacionToClock({
+    zonaHoraria: "America/Lima",
+    horaServidor: "2026-11-05T21:40:30Z",
+    fechaHoraOperativa: "2026-11-05T16:35:59",
+    fechaHoraInicio: "2026-11-05T14:00:10",
+    minutosTranscurridos: 160,
+  });
+  assert.equal(clock.simElapsedMinutes, 155);
+  assert.equal(clock.realElapsedMinutes, 160);
+  assert.deepEqual([clock.now.getFullYear(), clock.now.getMonth(), clock.now.getDate(), clock.now.getHours(), clock.now.getMinutes()], [2026, 10, 5, 16, 40]);
+  assert.deepEqual([clock.simTime.getHours(), clock.simTime.getMinutes()], [16, 35]);
+});
+
 test("el reloj mide lo transcurrido desde el arranque, no desde las 00:00", () => {
   const { adapters } = modules();
   const foto = { fechaHoraSimulada: "2026-09-02T11:00:00", minutoSimulado: 660, milisegundosReales: 2000, metricas: { pedidosEntregados: 0 } };

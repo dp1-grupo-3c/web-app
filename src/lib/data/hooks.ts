@@ -32,6 +32,7 @@ import {
   pedidoOperacionToOrder,
   TIPO_POR_MODO,
   vistaAlmacenToWarehouse,
+  vistaOperacionToClock,
   vistaUnidadToVehicle,
 } from "@/lib/data/adapters";
 import * as clientes from "@/lib/data/clientes";
@@ -62,6 +63,7 @@ import type {
   SimulationSummary,
   TrafficLight,
   VehiclePlates,
+  OpsClock,
 } from "@/lib/types";
 
 const EMPTY_ORDERS: Order[] = [];
@@ -477,6 +479,11 @@ export function useOperacionKpis(): OpsKpis | null {
       alerts: vista.incidentes.filter((i) => !i.resuelto).length,
     };
   }, [vista]);
+}
+
+export function useOperacionClock(): OpsClock | null {
+  const { vista } = useOperacionState();
+  return useMemo(() => (vista ? vistaOperacionToClock(vista) : null), [vista]);
 }
 
 export function useOperacionMetrics(): Metrics | null {

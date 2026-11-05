@@ -323,6 +323,10 @@ export interface VistaOperacion {
   zonaHoraria: string;
   horaServidor: string;
   fechaHoraOperativa: string;
+  /** Arranque de la operación y minutos de reloj real transcurridos desde entonces. */
+  inicio: string;
+  fechaHoraInicio: string;
+  minutosTranscurridos: number;
   configuracion: ConfiguracionOperacion;
   instantanea: InstantaneaSimulacion;
   parametros: ParametrosOperacionInstantanea;
