@@ -139,6 +139,14 @@ export type SimulationClock = {
   delivered: number;
 };
 
+/** Relojes de la operación diaria, a nivel de minuto. Las fechas están en la zona de la operación. */
+export type OpsClock = {
+  simTime: Date;
+  simElapsedMinutes: number;
+  now: Date;
+  realElapsedMinutes: number;
+};
+
 /** Marca de tiempo dentro de la simulación: día (1 = primer día) y hora "HH:MM". */
 export type SimStamp = { day: number; time: string };
 

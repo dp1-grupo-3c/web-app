@@ -18,6 +18,7 @@ import { Workspace } from "@/components/workspace/Workspace";
 import { PANEL_WIDTH } from "@/lib/constants";
 import {
   useOperacionBreakdowns,
+  useOperacionClock,
   useOperacionConnection,
   useOperacionKpis,
   useOperacionMapSnapshot,
@@ -39,6 +40,7 @@ export function DailyOperationsScreen() {
   const connection = useOperacionConnection();
   const snapshot = useOperacionMapSnapshot();
   const kpis = useOperacionKpis();
+  const clock = useOperacionClock();
   const orders = useOperacionOrders();
   const metrics = useOperacionMetrics();
   const breakdowns = useOperacionBreakdowns();
@@ -149,7 +151,7 @@ export function DailyOperationsScreen() {
       }
       hud={
         <>
-          <OpsHud connection={connection} kpis={kpis} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} />
+          <OpsHud connection={connection} clock={clock} kpis={kpis} compact={!!panel} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} />
           <ConnectionBanner state={connection} />
           <DailyRunControl />
         </>

@@ -31,6 +31,7 @@ import type {
   VehicleKind,
   VehicleStatus,
   Warehouse,
+  OpsClock,
 } from "@/lib/types";
 import type {
   Cliente,
@@ -48,6 +49,7 @@ import type {
   TipoEscenario,
   TipoUnidad,
   VistaAlmacen,
+  VistaOperacion,
   VistaBloqueo,
   VistaParametros,
   VistaPedidoOperacion,
@@ -295,6 +297,26 @@ const CODIGO_POR_PRIORIDAD = Object.fromEntries(
  */
 const instanteLocal = (fecha: string) => Date.parse(fecha.slice(0, 19) + "Z");
 export const minutosEntre = (desde: string, hasta: string) => Math.floor((instanteLocal(hasta) - instanteLocal(desde)) / 60_000);
+
+/** Fecha y hora de un instante en la zona indicada, sin depender de la zona del navegador. */
+export function fechaEnZona(instante: string, zona: string): Date {
+  const partes = new Intl.DateTimeFormat("en-US", { timeZone: zona, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }).formatToParts(new Date(instante));
+  const p = (tipo: Intl.DateTimeFormatPartTypes) => Number(partes.find((x) => x.type === tipo)?.value);
+  return new Date(p("year"), p("month") - 1, p("day"), p("hour"), p("minute"));
+}
+
+/**
+ * Relojes de la operación: lo simulado sale del motor (fechaHoraOperativa, que
+ * puede ir por detrás mientras planifica) y lo real del reloj del servidor.
+ */
+export function vistaOperacionToClock(v: VistaOperacion): OpsClock {
+  return {
+    simTime: new Date(v.fechaHoraOperativa),
+    simElapsedMinutes: Math.max(0, minutosEntre(v.fechaHoraInicio, v.fechaHoraOperativa)),
+    now: fechaEnZona(v.horaServidor, v.zonaHoraria),
+    realElapsedMinutes: v.minutosTranscurridos,
+  };
+}
 
 /** "2026-10-28T14:05:00" → "28/10 14:05", sin pasar por la zona del navegador. */
 export const formatoFechaOperativa = (fecha: string) => `${fecha.slice(8, 10)}/${fecha.slice(5, 7)} ${fecha.slice(11, 16)}`;
