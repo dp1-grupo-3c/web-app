@@ -1,4 +1,4 @@
-import { CircleX, House, Package, Utensils } from "lucide-react";
+import { CircleX, House, Package, PackageCheck, Utensils } from "lucide-react";
 import { VEHICLE_META } from "@/components/domain/vehicle";
 import { TONE_COLOR } from "@/lib/constants";
 import { warehouseTone } from "@/lib/traffic-light";
@@ -15,6 +15,7 @@ export const VEHICLE_STATUS_LABEL: Record<VehicleStatus, string> = {
   disponible: "Disponible",
   averiado: "Averiado",
   en_alimentacion: "Pausa de alimentación",
+  entregando: "Entregando · acondicionamiento",
   abasteciendo: "Abasteciendo",
 };
 
@@ -30,7 +31,9 @@ export function vehicleAppearance(v: Vehicle) {
   return {
     color: v.status === "averiado" ? "var(--color-critic)" : meta.color,
     Icon: meta.Icon,
-    BadgeIcon: v.status === "en_alimentacion" ? Utensils : undefined,
+    BadgeIcon: v.status === "en_alimentacion" ? Utensils : v.status === "entregando" ? PackageCheck : undefined,
+    // Ámbar para la pausa de alimentación; verde para la entrega en curso.
+    badgeColor: v.status === "entregando" ? "var(--color-success)" : "var(--color-warning)",
     meta,
   };
 }

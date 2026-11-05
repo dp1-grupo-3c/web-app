@@ -234,6 +234,24 @@ test("el estado del pedido operativo y su holgura se traducen al dominio", () =>
   assert.equal(adapters.pedidoActivo({ ...base, estado: "CANCELADO" }), false);
 });
 
+test("solo la carga actual (viaje 0) marca un pedido de la simulación como en ruta", () => {
+  const { adapters } = modules();
+  const unidad = (codigo, viaje) => adapters.vistaUnidadToVehicle({
+    codigo, tipo: "AUTO", estado: "EN_RUTA", x: 0, y: 0, cargaABordo: 5, capacidad: 24,
+    caminoRecorrido: [], caminoPendiente: [], destinoX: -1, destinoY: -1, minutosHastaDestino: 0,
+    pedidosABordo: [{ idPedido: 7, enLaUnidad: 5, totalDelPedido: 10, viaje }], tipoAveria: 0,
+  });
+  const fila = { id: 7, cliente: "c", paquetes: 10, pendientes: 10, x: 1, y: 2, plazoHoras: 4,
+    registro: "2026-01-01T00:00:00", limite: "2026-01-01T04:00:00", holguraMinutos: 60, entregado: false, semaforo: "VERDE" };
+  assert.equal(unidad("TA01", 2).orders[0].trip, 2);
+  const despues = adapters.filaPedidoToOrder(fila, [unidad("TA01", 1)]);
+  assert.equal(despues.status, "en_almacen", "espera una recarga: todavía no va a bordo");
+  assert.equal(despues.vehiclePlate, "TA01", "pero ya tiene vehículo asignado");
+  const partido = adapters.filaPedidoToOrder(fila, [unidad("TA01", 1), unidad("TA02", 0)]);
+  assert.equal(partido.status, "en_ruta");
+  assert.equal(partido.vehiclePlate, "TA02", "se informa el vehículo que lo lleva a bordo");
+});
+
 test("se adopta la corrida activa que reporta el servidor aunque la haya iniciado otra sesión", async () => {
   const { api, store } = modules();
   api.obtenerSalud = async () => ({ corridaActiva: "corrida-ajena" });

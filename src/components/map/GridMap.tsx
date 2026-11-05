@@ -17,9 +17,32 @@ import { useVehicleMotion } from "./motion";
 import { pendingFromShown, samePoint } from "./trajectory";
 import { assignedDestinations } from "./selection";
 
+/**
+ * Punto de vehículos en espera, con el color de su tipo de vehículo. Si en la
+ * misma intersección esperan vehículos de tipos distintos, el círculo se reparte
+ * en sectores, uno por vehículo.
+ */
+function WaitingDot({ colors, r }: { colors: string[]; r: number }) {
+  const sorted = [...colors].sort();
+  if (new Set(sorted).size === 1) return <circle r={r} fill={sorted[0]} stroke="#10161c" strokeWidth={2} />;
+  const n = sorted.length;
+  const at = (k: number) => {
+    const a = (2 * Math.PI * k) / n - Math.PI / 2;
+    return `${(r * Math.cos(a)).toFixed(2)} ${(r * Math.sin(a)).toFixed(2)}`;
+  };
+  return (
+    <>
+      {sorted.map((color, k) => <path key={k} d={`M0 0 L${at(k)} A${r} ${r} 0 0 1 ${at(k + 1)} Z`} fill={color} />)}
+      <circle r={r} fill="none" stroke="#10161c" strokeWidth={2} />
+    </>
+  );
+}
+
 type GridMapProps = {
   snapshot: MapSnapshot;
   orders?: Order[];
+  /** Destinos de pedidos ya vistos, para dibujar los que el servidor dejó de listar al entregarlos. */
+  knownDestinations?: ReadonlyMap<string, Coord>;
   trafficLight: TrafficLight;
   layers: MapLayers;
   /** Almacenes sin semáforo (simulación aún no iniciada). */
@@ -37,7 +60,7 @@ type GridMapProps = {
   status?: ReactNode;
 };
 
-export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status }: GridMapProps) {
+export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status }: GridMapProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
@@ -46,15 +69,40 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
   const [hover, setHover] = useState<Coord | null>(null);
   const [dragging, setDragging] = useState(false);
   const ready = size.w > 0 && size.h > 0;
-  const motion = useVehicleMotion(snapshot.vehicles, snapshot.sample);
+  const motion = useVehicleMotion(snapshot.vehicles, snapshot.sample, snapshot.blockages);
+  // Bloqueos vigentes en el minuto que muestra la animación, no en el de la foto
+  // más reciente: los vehículos se animan una foto por detrás.
+  const shownMinute = motion.minute == null ? undefined : Math.floor(motion.minute);
+  const blockages = shownMinute == null
+    ? snapshot.blockages
+    : motion.blockages.filter((b) => (b.startMinute ?? -Infinity) <= shownMinute && shownMinute < (b.endMinute ?? Infinity));
   const shownAt = (v: Vehicle) => motion.positions[v.id] ?? v.position;
   const atWarehouse = (v: Vehicle) => snapshot.warehouses.find((w) => samePoint(w.position, shownAt(v)));
+  // Vehículos en espera fuera de los almacenes: se agrupan en un punto por intersección
+  // y se despliegan al pulsarlo. Los de un almacén ya van en la ficha de ese almacén.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const nodeKey = (c: Coord) => `${Math.round(c.x)},${Math.round(c.y)}`;
+  const isWaiting = (v: Vehicle) => v.status === "disponible" && !atWarehouse(v);
+  const waitingGroups = new Map<string, Vehicle[]>();
+  for (const v of snapshot.vehicles) {
+    if (!isWaiting(v)) continue;
+    const key = nodeKey(shownAt(v));
+    waitingGroups.set(key, [...(waitingGroups.get(key) ?? []), v]);
+  }
+  /** Un grupo se ve desplegado si el usuario lo abrió o si contiene el vehículo seleccionado. */
+  const isExpanded = (key: string) => expanded.has(key) || (selected?.type === "vehicle" && !!waitingGroups.get(key)?.some((v) => v.id === selected.id));
+  /** Desplazamiento en píxeles para que los vehículos de un grupo desplegado no se tapen entre sí. */
+  const fanOffset = (v: Vehicle) => {
+    if (!isWaiting(v)) return 0;
+    const group = waitingGroups.get(nodeKey(shownAt(v))) ?? [];
+    return (group.indexOf(v) - (group.length - 1) / 2) * 30;
+  };
   const selectedVehicle = selected?.type === "vehicle" ? snapshot.vehicles.find((v) => v.id === selected.id) : undefined;
-  const destinations = selectedVehicle ? assignedDestinations(selectedVehicle, orders) : [];
+  const destinations = selectedVehicle ? assignedDestinations(selectedVehicle, orders, knownDestinations) : [];
   const finalDestination = selectedVehicle?.route?.pending.at(-1);
   const blockageAnchor = (b: MapSnapshot["blockages"][number]) => polylineMidpoint(b.path?.length ? b.path : [b.from, b.to]);
   const blink = { animationDuration: `${BLOCKAGE_BLINK_PERIOD_MS}ms` };
-  const endingSoon = (b: MapSnapshot["blockages"][number]) => endingIn(b, snapshot.sample?.simulatedMinute);
+  const endingSoon = (b: MapSnapshot["blockages"][number]) => endingIn(b, shownMinute ?? snapshot.sample?.simulatedMinute);
 
   // Tamaño del contenedor
   useEffect(() => {
@@ -115,11 +163,11 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
     if (!d || d.moved) return;
     const c = nearestCoord(g, ...local(e));
     if (pickMode) { if (c) onPick?.(c); }
-    else onSelect(null);
+    else { onSelect(null); setExpanded(new Set()); }
   };
 
   const idle = neutralWarehouses;
-  const isEmpty = snapshot.warehouses.length + snapshot.vehicles.length + snapshot.blockages.length === 0;
+  const isEmpty = snapshot.warehouses.length + snapshot.vehicles.length + blockages.length === 0;
 
   // Anclaje de la ventana de detalle
   let popover: ReactNode = null;
@@ -136,7 +184,7 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
       const w = snapshot.warehouses.find((x) => x.id === selected.id);
       if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
     } else {
-      const b = snapshot.blockages.find((x) => x.id === selected.id);
+      const b = blockages.find((x) => x.id === selected.id);
       if (b && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
     }
   }
@@ -171,7 +219,7 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
             ))}
           </g>
 
-          {!idle && layers.bloqueos && snapshot.blockages.map((b) => {
+          {!idle && layers.bloqueos && blockages.map((b) => {
             const ending = endingSoon(b) != null;
             const width = Math.max(5, g.cell * 0.3);
             return (
@@ -200,7 +248,7 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
             return <MapPin key={`wh-${w.id}`} x={x} y={y} scale={0.9} color={a.color} Icon={a.Icon} label={`${w.name} ${formatCoord(w.position)}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} />;
           })}
 
-          {!idle && layers.bloqueos && snapshot.blockages.map((b) => {
+          {!idle && layers.bloqueos && blockages.map((b) => {
             const [x, y] = project(g, blockageAnchor(b));
             const left = endingSoon(b);
             const pin = <MapPin x={x} y={y} centered scale={0.72} color="var(--color-critic)" Icon={left != null ? Hourglass : BlockageIcon} label={left != null ? `Vía bloqueada, se libera en ~${left} min` : "Vía bloqueada"} onActivate={() => onSelect({ type: "blockage", id: b.id })} />;
@@ -220,9 +268,26 @@ export function GridMap({ snapshot, orders = [], trafficLight, layers, neutralWa
 
           {!idle && layers.flota && snapshot.vehicles.map((v) => {
             if (atWarehouse(v)) return null;
-            const { color, Icon, BadgeIcon, meta } = vehicleAppearance(v);
-            const [x, y] = project(g, shownAt(v));
-            return <MapPin key={`vh-${v.id}`} x={x} y={y} color={color} Icon={Icon} BadgeIcon={BadgeIcon} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} />;
+            if (isWaiting(v) && !isExpanded(nodeKey(shownAt(v)))) return null;
+            const { color, Icon, BadgeIcon, badgeColor, meta } = vehicleAppearance(v);
+            const [px, y] = project(g, shownAt(v));
+            const x = px + fanOffset(v);
+            return <MapPin key={`vh-${v.id}`} x={x} y={y} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} />;
+          })}
+
+          {!idle && layers.flota && [...waitingGroups].map(([key, group]) => {
+            if (isExpanded(key)) return null;
+            const [x, y] = project(g, shownAt(group[0]));
+            const plates = group.map((v) => v.plate).join(", ");
+            const label = `${group.length === 1 ? "1 vehículo en espera" : `${group.length} vehículos en espera`} en (${key.replace(",", ", ")}): ${plates}. Pulsa para desplegar.`;
+            const open = () => setExpanded((s) => new Set(s).add(key));
+            return <g key={`wait-${key}`} data-pin transform={`translate(${x} ${y})`} role="button" tabIndex={0} aria-label={label} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }} className="cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125">
+              <title>{label}</title>
+              {/* Siempre con el número: un punto liso se confundiría con el destino de una ruta. */}
+              <circle r={16} fill="transparent" />
+              <WaitingDot colors={group.map((v) => vehicleAppearance(v).color)} r={10} />
+              <text y={4.5} textAnchor="middle" fontSize={12} fontWeight={700} fill="#161d25">{group.length}</text>
+            </g>;
           })}
 
           {!idle && layers.flota && snapshot.warehouses.map((w) => {
