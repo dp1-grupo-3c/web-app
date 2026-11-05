@@ -1,4 +1,4 @@
-import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, SlidersVertical, Users, type LucideIcon } from "lucide-react";
+import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, SlidersVertical, Truck, Users, Warehouse, type LucideIcon } from "lucide-react";
 import { Alert, Tile } from "@/components/ui/feedback";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 
@@ -18,7 +18,9 @@ const ITEMS: Record<Audience, [LucideIcon, string, string][]> = {
     [Layers, "Leyenda", "Qué significa cada ícono y color del mapa."],
   ],
   simulacion: [
-    [Settings, "Configurar", "Elige la fecha de inicio y los rangos del semáforo."],
+    [Settings, "Configurar", "Elige la fecha y hora de inicio, la flota, los semáforos y las averías."],
+    [Truck, "Vehículos", "Ocupación, carga y avance de cada vehículo, con filtros y orden."],
+    [Warehouse, "Almacenes", "Stock, ocupación y pedidos de cada almacén; se resaltan en el mapa."],
     [Activity, "Métricas", "Indicadores acumulados de la simulación."],
     [Package, "Pedidos", "Pedidos activos dentro de la simulación."],
     [CircleAlert, "Averías", "Registra averías para ver cómo reacciona la flota."],

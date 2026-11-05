@@ -236,6 +236,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             neutralWarehouses={idle}
             vehicleBands={shownSettings.vehicleOccupancy}
             emphasis={emphasis}
+            warehouseFillBands={shownSettings.warehouseFill}
             selected={selected}
             onSelect={setSelected}
             highlight={highlightFor(orders, orderId)}
