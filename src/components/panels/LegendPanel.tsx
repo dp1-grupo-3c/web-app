@@ -1,4 +1,4 @@
-import { CircleX, Flag, Hourglass, House, Package, Utensils, type LucideIcon } from "lucide-react";
+import { CircleX, Flag, Hourglass, House, Package, PackageCheck, Utensils, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { VEHICLE_META, VEHICLE_ORDER } from "@/components/domain/vehicle";
 import { PinGlyph } from "@/components/map/MapPin";
@@ -35,7 +35,9 @@ export function LegendPanel({ layers, onToggle, onClose, width }: { layers: MapL
           {VEHICLE_ORDER.map((k) => <Item key={k} glyph={pin(VEHICLE_META[k].color, VEHICLE_META[k].Icon)}>{VEHICLE_META[k].label}</Item>)}
           <Item glyph={pin("var(--color-critic)", VEHICLE_META.auto.Icon)}>Vehículo averiado (cualquier tipo)</Item>
           <Item glyph={<Utensils className="size-5 text-warning" />}>Cubiertos · pausa de alimentación</Item>
+          <Item glyph={<PackageCheck className="size-5 text-success" />}>Paquete con check · pedido entregado, acondicionamiento (1 h)</Item>
           <Item glyph={<span className="rounded bg-panel px-2 text-xs">3</span>}>Vehículos agrupados en un almacén; pulsa para consultar sus estados</Item>
+          <Item glyph={<svg width="20" height="20" aria-hidden><circle cx="10" cy="10" r="9" fill={VEHICLE_META.auto.color} stroke="#10161c" strokeWidth="2" /><text x="10" y="14" textAnchor="middle" fontSize="11" fontWeight="700" fill="#161d25">2</text></svg>}>Punto numerado · vehículos en espera fuera de un almacén, con el color de su tipo (repartido si hay varios tipos); pulsa para desplegarlos y en el mapa vacío para volver a agruparlos</Item>
         </ul>
       </PanelSection>
       <PanelSection title="Rutas" action={toggle("rutas", "rutas")}>

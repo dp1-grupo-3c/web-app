@@ -20,6 +20,7 @@ import {
   BUFFER_SIZE,
   BURST_GAP_MS,
   CATCHUP_RATE,
+  COLLAPSE_SNAPSHOT_MINUTES,
   DEFAULT_BUFFER_VARIANT,
   FALLBACK_MS_PER_SIM_MINUTE,
   PENDING_CHANGE_TIMEOUT_MS,
@@ -323,7 +324,10 @@ export async function arrancar(mode: SimulationMode, input: { startDate: string;
     const r = await api.arrancarCorrida({
       tipo: TIPO_POR_MODO[mode],
       primerDia: input.startDate,
-      ...(mode === "5d" ? { ultimoDia: toISODate(addDays(start, SIMULATION_DAYS_5D - 1)) } : {}),
+      ...(mode === "5d"
+        ? { ultimoDia: toISODate(addDays(start, SIMULATION_DAYS_5D - 1)) }
+        // Escenario abierto: el backend carga mes a mes desde primerDia hasta el colapso.
+        : { minutosEntreFotografias: COLLAPSE_SNAPSHOT_MINUTES }),
     });
     dispatch({ t: "seleccionar", id: r.id });
     dispatch({ t: "ws", m: { tipo: "corrida", corrida: r.id, carga: r } });
