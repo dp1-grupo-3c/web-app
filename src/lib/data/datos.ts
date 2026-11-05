@@ -6,7 +6,7 @@
 
 import * as api from "@/lib/backend/api";
 import { ErrorServicio } from "@/lib/backend/api";
-import type { ArchivoGuardado, InventarioDatos } from "@/lib/backend/types";
+import type { ArchivoGuardado, InventarioDatos, SolicitudBloqueo } from "@/lib/backend/types";
 import { recargarParametros } from "@/lib/data/store";
 
 type Result<T = undefined> = { ok: true; data: T } | { ok: false; message: string };
@@ -37,6 +37,18 @@ export async function subirArchivo(kind: DataKind, archivo: File, mes?: string):
     return { ok: false, message: msg(e) };
   }
 }
+
+export async function registrarBloqueo(s: SolicitudBloqueo): Promise<Result<ArchivoGuardado[]>> {
+  try {
+    return { ok: true, data: await api.registrarBloqueo(s) };
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+}
+
+/** Mensaje de éxito con los archivos a los que se agregó el bloqueo. */
+export const resumenBloqueo = (archivos: ArchivoGuardado[]) =>
+  `Bloqueo guardado en ${archivos.map((a) => a.ruta).join(" y ")}. Rige desde la siguiente corrida.`;
 
 /** Mensaje de éxito con los registros que el servidor validó. */
 export function resumenGuardado(r: ArchivoGuardado) {

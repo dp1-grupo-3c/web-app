@@ -11,6 +11,7 @@ import type {
   DetalleCorrida,
   InventarioDatos,
   SolicitudAtributosAveria,
+  SolicitudBloqueo,
   SolicitudCliente,
   MetricasSimulacion,
   PaginaPedidos,
@@ -112,6 +113,9 @@ export const subirFlota = (archivo: File) => api<ArchivoGuardado>("/datos/flota"
 export const subirBloqueos = (archivo: File, mes?: string) =>
   api<ArchivoGuardado>(`/datos/bloqueos${mes ? `?mes=${encodeURIComponent(mes)}` : ""}`, { metodo: "POST", archivo });
 export const subirMantenimiento = (archivo: File) => api<ArchivoGuardado>("/datos/mantenimiento", { metodo: "POST", archivo });
+/** Un bloqueo que cruza de mes se guarda en un archivo por cada mes. */
+export const registrarBloqueo = (s: SolicitudBloqueo) =>
+  api<ArchivoGuardado[]>("/datos/bloqueos/manual", { metodo: "POST", cuerpo: s });
 
 // ---- Operaciones diarias -----------------------------------------------------
 

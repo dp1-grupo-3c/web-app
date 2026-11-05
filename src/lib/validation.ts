@@ -70,6 +70,28 @@ export function isoFromParts(day: number, month: number, year: number): string |
   return toISODate(d);
 }
 
+/**
+ * Nodos de un tramo bloqueado, escritos como "12,20 13,20 13,25". Exige al
+ * menos dos, dentro de la retícula, sin repetir y con tramos rectos: la ciudad
+ * no tiene diagonales. Es el mismo criterio con el que valida el servidor.
+ */
+export function blockageNodes(raw: string, grid: { width: number; height: number }): { nodes: { x: number; y: number }[]; error: Check } {
+  const parts = raw.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { nodes: [], error: REQUIRED_MESSAGE };
+  const nodes: { x: number; y: number }[] = [];
+  for (const part of parts) {
+    const m = /^(\d+),(\d+)$/.exec(part);
+    if (!m) return { nodes: [], error: `«${part}» no es un nodo: escribe cada uno como x,y y sepáralos con espacios.` };
+    const node = { x: Number(m[1]), y: Number(m[2]) };
+    if (node.x > grid.width || node.y > grid.height) return { nodes: [], error: `El nodo ${part} está fuera del mapa (x de 0 a ${grid.width}, y de 0 a ${grid.height}).` };
+    const last = nodes.at(-1);
+    if (last && last.x !== node.x && last.y !== node.y) return { nodes: [], error: `El tramo hasta ${part} es diagonal: cada tramo debe ser horizontal o vertical.` };
+    if (nodes.some((n) => n.x === node.x && n.y === node.y)) return { nodes: [], error: `El nodo ${part} está repetido.` };
+    nodes.push(node);
+  }
+  return nodes.length < 2 ? { nodes: [], error: "Indica al menos dos nodos." } : { nodes, error: null };
+}
+
 export const INCOMPLETE_DATE = "Completa la fecha con el formato dd/mm/aaaa.";
 
 /** Texto dd/mm/aaaa (con o sin barras) → problema de calendario, o null si es una fecha real o está vacío. */

@@ -431,6 +431,18 @@ test("datos: muestra el error del servidor y al subir la flota relee los paráme
   assert.equal(store.getSnapshot().parametros.version, 7);
 });
 
+test("datos: un bloqueo manual informa cada archivo o el error del servidor", async () => {
+  const { api, datos } = modulosDatos();
+  let cuerpo;
+  api.registrarBloqueo = async (s) => { cuerpo = s; return [{ ruta: "bloqueos/bloqueo.2609.txt" }, { ruta: "bloqueos/bloqueo.2610.txt" }]; };
+  const s = { nodos: [{ x: 1, y: 1 }, { x: 2, y: 1 }], inicio: "2026-09-30T22:00", fin: "2026-10-01T02:00" };
+  const r = await datos.registrarBloqueo(s);
+  assert.deepEqual(cuerpo, s);
+  assert.equal(datos.resumenBloqueo(r.data), "Bloqueo guardado en bloqueos/bloqueo.2609.txt y bloqueos/bloqueo.2610.txt. Rige desde la siguiente corrida.");
+  api.registrarBloqueo = async () => { throw new api.ErrorServicio(400, "el tramo es diagonal"); };
+  assert.deepEqual(await datos.registrarBloqueo(s), { ok: false, message: "el tramo es diagonal" });
+});
+
 test("datos: el mes es opcional y debe ser AAAA-MM", () => {
   const { datos } = modulosDatos();
   assert.equal(datos.mesValido(""), true);

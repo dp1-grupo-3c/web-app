@@ -252,6 +252,13 @@ export interface InventarioDatos {
   mantenimiento: string[];
 }
 
+/** Cuerpo de POST /api/datos/bloqueos/manual: fechas al minuto ("2026-09-02T10:30"). */
+export interface SolicitudBloqueo {
+  nodos: { x: number; y: number }[];
+  inicio: string;
+  fin: string;
+}
+
 export interface ArchivoGuardado {
   ruta: string;
   registros: number;

@@ -27,6 +27,17 @@ test("fechas: dentro del periodo con datos, y 5 días completos", () => {
   assert.equal(v.simulationStart("2028-12-31", 1, RANGE), null);
 });
 
+test("nodos de un bloqueo: pares x,y con tramos rectos dentro del mapa", () => {
+  const grid = { width: 70, height: 50 };
+  assert.deepEqual(v.blockageNodes("12,20  13,20 13,25", grid), { nodes: [{ x: 12, y: 20 }, { x: 13, y: 20 }, { x: 13, y: 25 }], error: null });
+  assert.equal(v.blockageNodes("  ", grid).error, v.REQUIRED_MESSAGE);
+  assert.match(v.blockageNodes("12,20", grid).error, /al menos dos/);
+  assert.match(v.blockageNodes("12;20 13,20", grid).error, /no es un nodo/);
+  assert.match(v.blockageNodes("12,20 13,21", grid).error, /diagonal/);
+  assert.match(v.blockageNodes("12,20 71,20", grid).error, /fuera del mapa/);
+  assert.match(v.blockageNodes("1,1 1,5 1,1", grid).error, /repetido/);
+});
+
 test("números: enteros, negativos, vacíos y no numéricos", () => {
   assert.equal(v.integerInRange("10", 0, 100000), null);
   assert.equal(v.integerInRange("", 0, 10), v.REQUIRED_MESSAGE);
