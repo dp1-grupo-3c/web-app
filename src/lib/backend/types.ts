@@ -13,7 +13,8 @@ export type TipoUnidad = "AUTO" | "MOTO" | "BICICLETA";
 export type EstadoUnidad =
   | "DISPONIBLE" | "EN_RUTA" | "ENTREGANDO" | "EN_ALIMENTACION"
   | "ABASTECIENDO" | "AVERIADA" | "EN_MANTENIMIENTO";
-export type ColorSemaforo = "VERDE" | "AMBAR" | "ROJO";
+// VACIO: almacén sin stock o unidad sin carga.
+export type ColorSemaforo = "VERDE" | "AMBAR" | "ROJO" | "VACIO";
 
 export type MensajeVisualizador =
   | { tipo: "corrida"; corrida: string; carga: ResumenCorrida }
