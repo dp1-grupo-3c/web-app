@@ -63,9 +63,13 @@ type GridMapProps = {
   status?: ReactNode;
   /** Semáforo de ocupación por tipo de vehículo (tooltip); por defecto, el de la configuración. */
   vehicleBands?: Record<VehicleKind, PercentBands>;
+  /** Marcadores resaltados con un anillo (elegidos en un listado lateral). */
+  emphasis?: { warehouses?: ReadonlySet<string>; vehicles?: ReadonlySet<string> };
 };
 
-export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS }: GridMapProps) {
+const NO_EMPHASIS: NonNullable<GridMapProps["emphasis"]> = {};
+
+export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS }: GridMapProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
@@ -278,7 +282,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
             const [x, y] = project(g, w.position);
             const intermediate = w.kind === "secundario";
             const stock = intermediate ? warehouseStockText(w) : "";
-            return <MapPin key={`wh-${w.id}`} x={x} y={y} scale={0.9} color={a.color} Icon={a.Icon} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={intermediate ? hoverOf({ type: "warehouse", id: w.id }) : undefined} />;
+            return <MapPin key={`wh-${w.id}`} x={x} y={y} scale={0.9} ring={!!emphasis.warehouses?.has(w.id)} color={a.color} Icon={a.Icon} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={intermediate ? hoverOf({ type: "warehouse", id: w.id }) : undefined} />;
           })}
 
           {!idle && layers.bloqueos && blockages.map((b) => {
@@ -305,7 +309,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
             const { color, Icon, BadgeIcon, badgeColor, meta } = vehicleAppearance(v);
             const [px, y] = project(g, shownAt(v));
             const x = px + fanOffset(v);
-            return <MapPin key={`vh-${v.id}`} x={x} y={y} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
+            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id)} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
           })}
 
           {!idle && layers.flota && [...waitingGroups].map(([key, group]) => {
