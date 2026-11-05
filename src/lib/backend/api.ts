@@ -6,8 +6,10 @@
  */
 
 import type {
+  ArchivoGuardado,
   Cliente,
   DetalleCorrida,
+  InventarioDatos,
   SolicitudAtributosAveria,
   SolicitudCliente,
   MetricasSimulacion,
@@ -102,6 +104,14 @@ export const cambiarSemaforo = (ambar: number, verde: number) =>
   api<VistaParametros>("/parametros/semaforo", { metodo: "PUT", cuerpo: { ambar, verde } });
 export const cambiarAverias = (s: SolicitudAtributosAveria) =>
   api<VistaParametros>("/parametros/averias", { metodo: "PUT", cuerpo: s });
+
+// ---- Datos -----------------------------------------------------------------------
+
+export const obtenerDatos = () => api<InventarioDatos>("/datos");
+export const subirFlota = (archivo: File) => api<ArchivoGuardado>("/datos/flota", { metodo: "POST", archivo });
+export const subirBloqueos = (archivo: File, mes?: string) =>
+  api<ArchivoGuardado>(`/datos/bloqueos${mes ? `?mes=${encodeURIComponent(mes)}` : ""}`, { metodo: "POST", archivo });
+export const subirMantenimiento = (archivo: File) => api<ArchivoGuardado>("/datos/mantenimiento", { metodo: "POST", archivo });
 
 // ---- Operaciones diarias -----------------------------------------------------
 

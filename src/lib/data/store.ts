@@ -357,6 +357,11 @@ function guardarAjustes(a: AjustesCorrida) {
   }
 }
 
+/** Vuelve a leer los parámetros tras un cambio hecho fuera de este store. */
+export async function recargarParametros() {
+  set({ parametros: await api.obtenerParametros(), cantidadesFlota: null });
+}
+
 export async function arrancar(
   mode: SimulationMode,
   input: { startDate: string; trafficLight: TrafficLight; settings?: SimSettings; fleet?: FleetSettings },

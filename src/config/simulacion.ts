@@ -43,6 +43,11 @@ export const FLEET_DEFAULTS = {
  */
 export const COLLAPSE_SNAPSHOT_MINUTES = 15;
 
+// ---- Carga de datos ---------------------------------------------------------
+
+/** Tope de cada archivo: spring.servlet.multipart.max-file-size del servidor. */
+export const MAX_DATA_FILE_MB = 1;
+
 // ---- Validación de formularios ----------------------------------------------
 
 /**

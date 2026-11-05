@@ -1,12 +1,13 @@
 "use client";
 
-import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, Truck, Warehouse } from "lucide-react";
+import { Activity, CircleAlert, CircleHelp, Database, Layers, Package, Settings, Truck, Warehouse } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { SimHud } from "@/components/hud/SimHud";
 import { GridMap } from "@/components/map/GridMap";
 import { PendingChangeChip } from "@/components/map/PendingChangeChip";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
+import { DataPanel } from "@/components/panels/DataPanel";
 import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft } from "@/components/panels/FleetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
@@ -39,7 +40,7 @@ import { defaultSimSettings } from "@/lib/sim-settings";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 
-const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
+const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
 const DESCRIPTIONS: Partial<Record<Panel, string>> = {
   config: "Fecha y hora de inicio, flota, semáforos y averías.",
@@ -48,6 +49,7 @@ const DESCRIPTIONS: Partial<Record<Panel, string>> = {
   metricas: "Indicadores acumulados de la simulación.",
   pedidos: "Pedidos activos y su destino en el mapa.",
   averias: "Registra averías y revisa las recientes.",
+  datos: "Archivos de flota, bloqueos y mantenimiento.",
   ayuda: "Guía rápida de la pantalla.",
   leyenda: "Íconos del mapa y capas visibles.",
 };
@@ -163,7 +165,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
 
   const idle = effectivePhase === "idle";
   const items: RailItem<Panel>[] = idle
-    ? [{ id: "config", label: "Configurar", Icon: Settings }]
+    ? [{ id: "config", label: "Configurar", Icon: Settings }, { id: "datos", label: "Datos", Icon: Database }]
     : [
         { id: "config", label: "Configurar", Icon: Settings },
         { id: "vehiculos", label: "Vehículos", Icon: Truck },
@@ -171,13 +173,14 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         { id: "metricas", label: "Métricas", Icon: Activity },
         { id: "pedidos", label: "Pedidos", Icon: Package },
         { id: "averias", label: "Averías", Icon: CircleAlert, badge: breakdowns.filter((b) => b.status === "activa").length },
+        { id: "datos", label: "Datos", Icon: Database },
       ];
   const bottom: RailItem<Panel>[] = [
     { id: "ayuda", label: "Ayuda", Icon: CircleHelp },
     { id: "leyenda", label: "Leyenda", Icon: Layers },
   ];
   // Durante la configuración solo se ofrecen los paneles disponibles.
-  const requested = panel === "flota" ? "config" : idle && panel && !["menu", "config", "ayuda", "leyenda"].includes(panel) ? null : panel;
+  const requested = panel === "flota" ? "config" : idle && panel && !["menu", "config", "datos", "ayuda", "leyenda"].includes(panel) ? null : panel;
   // Fijado, el panel no se cierra: sin una sección elegida muestra el menú de secciones.
   const shown = requested ?? (pinned ? "menu" : null);
   const section = shown === "menu" ? null : shown;
@@ -242,6 +245,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
       <SimOrdersPanel scope={scope} orders={orders} selectedId={orderId} onSelect={setOrderId} highlight={ordersHighlight} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
     )
     : shown === "averias" ? <BreakdownsPanel plates={plates} recent={breakdowns} onClose={close} width={width} />
+    : shown === "datos" ? <DataPanel onClose={close} width={width} />
     : shown === "ayuda" ? <HelpPanel audience="simulacion" onClose={close} width={width} />
     : shown === "leyenda" ? <LegendPanel layers={layers} onToggle={(l, on) => setLayers((x) => ({ ...x, [l]: on }))} onClose={close} width={width} />
     : null;
