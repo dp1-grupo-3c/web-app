@@ -178,3 +178,24 @@ export type SimulationSummary = {
 export type DataScope = { kind: "live" } | { kind: "client" } | { kind: "sim"; mode: SimulationMode };
 
 export type EntityRef = { type: "vehicle" | "warehouse" | "blockage"; id: string };
+
+// ---- Configuración ampliada de la simulación ---------------------------------
+
+/** Límites de un semáforo en % (0–100), con 0 ≤ low < high ≤ 100. Ver src/lib/occupancy.ts. */
+export type PercentBands = { low: number; high: number };
+
+/** T1 y T2 en horas; T3 en días. */
+export type BreakdownDurations = Record<BreakdownType, number>;
+
+/** Lo que se configura antes de comenzar; todo tiene un valor por defecto (DEFAULT_SIM_SETTINGS). */
+export type SimSettings = {
+  /** Hora de inicio "HH:MM" del día elegido. */
+  startTime: string;
+  breakdownDurations: BreakdownDurations;
+  /** Semáforo de ocupación por tipo de vehículo (verde = poco cargado). */
+  vehicleOccupancy: Record<VehicleKind, PercentBands>;
+  /** Semáforo de llenado de almacenes intermedios (verde = mucho stock). */
+  warehouseFill: PercentBands;
+};
+
+export type DistanceBand = "0-10" | "10-20" | "20-40" | "40+";

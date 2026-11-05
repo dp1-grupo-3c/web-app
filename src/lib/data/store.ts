@@ -28,10 +28,12 @@ import {
   PLAYBACK_CONTROL,
   PLAYBACK_RATE_WINDOW,
   PLAYBACK_TICK_MS,
+  RECENT_DELIVERIES_WINDOW_MIN,
   type BufferVariant,
 } from "@/config/simulacion";
 import * as playback from "@/lib/data/playback";
-import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO } from "@/lib/data/adapters";
+import { emptyTripLog, observe, type TripLog } from "@/lib/data/trips";
+import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO, vistaUnidadToVehicle } from "@/lib/data/adapters";
 import { SIMULATION_DAYS_5D } from "@/lib/constants";
 import { addDays, parseISODate, toISODate } from "@/lib/format";
 import type { FirstLateOrder, FleetCount, FleetSettings, SimulationMode, TrafficLight, VehicleKind } from "@/lib/types";
@@ -80,6 +82,8 @@ export interface Store {
   cantidadesFlota: FleetCount | null;
   reproduccion: Reproduccion;
   cambiosPendientes: CambioPendiente[];
+  /** Origen, salida y entregas estimados a partir de la foto reproducida (ver trips.ts). */
+  recorridos: TripLog;
 }
 
 const initialStore: Store = {
@@ -94,6 +98,7 @@ const initialStore: Store = {
   cantidadesFlota: null,
   reproduccion: { instantanea: null, duracionMs: 0, fase: "inactiva", enCola: 0, objetivo: BUFFER_SIZE[DEFAULT_BUFFER_VARIANT], variante: DEFAULT_BUFFER_VARIANT, retrasoMs: 0 },
   cambiosPendientes: [],
+  recorridos: emptyTripLog(),
 };
 
 let state: Store = initialStore;
@@ -178,8 +183,20 @@ function publicarReproduccion() {
     variante,
     retrasoMs: playback.expectedLagMs(pb, cfg),
   };
+  // El registro de recorridos sigue a la foto que se muestra (no a la última recibida).
+  const recorridos = next.instantanea && next.instantanea !== r.instantanea ? registrarRecorridos(next.instantanea) : state.recorridos;
   if (next.instantanea === r.instantanea && next.fase === r.fase && next.enCola === r.enCola && next.objetivo === r.objetivo && next.variante === r.variante && Math.round(next.retrasoMs / 1000) === Math.round(r.retrasoMs / 1000)) return;
-  set({ reproduccion: next });
+  set({ reproduccion: next, recorridos });
+}
+
+function registrarRecorridos(foto: InstantaneaSimulacion): TripLog {
+  return observe(state.recorridos, {
+    runId: state.estado.idActual,
+    minute: foto.minutoSimulado,
+    vehicles: foto.unidades.map(vistaUnidadToVehicle),
+    warehouses: foto.almacenes.map((a) => ({ id: String(a.id), position: { x: a.x, y: a.y } })),
+    windowMin: RECENT_DELIVERIES_WINDOW_MIN,
+  });
 }
 
 /**
@@ -244,7 +261,7 @@ function fetchFirstLateIfNeeded(estado: EstadoSim) {
 export function olvidarCorrida() {
   olvidada = state.estado.idActual;
   reiniciarReproduccion(null);
-  set({ estado: inicial, averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null, cambiosPendientes: [] });
+  set({ estado: inicial, averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null, cambiosPendientes: [], recorridos: emptyTripLog() });
   publicarReproduccion();
 }
 
