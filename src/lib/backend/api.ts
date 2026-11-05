@@ -28,9 +28,11 @@ import type {
   RespuestaAveria,
   RespuestaSalud,
   SolicitudFlota,
+  SolicitudMundo,
   SolicitudSimulacion,
   TipoUnidad,
   VistaAlmacen,
+  VistaMundo,
   VistaParametros,
 } from "./types";
 
@@ -105,6 +107,8 @@ export const cambiarSemaforo = (ambar: number, verde: number) =>
   api<VistaParametros>("/parametros/semaforo", { metodo: "PUT", cuerpo: { ambar, verde } });
 export const cambiarAverias = (s: SolicitudAtributosAveria) =>
   api<VistaParametros>("/parametros/averias", { metodo: "PUT", cuerpo: s });
+export const obtenerMundo = () => api<VistaMundo>("/parametros/mundo");
+export const cambiarMundo = (s: SolicitudMundo) => api<VistaMundo>("/parametros/mundo", { metodo: "PUT", cuerpo: s });
 
 // ---- Datos -----------------------------------------------------------------------
 

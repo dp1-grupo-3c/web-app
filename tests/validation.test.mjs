@@ -27,6 +27,39 @@ test("fechas: dentro del periodo con datos, y 5 días completos", () => {
   assert.equal(v.simulationStart("2028-12-31", 1, RANGE), null);
 });
 
+const MUNDO = {
+  version: 1,
+  mapa: { largoKm: 70, anchoKm: 50 },
+  almacenes: [
+    { id: 0, nombre: "Central", x: 27, y: 14, central: true, capacidad: null },
+    { id: 1, nombre: "Nor-Oeste", x: 12, y: 38, central: false, capacidad: 1000 },
+  ],
+  ejecucionActiva: null,
+};
+
+test("mundo: el borrador va y vuelve sin cambiar los valores, y el central no lleva capacidad", () => {
+  const d = v.worldDraft(MUNDO);
+  assert.deepEqual(v.validateWorld(d), {});
+  assert.deepEqual(v.worldRequest(d), {
+    mapa: { largoKm: 70, anchoKm: 50 },
+    almacenes: [{ id: 0, x: 27, y: 14 }, { id: 1, x: 12, y: 38, capacidad: 1000 }],
+  });
+});
+
+test("mundo: mapa en rango, almacenes dentro del mapa, en lugares distintos y con capacidad", () => {
+  const con = (cambio) => {
+    const d = v.worldDraft(MUNDO);
+    cambio(d);
+    return v.validateWorld(d);
+  };
+  assert.match(con((d) => { d.width = "0"; }).width, /entre 1 y 500/);
+  assert.match(con((d) => { d.height = "501"; }).height, /entre 1 y 500/);
+  assert.match(con((d) => { d.width = "20"; }).warehouses[0], /^X: /);
+  assert.match(con((d) => { d.height = "30"; }).warehouses[1], /^Y: /);
+  assert.match(con((d) => { d.warehouses[1].capacity = "0"; }).warehouses[1], /^Capacidad: /);
+  assert.match(con((d) => { d.warehouses[1].x = "27"; d.warehouses[1].y = "14"; }).warehouses[1], /otro almacén/);
+});
+
 test("nodos de un bloqueo: pares x,y con tramos rectos dentro del mapa", () => {
   const grid = { width: 70, height: 50 };
   assert.deepEqual(v.blockageNodes("12,20  13,20 13,25", grid), { nodes: [{ x: 12, y: 20 }, { x: 13, y: 20 }, { x: 13, y: 25 }], error: null });

@@ -33,7 +33,7 @@ function modules() {
   const documento = load(resolve(root, "src/lib/documento.ts"));
   const clientes = load(resolve(root, "src/lib/data/clientes.ts"));
   operacion.ESPERA_COMANDO.intervaloMs = 1;
-  return { api, store, operacion, actions, adapters, documento, clientes };
+  return { api, store, operacion, actions, adapters, documento, clientes, load };
 }
 
 const input = {
@@ -394,21 +394,35 @@ test("si el servidor rechaza las averías, la simulación no se inicia", async (
 
 function modulosDatos() {
   const m = modules();
-  const cache = new Map();
-  const datos = (function load(file) {
-    if (cache.has(file)) return cache.get(file);
-    const exports = {};
-    cache.set(file, exports);
-    const { outputText } = ts.transpileModule(readFileSync(file, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-      fileName: file,
-    });
-    const deps = { "@/lib/backend/api": m.api, "@/lib/data/store": m.store };
-    new Function("require", "exports", outputText)((name) => deps[name], exports);
-    return exports;
-  })(resolve(root, "src/lib/data/datos.ts"));
-  return { ...m, datos };
+  return { ...m, datos: m.load(resolve(root, "src/lib/data/datos.ts")) };
 }
+
+test("mundo: al leerlo o guardarlo actualiza la retícula y los almacenes en reposo", async () => {
+  const { api, load, store, operacion } = modules();
+  const mundo = load(resolve(root, "src/lib/data/mundo.ts"));
+  const { GRID } = load(resolve(root, "src/lib/constants.ts"));
+  const vista = (largoKm, anchoKm) => ({ version: 1, mapa: { largoKm, anchoKm }, almacenes: [], ejecucionActiva: null });
+  api.obtenerMundo = async () => vista(90, 60);
+  await mundo.cargarMundo();
+  assert.deepEqual([GRID.width, GRID.height], [90, 60]);
+  api.cambiarMundo = async () => vista(100, 80);
+  api.obtenerAlmacenes = async () => [{ id: 1, x: 80, y: 55 }];
+  assert.equal((await mundo.guardarMundo({ mapa: { largoKm: 100, anchoKm: 80 }, almacenes: [] })).ok, true);
+  assert.deepEqual([GRID.width, GRID.height], [100, 80]);
+  assert.equal(store.getSnapshot().almacenes[0].x, 80);
+  assert.equal(operacion.getSnapshot().almacenes[0].x, 80);
+  GRID.width = 70;
+  GRID.height = 50;
+});
+
+test("mundo: con una corrida activa muestra el rechazo del servidor y no cambia la retícula", async () => {
+  const { api, load } = modules();
+  const mundo = load(resolve(root, "src/lib/data/mundo.ts"));
+  const { GRID } = load(resolve(root, "src/lib/constants.ts"));
+  api.cambiarMundo = async () => { throw new api.ErrorServicio(409, "Ya hay una ejecucion activa de simulacion"); };
+  assert.deepEqual(await mundo.guardarMundo({ mapa: { largoKm: 10, anchoKm: 10 }, almacenes: [] }), { ok: false, message: "Ya hay una ejecucion activa de simulacion" });
+  assert.deepEqual([GRID.width, GRID.height], [70, 50]);
+});
 
 test("datos: informa los registros validados y si reemplazó un archivo", async () => {
   const { api, datos } = modulosDatos();

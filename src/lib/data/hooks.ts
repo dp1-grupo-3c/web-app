@@ -14,6 +14,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import * as mundo from "@/lib/data/mundo";
 import { breakdownDurationsFrom } from "@/lib/sim-settings";
 import * as api from "@/lib/backend/api";
 import type { FilaPedido, VistaUnidad } from "@/lib/backend/types";
@@ -338,6 +339,12 @@ export function useFleetSettings(): { value: FleetSettings; version: string } {
     if (s.cantidadesFlota) for (const k of Object.keys(value) as (keyof FleetSettings)[]) value[k].quantity = s.cantidadesFlota[k];
     return { value, version: `${s.parametros?.version ?? "-"}:${s.estado.idActual ?? "-"}:${JSON.stringify(s.cantidadesFlota)}` };
   }, [s.parametros, s.estado.corrida, s.estado.idActual, s.cantidadesFlota]);
+}
+
+/** Parámetros del mundo; suscribirse redibuja el mapa si cambia su tamaño. */
+export function useMundo() {
+  useEffect(() => { mundo.asegurarMundo(); }, []);
+  return useSyncExternalStore(mundo.subscribe, mundo.getSnapshot, mundo.getServerSnapshot);
 }
 
 /** Atributos de avería vigentes en el servidor, en las unidades del formulario. */

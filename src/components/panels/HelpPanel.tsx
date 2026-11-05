@@ -21,7 +21,7 @@ const ITEMS: Record<Audience, [LucideIcon, string, string][]> = {
     [Settings, "Configurar", "Elige la fecha y hora de inicio, la flota, los semáforos y las averías."],
     [Database, "Datos", "Revisa los archivos del servidor y sube flota, bloqueos o mantenimiento."],
     [Truck, "Vehículos", "Ocupación, carga y avance de cada vehículo, con filtros y orden."],
-    [Warehouse, "Almacenes", "Stock, ocupación y pedidos de cada almacén; se resaltan en el mapa."],
+    [Warehouse, "Almacenes", "Stock, ocupación y pedidos de cada almacén; sin corrida activa, edita el mapa y los almacenes."],
     [Activity, "Métricas", "Indicadores acumulados de la simulación."],
     [Package, "Pedidos", "Pedidos activos dentro de la simulación."],
     [CircleAlert, "Averías", "Registra averías para ver cómo reacciona la flota."],

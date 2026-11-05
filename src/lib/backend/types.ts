@@ -230,6 +230,31 @@ export interface FichaAveria {
   regla: string;
 }
 
+// ---- Parámetros del mundo (/api/parametros/mundo) ------------------------------
+
+export interface AlmacenMundo {
+  id: number;
+  nombre: string;
+  x: number;
+  y: number;
+  central: boolean;
+  /** null en el central, que es ilimitado. */
+  capacidad: number | null;
+}
+
+export interface VistaMundo {
+  version: number;
+  mapa: { largoKm: number; anchoKm: number };
+  almacenes: AlmacenMundo[];
+  /** Tipo de la ejecución en curso, que impide editar. */
+  ejecucionActiva: string | null;
+}
+
+export interface SolicitudMundo {
+  mapa: { largoKm: number; anchoKm: number };
+  almacenes: { id: number; x: number; y: number; capacidad?: number }[];
+}
+
 /** Cuerpo de PUT /api/parametros/averias: lo que no llega conserva su valor vigente. */
 export type SolicitudAtributosAveria = { tipo: 1 | 2 | 3 } & Partial<AtributosAveria>;
 
