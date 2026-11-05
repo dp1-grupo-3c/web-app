@@ -242,6 +242,22 @@ export interface SolicitudFlota {
   unidades: Record<TipoUnidad, { cantidad: number; kmPorHora: number }>;
 }
 
+// ---- Datos (/api/datos) ------------------------------------------------------
+
+/** `flota` es null si no hay archivo y se usaría la del enunciado. */
+export interface InventarioDatos {
+  flota: string | null;
+  ventas: string[];
+  bloqueos: string[];
+  mantenimiento: string[];
+}
+
+export interface ArchivoGuardado {
+  ruta: string;
+  registros: number;
+  reemplazado: boolean;
+}
+
 export interface RespuestaAveria {
   placa: string;
   tipo: number;

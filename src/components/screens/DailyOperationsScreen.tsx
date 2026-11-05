@@ -1,12 +1,13 @@
 "use client";
 
-import { Activity, CircleAlert, CircleHelp, Layers, Package, SlidersVertical, Users } from "lucide-react";
+import { Activity, CircleAlert, CircleHelp, Database, Layers, Package, SlidersVertical, Users } from "lucide-react";
 import { useState } from "react";
 import { ConnectionBanner, OpsHud } from "@/components/hud/Hud";
 import { GridMap } from "@/components/map/GridMap";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
 import { ClientsPanel, EMPTY_CLIENT_DRAFT, type ClientsTab } from "@/components/panels/ClientsPanel";
+import { DataPanel } from "@/components/panels/DataPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
@@ -32,7 +33,7 @@ import type { Client, EntityRef } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 import { DailyRunControl } from "./DailyRunControl";
 
-const PANELS = ["semaforo", "metricas", "clientes", "pedidos", "averias", "ayuda", "leyenda"] as const;
+const PANELS = ["semaforo", "metricas", "clientes", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
 
 export function DailyOperationsScreen() {
@@ -82,6 +83,7 @@ export function DailyOperationsScreen() {
     { id: "clientes", label: "Clientes", Icon: Users },
     { id: "pedidos", label: "Pedidos", Icon: Package },
     { id: "averias", label: "Averías", Icon: CircleAlert, badge: activeBreakdowns },
+    { id: "datos", label: "Datos", Icon: Database },
   ];
   const bottom: RailItem<Panel>[] = [
     { id: "ayuda", label: "Ayuda", Icon: CircleHelp },
@@ -91,6 +93,7 @@ export function DailyOperationsScreen() {
   const panelNode =
     panel === "semaforo" ? <TrafficLightPanel key={JSON.stringify(trafficLight)} saved={trafficLight} onClose={close} width={width} />
     : panel === "metricas" ? <MetricsPanel metrics={metrics} simulation={false} onClose={close} width={width} />
+    : panel === "datos" ? <DataPanel onClose={close} width={width} />
     : panel === "clientes" ? (
       <ClientsPanel
         tab={clientTab}

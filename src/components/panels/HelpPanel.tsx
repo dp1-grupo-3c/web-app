@@ -1,4 +1,4 @@
-import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, SlidersVertical, Truck, Users, Warehouse, type LucideIcon } from "lucide-react";
+import { Activity, CircleAlert, CircleHelp, Database, Layers, Package, Settings, SlidersVertical, Truck, Users, Warehouse, type LucideIcon } from "lucide-react";
 import { Alert, Tile } from "@/components/ui/feedback";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 
@@ -19,6 +19,7 @@ const ITEMS: Record<Audience, [LucideIcon, string, string][]> = {
   ],
   simulacion: [
     [Settings, "Configurar", "Elige la fecha y hora de inicio, la flota, los semáforos y las averías."],
+    [Database, "Datos", "Revisa los archivos del servidor y sube flota, bloqueos o mantenimiento."],
     [Truck, "Vehículos", "Ocupación, carga y avance de cada vehículo, con filtros y orden."],
     [Warehouse, "Almacenes", "Stock, ocupación y pedidos de cada almacén; se resaltan en el mapa."],
     [Activity, "Métricas", "Indicadores acumulados de la simulación."],

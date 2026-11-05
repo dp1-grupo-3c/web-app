@@ -392,6 +392,53 @@ test("si el servidor rechaza las averías, la simulación no se inicia", async (
   assert.equal(calls.start, 0);
 });
 
+function modulosDatos() {
+  const m = modules();
+  const cache = new Map();
+  const datos = (function load(file) {
+    if (cache.has(file)) return cache.get(file);
+    const exports = {};
+    cache.set(file, exports);
+    const { outputText } = ts.transpileModule(readFileSync(file, "utf8"), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      fileName: file,
+    });
+    const deps = { "@/lib/backend/api": m.api, "@/lib/data/store": m.store };
+    new Function("require", "exports", outputText)((name) => deps[name], exports);
+    return exports;
+  })(resolve(root, "src/lib/data/datos.ts"));
+  return { ...m, datos };
+}
+
+test("datos: informa los registros validados y si reemplazó un archivo", async () => {
+  const { api, datos } = modulosDatos();
+  let mes;
+  api.subirBloqueos = async (_, m) => { mes = m; return { ruta: "bloqueos/bloqueo.2609.txt", registros: 12, reemplazado: true }; };
+  const r = await datos.subirArchivo("bloqueos", {}, "2026-09");
+  assert.equal(r.ok, true);
+  assert.equal(mes, "2026-09");
+  assert.equal(datos.resumenGuardado(r.data), "12 registros validados en bloqueos/bloqueo.2609.txt (reemplazó al archivo anterior).");
+  assert.equal(datos.resumenGuardado({ ruta: "flota.txt", registros: 1, reemplazado: false }), "1 registro validado en flota.txt.");
+});
+
+test("datos: muestra el error del servidor y al subir la flota relee los parámetros", async () => {
+  const { api, datos, store } = modulosDatos();
+  api.subirMantenimiento = async () => { throw new api.ErrorServicio(400, "El plan de mantenimiento debe llamarse mant.preventivo.m1.m2"); };
+  assert.deepEqual(await datos.subirArchivo("mantenimiento", {}), { ok: false, message: "El plan de mantenimiento debe llamarse mant.preventivo.m1.m2" });
+  api.subirFlota = async () => ({ ruta: "flota.txt", registros: 3, reemplazado: true });
+  api.obtenerParametros = async () => ({ version: 7 });
+  assert.equal((await datos.subirArchivo("flota", {})).ok, true);
+  assert.equal(store.getSnapshot().parametros.version, 7);
+});
+
+test("datos: el mes es opcional y debe ser AAAA-MM", () => {
+  const { datos } = modulosDatos();
+  assert.equal(datos.mesValido(""), true);
+  assert.equal(datos.mesValido("2026-09"), true);
+  assert.equal(datos.mesValido("2026-13"), false);
+  assert.equal(datos.mesValido("09/2026"), false);
+});
+
 test("relojes de la operación: simulado y real por separado, en la zona de la operación y al minuto", () => {
   const { adapters } = modules();
   const clock = adapters.vistaOperacionToClock({
