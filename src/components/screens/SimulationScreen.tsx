@@ -12,7 +12,8 @@ import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
 import { OccupancyMetrics } from "@/components/panels/OccupancyMetrics";
-import { EMPTY_DRAFT, OrdersPanel } from "@/components/panels/OrdersPanel";
+import { EMPTY_DRAFT, type OrdersHighlight } from "@/components/panels/OrdersPanel";
+import { SimOrdersPanel } from "@/components/panels/SimOrdersPanel";
 import { SectionsPanel } from "@/components/panels/SectionsPanel";
 import { SimConfigPanel, type ConfigTab } from "@/components/panels/SimConfigPanel";
 import { VehiclesPanel } from "@/components/panels/VehiclesPanel";
@@ -180,9 +181,23 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
 
   // Con el listado de almacenes abierto, el almacén elegido se resalta en el mapa.
   const selectedWarehouse = selected?.type === "warehouse" ? selected.id : null;
+  // Con el listado de pedidos abierto: el pedido elegido resalta los vehículos
+  // que lo entregan, y el vehículo elegido en el mapa resalta sus pedidos.
+  const selectedVehicle = selected?.type === "vehicle" ? selected.id : null;
+  const orderCarriers = useMemo(() => {
+    if (shown !== "pedidos" || !orderId) return null;
+    return new Set(snapshot.vehicles.filter((v) => v.orders.some((o) => o.orderId === orderId)).map((v) => v.id));
+  }, [shown, orderId, snapshot.vehicles]);
+  const ordersHighlight = useMemo((): OrdersHighlight | null => {
+    if (shown !== "pedidos" || !selectedVehicle) return null;
+    const v = snapshot.vehicles.find((x) => x.id === selectedVehicle);
+    return v ? { vehicle: v.plate, ids: new Set(v.orders.map((o) => o.orderId)) } : null;
+  }, [shown, selectedVehicle, snapshot.vehicles]);
   const emphasis = useMemo(
-    () => (shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]) } : undefined),
-    [shown, selectedWarehouse],
+    () => (shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]) }
+      : orderCarriers?.size ? { vehicles: orderCarriers }
+      : undefined),
+    [shown, selectedWarehouse, orderCarriers],
   );
 
   const panelNode =
@@ -216,7 +231,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} occupancy={<OccupancyMetrics scope={scope} settings={shownSettings} />} />
     : shown === "pedidos" ? (
-      <OrdersPanel audience="simulacion" orders={orders} selectedId={orderId} onSelect={setOrderId} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
+      <SimOrdersPanel scope={scope} orders={orders} selectedId={orderId} onSelect={setOrderId} highlight={ordersHighlight} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
     )
     : shown === "averias" ? <BreakdownsPanel plates={plates} recent={breakdowns} onClose={close} width={width} />
     : shown === "ayuda" ? <HelpPanel audience="simulacion" onClose={close} width={width} />

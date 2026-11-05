@@ -87,3 +87,10 @@ test("las entregas de viajes posteriores a una recarga no cuentan como carga a b
   log = step(log, 10, [withTrip("V1", 3, [["10", 5, 0]])]);
   assert.equal(log.deliveries.length, 0, "quitar una entrega futura del plan no es una entrega");
 });
+
+test("hora simulada con fecha cuando cambia el día", () => {
+  assert.equal(sel.formatSimClock("2026-03-01T22:00:00", 100, 130), "22:30");
+  assert.equal(sel.formatSimClock("2026-03-01T22:00:00", 100, 300), "02/03 01:20");
+  assert.equal(sel.formatSimClock(null, 100, 130), "—");
+  assert.equal(sel.formatSimClock("2026-03-01T22:00:00", 100, null), "—");
+});

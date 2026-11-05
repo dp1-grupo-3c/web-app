@@ -182,3 +182,10 @@ export function clockAt(currentSimTime: string, currentMinute: number, minute: n
   const iso = at.toISOString();
   return { day: iso.slice(0, 10), time: iso.slice(11, 16) };
 }
+
+/** "HH:MM" simulada de un minuto; si cae en otra fecha, "dd/mm HH:MM". Sin dato → "—". */
+export function formatSimClock(currentSimTime: string | null, currentMinute: number | null, minute: number | null): string {
+  if (minute == null || currentSimTime == null || currentMinute == null) return "—";
+  const c = clockAt(currentSimTime, currentMinute, minute);
+  return c.day === currentSimTime.slice(0, 10) ? c.time : `${c.day.slice(8, 10)}/${c.day.slice(5, 7)} ${c.time}`;
+}
