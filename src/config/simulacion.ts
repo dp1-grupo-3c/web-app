@@ -128,3 +128,55 @@ export const PENDING_CHANGE_TIMEOUT_MS = 20_000;
 
 /** Cuánto se muestra el aviso de error del indicador antes de desaparecer solo. */
 export const PENDING_ERROR_VISIBLE_MS = 6000;
+
+// ---- Configuración ampliada de la simulación ------------------------------
+
+/**
+ * Duración de cada tipo de avería: T1 y T2 en horas, T3 en días.
+ * TODO(backend): POST /simulaciones aún no acepta estas duraciones; la UI
+ * las recoge y avisa que el avance es parcial (ver arrancar en store.ts).
+ */
+export const BREAKDOWN_DURATION_DEFAULTS = { T1: 2, T2: 4, T3: 2 } as const;
+export const BREAKDOWN_DURATION_UNIT = { T1: "h", T2: "h", T3: "d" } as const;
+/** Rangos aceptados (enteros). Provisionales: el enunciado no fija un máximo. */
+export const BREAKDOWN_DURATION_LIMITS = {
+  T1: { min: 1, max: 72 },
+  T2: { min: 1, max: 72 },
+  T3: { min: 1, max: 30 },
+} as const;
+
+/** Hora de inicio por defecto: las 00:00 del día elegido. */
+export const DEFAULT_START_TIME = "00:00";
+
+/**
+ * Semáforo de ocupación de vehículos, en % de la capacidad: verde por debajo
+ * de `low`, ámbar de `low` a `high` (ambos incluidos) y rojo por encima de
+ * `high`. Es el valor inicial de cada tipo de vehículo (configurable).
+ */
+export const VEHICLE_OCCUPANCY_DEFAULTS = { low: 25, high: 75 } as const;
+
+/** Semáforo FIJO de la ocupación global de la flota (no configurable). */
+export const FLEET_OCCUPANCY_BANDS = { low: 25, high: 75 } as const;
+
+/**
+ * Semáforo de llenado de almacenes intermedios, en % (opción B: umbrales
+ * propios en %, independientes del semáforo en paquetes). Mismo sentido que
+ * el semáforo de stock del mapa: más stock = verde. Rojo hasta `low`, ámbar
+ * hasta `high`, verde desde `high`. Los valores por defecto equivalen al
+ * semáforo en paquetes por defecto (250 / 500) sobre una escala de 1000.
+ */
+export const WAREHOUSE_FILL_DEFAULTS = { low: 25, high: 50 } as const;
+
+/** Límites inferiores (km) de los rangos de distancia: 0–10, 10–20, 20–40 y 40+. */
+export const DISTANCE_BANDS_KM = [0, 10, 20, 40] as const;
+
+/** Ventana, en minutos SIMULADOS, de "pedidos entregados en las últimas 4 horas". */
+export const RECENT_DELIVERIES_WINDOW_MIN = 240;
+
+/**
+ * Qué parte de la configuración ampliada acepta ya POST /simulaciones.
+ * TODO(backend): mientras sea false, la UI la recoge y la muestra, pero no se
+ * envía (un campo desconocido podría hacer fallar el inicio) y se avisa que el
+ * avance es parcial. Al implementarse en el servidor, basta con poner true.
+ */
+export const BACKEND_ACCEPTS = { startTime: false, breakdownDurations: false } as const;

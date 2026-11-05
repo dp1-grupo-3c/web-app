@@ -366,3 +366,26 @@ test("un conflicto al registrar se informa con el mensaje del servidor", async (
   assert.deepEqual(await actions.registerClient(persona), { ok: false, message: "Ya existe un cliente con el documento 45678912" });
   assert.equal(clientes.getSnapshot().clientes.length, 0);
 });
+
+test("iniciar con configuración ampliada: no envía campos que el servidor aún no acepta y la recuerda por corrida", async () => {
+  const { api, store, actions } = modules();
+  let body = null;
+  api.cambiarSemaforo = async () => ({});
+  api.arrancarCorrida = async (b) => { body = b; return { id: "c-1", estado: "EN_CURSO", tipo: "SIMULACION_5D" }; };
+  const settings = { startTime: "08:30", breakdownDurations: { T1: 2, T2: 4, T3: 2 }, vehicleOccupancy: {}, warehouseFill: { low: 25, high: 50 } };
+  const fleet = { auto: { quantity: 10, speed: 40 }, moto: { quantity: 15, speed: 25 }, bicicleta: { quantity: 12, speed: 12 } };
+  assert.equal((await actions.startSimulation({ mode: "5d", ...input, settings, fleet })).ok, true);
+  assert.equal("horaInicio" in body, false);
+  assert.equal("minutosPorTipoAveria" in body, false);
+  assert.deepEqual(store.getSnapshot().ajustesCorrida, { runId: "c-1", settings, fleet });
+});
+
+test("iniciar sin configuración ampliada conserva el comportamiento anterior", async () => {
+  const { api, store, actions } = modules();
+  let body = null;
+  api.cambiarSemaforo = async () => ({});
+  api.arrancarCorrida = async (b) => { body = b; return { id: "c-2", estado: "EN_CURSO", tipo: "SIMULACION_5D" }; };
+  assert.equal((await actions.startSimulation({ mode: "5d", ...input })).ok, true);
+  assert.deepEqual(body, { tipo: "SIMULACION_5D", primerDia: "2026-09-01", ultimoDia: "2026-09-05" });
+  assert.equal(store.getSnapshot().ajustesCorrida, null);
+});

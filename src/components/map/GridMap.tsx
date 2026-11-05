@@ -4,14 +4,15 @@ import { Crosshair, Flag, Focus, Hourglass, MapPin as MapPinIcon, Minus, Package
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Button, ControlButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import { BLOCKAGE_BLINK_PERIOD_MS } from "@/config/simulacion";
+import { BLOCKAGE_BLINK_PERIOD_MS, VEHICLE_OCCUPANCY_DEFAULTS } from "@/config/simulacion";
 import { endingIn } from "@/lib/blockage";
 import { GRID } from "@/lib/constants";
 import { formatCoord } from "@/lib/format";
-import type { Coord, EntityRef, MapSnapshot, Order, TrafficLight, Vehicle } from "@/lib/types";
+import type { Coord, EntityRef, MapSnapshot, Order, PercentBands, TrafficLight, Vehicle, VehicleKind } from "@/lib/types";
 import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from "./EntityPopover";
 import { computeGeometry, nearestCoord, polylineMidpoint, project, toPath, zoomView, type View } from "./geometry";
 import { BlockageIcon, PINK, VEHICLE_STATUS_LABEL, vehicleAppearance, warehouseAppearance, type MapLayers } from "./layers";
+import { HoverTooltip, vehicleOccupancyText, warehouseStockText } from "./HoverTooltip";
 import { MapPin } from "./MapPin";
 import { useVehicleMotion } from "./motion";
 import { pendingFromShown, samePoint } from "./trajectory";
@@ -38,6 +39,8 @@ function WaitingDot({ colors, r }: { colors: string[]; r: number }) {
   );
 }
 
+const DEFAULT_VEHICLE_BANDS: Record<VehicleKind, PercentBands> = { auto: VEHICLE_OCCUPANCY_DEFAULTS, moto: VEHICLE_OCCUPANCY_DEFAULTS, bicicleta: VEHICLE_OCCUPANCY_DEFAULTS };
+
 type GridMapProps = {
   snapshot: MapSnapshot;
   orders?: Order[];
@@ -58,15 +61,27 @@ type GridMapProps = {
   emptyMessage?: ReactNode;
   /** Indicador discreto junto a los controles (p. ej. "Aplicando cambios…"); nunca lo tapa el panel lateral. */
   status?: ReactNode;
+  /** Semáforo de ocupación por tipo de vehículo (tooltip); por defecto, el de la configuración. */
+  vehicleBands?: Record<VehicleKind, PercentBands>;
+  /** Umbrales de llenado en % para el color de los almacenes (simulación); sin ellos, el semáforo en paquetes. */
+  warehouseFillBands?: PercentBands;
+  /** Marcadores resaltados con un anillo (elegidos en un listado lateral). */
+  emphasis?: { warehouses?: ReadonlySet<string>; vehicles?: ReadonlySet<string> };
 };
 
-export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status }: GridMapProps) {
+const NO_EMPHASIS: NonNullable<GridMapProps["emphasis"]> = {};
+
+export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands }: GridMapProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<View>({ zoom: 1, pan: { x: 0, y: 0 } });
   const [hover, setHover] = useState<Coord | null>(null);
+  // Marcador bajo el cursor (o con foco): estado local del mapa, no de la pantalla.
+  const [hovered, setHovered] = useState<EntityRef | null>(null);
+  const hoverOf = (ref: EntityRef) => (on: boolean) =>
+    setHovered((h) => (on ? ref : h?.type === ref.type && h.id === ref.id ? null : h));
   const [dragging, setDragging] = useState(false);
   const ready = size.w > 0 && size.h > 0;
   const motion = useVehicleMotion(snapshot.vehicles, snapshot.sample, snapshot.blockages);
@@ -167,6 +182,8 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
   };
 
   const idle = neutralWarehouses;
+  /** Antes de comenzar no hay vehículos; los almacenes muestran su stock sin semáforo. */
+  const idleTooltipHidden = (r: EntityRef) => idle && r.type === "vehicle";
   const isEmpty = snapshot.warehouses.length + snapshot.vehicles.length + blockages.length === 0;
 
   // Anclaje de la ventana de detalle
@@ -182,10 +199,30 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
       if (v && !idle) popover = <VehiclePopover vehicle={v} anchor={anchorFor(shownAt(v))} onClose={close} mapHeight={size.h} docked />;
     } else if (selected.type === "warehouse") {
       const w = snapshot.warehouses.find((x) => x.id === selected.id);
-      if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
+      if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} fillBands={warehouseFillBands} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
     } else {
       const b = blockages.find((x) => x.id === selected.id);
       if (b && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
+    }
+  }
+
+  // Tooltip del marcador bajo el cursor; no se repite si ya está abierta su ficha.
+  let tooltip: ReactNode = null;
+  const isSelected = (r: EntityRef) => selected?.type === r.type && selected.id === r.id;
+  if (ready && hovered && !dragging && !idleTooltipHidden(hovered) && !isSelected(hovered)) {
+    if (hovered.type === "vehicle") {
+      const v = snapshot.vehicles.find((x) => x.id === hovered.id);
+      // Solo mientras su marcador esté visible (no en un almacén ni dentro de un grupo plegado).
+      if (v && layers.flota && !atWarehouse(v) && !(isWaiting(v) && !isExpanded(nodeKey(shownAt(v))))) {
+        const [px, py] = project(g, shownAt(v));
+        tooltip = <HoverTooltip kind="vehicle" vehicle={v} bands={vehicleBands[v.kind]} x={px + fanOffset(v)} y={py} mapWidth={size.w} />;
+      }
+    } else if (hovered.type === "warehouse") {
+      const w = snapshot.warehouses.find((x) => x.id === hovered.id);
+      if (w && layers.almacenes && w.kind === "secundario") {
+        const [px, py] = project(g, w.position);
+        tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={warehouseAppearance(w, trafficLight, idle, warehouseFillBands).tone} x={px} y={py} mapWidth={size.w} />;
+      }
     }
   }
 
@@ -243,9 +280,11 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
           })}
 
           {layers.almacenes && snapshot.warehouses.map((w) => {
-            const a = warehouseAppearance(w, trafficLight, idle);
+            const a = warehouseAppearance(w, trafficLight, idle, warehouseFillBands);
             const [x, y] = project(g, w.position);
-            return <MapPin key={`wh-${w.id}`} x={x} y={y} scale={0.9} color={a.color} Icon={a.Icon} label={`${w.name} ${formatCoord(w.position)}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} />;
+            const intermediate = w.kind === "secundario";
+            const stock = intermediate ? warehouseStockText(w) : "";
+            return <MapPin key={`wh-${w.id}`} x={x} y={y} scale={0.9} ring={!!emphasis.warehouses?.has(w.id)} color={a.color} Icon={a.Icon} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={intermediate ? hoverOf({ type: "warehouse", id: w.id }) : undefined} />;
           })}
 
           {!idle && layers.bloqueos && blockages.map((b) => {
@@ -272,7 +311,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
             const { color, Icon, BadgeIcon, badgeColor, meta } = vehicleAppearance(v);
             const [px, y] = project(g, shownAt(v));
             const x = px + fanOffset(v);
-            return <MapPin key={`vh-${v.id}`} x={x} y={y} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} />;
+            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id)} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
           })}
 
           {!idle && layers.flota && [...waitingGroups].map(([key, group]) => {
@@ -319,7 +358,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
         </svg>
       )}
 
-      {hover && !dragging && (() => {
+      {hover && !dragging && !tooltip && (() => {
         // Dirección de la intersección bajo el cursor (la retícula ya no lleva numeración).
         const [x, y] = project(g, hover);
         const right = x < size.w - 170;
@@ -335,6 +374,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
         );
       })()}
 
+      {tooltip}
       {popover}
 
       {pickMode && (

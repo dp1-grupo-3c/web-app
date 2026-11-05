@@ -36,9 +36,11 @@ type MapPinProps = {
   /** Centra el glifo sobre la coordenada; útil para bloqueos sobre su línea. */
   centered?: boolean;
   onActivate?: () => void;
+  /** Cursor encima o foco de teclado (tooltip del mapa). */
+  onHoverChange?: (hovered: boolean) => void;
 };
 
-export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, BadgeIcon, badgeColor, centered, onActivate }: MapPinProps) {
+export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, BadgeIcon, badgeColor, centered, onActivate, onHoverChange }: MapPinProps) {
   const interactive = !!onActivate;
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -55,6 +57,10 @@ export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, BadgeIcon
       aria-label={label}
       onClick={onActivate}
       onKeyDown={interactive ? onKeyDown : undefined}
+      onPointerEnter={onHoverChange && (() => onHoverChange(true))}
+      onPointerLeave={onHoverChange && (() => onHoverChange(false))}
+      onFocus={onHoverChange && (() => onHoverChange(true))}
+      onBlur={onHoverChange && (() => onHoverChange(false))}
       className={interactive ? "cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125" : "pointer-events-none"}
     >
       <title>{label}</title>
