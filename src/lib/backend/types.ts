@@ -148,6 +148,13 @@ export interface SolicitudSimulacion {
   algoritmo: "HGS" | "ALNS";
   semilla: number;
   generarAverias: boolean;
+  /**
+   * PROPUESTA — TODO(backend): aún no existen. Hora "HH:MM" del primer día y
+   * minutos de inactividad por tipo de avería (1, 2, 3). Solo se envían si
+   * BACKEND_ACCEPTS lo indica (src/config/simulacion.ts).
+   */
+  horaInicio?: string;
+  minutosPorTipoAveria?: Record<"1" | "2" | "3", number>;
 }
 
 export interface DetalleCorrida {
