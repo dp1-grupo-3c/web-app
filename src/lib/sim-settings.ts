@@ -62,10 +62,10 @@ export function validateBands(b: PercentBands): { message: string; keys: (keyof 
 
 // ---- Duración de averías ---------------------------------------------------------
 
-/** Mensaje de un valor escrito (texto del campo) para el tipo de avería. */
-export function breakdownDuration(type: BreakdownType, raw: string): Check {
+/** Mensaje para la duración del tipo de avería (texto del campo, o número; NaN = vacío). */
+export function breakdownDuration(type: BreakdownType, raw: string | number): Check {
   const { min, max } = BREAKDOWN_DURATION_LIMITS[type];
-  return integerInRange(raw, min, max);
+  return integerInRange(typeof raw === "number" ? (Number.isNaN(raw) ? "" : String(raw)) : raw, min, max);
 }
 
 /** T1 y T2 en horas, T3 en días → minutos simulados. */
@@ -76,11 +76,26 @@ export function validateSimSettings(s: SimSettings): Partial<Record<"startTime" 
   const out: Partial<Record<"startTime" | "breakdowns" | "vehicleOccupancy" | "warehouseFill", string>> = {};
   const t = timeOfDay(s.startTime);
   if (t) out.startTime = t;
-  const b = BREAKDOWNS.map((k) => breakdownDuration(k, String(s.breakdownDurations[k]))).find(Boolean);
+  const b = BREAKDOWNS.map((k) => breakdownDuration(k, s.breakdownDurations[k])).find(Boolean);
   if (b) out.breakdowns = b;
   const v = KINDS.map((k) => validateBands(s.vehicleOccupancy[k])?.message).find(Boolean);
   if (v) out.vehicleOccupancy = v;
   const w = validateBands(s.warehouseFill);
   if (w) out.warehouseFill = w.message;
   return out;
+}
+
+/**
+ * Campos propuestos de POST /simulaciones para la configuración ampliada.
+ * Solo incluye lo que el servidor ya acepta (BACKEND_ACCEPTS); una hora vacía
+ * se envía como 00:00.
+ */
+export function proposedRunFields(s: SimSettings, accepts: { startTime: boolean; breakdownDurations: boolean }) {
+  const d = s.breakdownDurations;
+  return {
+    ...(accepts.startTime ? { horaInicio: formatTimeOfDay(parseTimeOfDay(s.startTime) ?? 0) } : {}),
+    ...(accepts.breakdownDurations
+      ? { minutosPorTipoAveria: { "1": breakdownMinutes("T1", d.T1), "2": breakdownMinutes("T2", d.T2), "3": breakdownMinutes("T3", d.T3) } }
+      : {}),
+  };
 }

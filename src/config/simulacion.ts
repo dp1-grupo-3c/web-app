@@ -172,3 +172,11 @@ export const DISTANCE_BANDS_KM = [0, 10, 20, 40] as const;
 
 /** Ventana, en minutos SIMULADOS, de "pedidos entregados en las últimas 4 horas". */
 export const RECENT_DELIVERIES_WINDOW_MIN = 240;
+
+/**
+ * Qué parte de la configuración ampliada acepta ya POST /simulaciones.
+ * TODO(backend): mientras sea false, la UI la recoge y la muestra, pero no se
+ * envía (un campo desconocido podría hacer fallar el inicio) y se avisa que el
+ * avance es parcial. Al implementarse en el servidor, basta con poner true.
+ */
+export const BACKEND_ACCEPTS = { startTime: false, breakdownDurations: false } as const;
