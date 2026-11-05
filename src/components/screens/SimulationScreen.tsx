@@ -79,6 +79,8 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [configTab, setConfigTab] = useState<ConfigTab>("general");
   const [settings, setSettings] = useState(defaultSimSettings);
+  // Respaldo estable (no un objeto nuevo en cada render) para las corridas sin configuración conocida.
+  const [fallbackSettings] = useState(defaultSimSettings);
   // Borrador de la flota: se reinicia cuando el servidor confirma otros valores.
   const [fleetDraft, setFleetDraft] = useState(() => ({ version: fleet.version, draft: toFleetDraft(fleet.value) }));
   if (fleetDraft.version !== fleet.version) setFleetDraft({ version: fleet.version, draft: toFleetDraft(fleet.value) });
@@ -102,7 +104,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const runTrafficLight = own ? savedTrafficLight : trafficLight;
   // Durante la corrida se muestran los valores con los que el usuario la comenzó.
   const runSettings = useRunSettings(own?.id);
-  const shownSettings = own ? runSettings?.settings ?? defaultSimSettings() : settings;
+  const shownSettings = own ? runSettings?.settings ?? fallbackSettings : settings;
   const shownFleet = own ? toFleetDraft(runSettings?.fleet ?? fleet.value) : fleetDraft.draft;
 
   const width = panel === "config" ? PANEL_WIDTH.wide : PANEL_WIDTH.default;
@@ -212,6 +214,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             trafficLight={runTrafficLight}
             layers={layers}
             neutralWarehouses={idle}
+            vehicleBands={shownSettings.vehicleOccupancy}
             selected={selected}
             onSelect={setSelected}
             highlight={highlightFor(orders, orderId)}
