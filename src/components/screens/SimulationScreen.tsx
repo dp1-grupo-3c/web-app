@@ -1,7 +1,7 @@
 "use client";
 
-import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, Truck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, Truck, Warehouse } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { SimHud } from "@/components/hud/SimHud";
 import { GridMap } from "@/components/map/GridMap";
 import { PendingChangeChip } from "@/components/map/PendingChangeChip";
@@ -16,6 +16,7 @@ import { EMPTY_DRAFT, OrdersPanel } from "@/components/panels/OrdersPanel";
 import { SectionsPanel } from "@/components/panels/SectionsPanel";
 import { SimConfigPanel, type ConfigTab } from "@/components/panels/SimConfigPanel";
 import { VehiclesPanel } from "@/components/panels/VehiclesPanel";
+import { WarehousesPanel } from "@/components/panels/WarehousesPanel";
 import { BufferingDialog } from "@/components/simulation/BufferingDialog";
 import { ConfirmCancelDialog } from "@/components/simulation/ConfirmCancelDialog";
 import { OtherRunNotice, RUN_TITLE } from "@/components/simulation/OtherRunNotice";
@@ -37,11 +38,12 @@ import { defaultSimSettings } from "@/lib/sim-settings";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 
-const PANELS = ["menu", "config", "flota", "vehiculos", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
+const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
 const DESCRIPTIONS: Partial<Record<Panel, string>> = {
   config: "Fecha y hora de inicio, flota, semáforos y averías.",
   vehiculos: "Ocupación, carga y avance de cada vehículo.",
+  almacenes: "Stock, ocupación y pedidos de cada almacén.",
   metricas: "Indicadores acumulados de la simulación.",
   pedidos: "Pedidos activos y su destino en el mapa.",
   averias: "Registra averías y revisa las recientes.",
@@ -156,6 +158,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     : [
         { id: "config", label: "Configurar", Icon: Settings },
         { id: "vehiculos", label: "Vehículos", Icon: Truck },
+        { id: "almacenes", label: "Almacenes", Icon: Warehouse },
         { id: "metricas", label: "Métricas", Icon: Activity },
         { id: "pedidos", label: "Pedidos", Icon: Package },
         { id: "averias", label: "Averías", Icon: CircleAlert, badge: breakdowns.filter((b) => b.status === "activa").length },
@@ -174,6 +177,13 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     onTogglePin: () => setPinned(!pinned),
     onBack: shown === "menu" ? undefined : () => setPanel("menu"),
   };
+
+  // Con el listado de almacenes abierto, el almacén elegido se resalta en el mapa.
+  const selectedWarehouse = selected?.type === "warehouse" ? selected.id : null;
+  const emphasis = useMemo(
+    () => (shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]) } : undefined),
+    [shown, selectedWarehouse],
+  );
 
   const panelNode =
     shown === "menu" ? <SectionsPanel items={[...items, ...bottom]} descriptions={DESCRIPTIONS} onPick={setPanel} onClose={close} width={width} />
@@ -201,6 +211,9 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     : shown === "vehiculos" ? (
       <VehiclesPanel scope={scope} settings={shownSettings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} onClose={close} width={width} />
     )
+    : shown === "almacenes" ? (
+      <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} />
+    )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} occupancy={<OccupancyMetrics scope={scope} settings={shownSettings} />} />
     : shown === "pedidos" ? (
       <OrdersPanel audience="simulacion" orders={orders} selectedId={orderId} onSelect={setOrderId} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
@@ -222,6 +235,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             layers={layers}
             neutralWarehouses={idle}
             vehicleBands={shownSettings.vehicleOccupancy}
+            emphasis={emphasis}
             selected={selected}
             onSelect={setSelected}
             highlight={highlightFor(orders, orderId)}
