@@ -36,7 +36,7 @@ import * as playback from "@/lib/data/playback";
 import { emptyTripLog, observe, type TripLog } from "@/lib/data/trips";
 import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO, vistaUnidadToVehicle } from "@/lib/data/adapters";
 import { SIMULATION_DAYS_5D } from "@/lib/constants";
-import { proposedRunFields } from "@/lib/sim-settings";
+import { runStartFields } from "@/lib/sim-settings";
 import { addDays, parseISODate, toISODate } from "@/lib/format";
 import type { FirstLateOrder, FleetCount, FleetSettings, SimSettings, SimulationMode, TrafficLight, VehicleKind } from "@/lib/types";
 
@@ -378,7 +378,7 @@ export async function arrancar(
         ? { ultimoDia: toISODate(addDays(start, SIMULATION_DAYS_5D - 1)) }
         // Escenario abierto: el backend carga mes a mes desde primerDia hasta el colapso.
         : { minutosEntreFotografias: COLLAPSE_SNAPSHOT_MINUTES }),
-      ...(input.settings ? proposedRunFields(input.settings, BACKEND_ACCEPTS) : {}),
+      ...(input.settings ? runStartFields(input.settings, input.startDate, BACKEND_ACCEPTS) : {}),
     });
     if (input.settings) guardarAjustes({ runId: r.id, settings: input.settings, fleet: input.fleet ?? null });
     dispatch({ t: "seleccionar", id: r.id });

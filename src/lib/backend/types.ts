@@ -104,6 +104,9 @@ export interface ResumenCorrida {
   minutoSimulado: number;
   minutosHorizonte: number;
   fechaHoraSimulada: string;
+  /** Arranque elegido y su minuto: minutoSimulado cuenta desde las 00:00 del primer día. */
+  fechaHoraInicio: string;
+  minutoInicial: number;
   milisegundosReales: number;
   pedidosDelEscenario: number;
   unidadesDeLaFlota: number;
@@ -149,13 +152,8 @@ export interface SolicitudSimulacion {
   algoritmo: "HGS" | "ALNS";
   semilla: number;
   generarAverias: boolean;
-  /**
-   * PROPUESTA — TODO(backend): aún no existen. Hora "HH:MM" del primer día y
-   * minutos de inactividad por tipo de avería (1, 2, 3). Solo se envían si
-   * BACKEND_ACCEPTS lo indica (src/config/simulacion.ts).
-   */
-  horaInicio?: string;
-  minutosPorTipoAveria?: Record<"1" | "2" | "3", number>;
+  /** Fecha y hora de arranque al minuto ("2026-09-02T10:30"); su fecha debe ser primerDia. */
+  inicio?: string;
 }
 
 export interface DetalleCorrida {

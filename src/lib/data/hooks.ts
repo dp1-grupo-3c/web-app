@@ -353,7 +353,7 @@ export function useSimulationFeed(mode: SimulationMode): {
     if (!matchesSim(s, mode) || !s.estado.corrida) return { clock: null, summary: null, outcome: null, error: null };
     // La hora sigue a la foto reproducida para coincidir con el mapa.
     const shown = s.reproduccion.instantanea ?? s.estado.instantanea;
-    const clock = shown ? instantaneaToClock(shown) : null;
+    const clock = shown ? instantaneaToClock(shown, s.estado.corrida.minutoInicial) : null;
     const trafficLight = s.parametros ? parametrosToTrafficLight(s.parametros) : DEFAULT_TRAFFIC_LIGHT;
     const summary = s.estado.resultado ? buildSummary(s.estado.corrida, s.estado.resultado, trafficLight, s.firstLateOrder ?? undefined) : null;
     const outcome = summary?.outcome ?? (esFinal(s.estado.corrida.estado) ? outcomePorEstado(s.estado.corrida.estado) : null);

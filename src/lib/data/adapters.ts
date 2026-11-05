@@ -154,10 +154,11 @@ export function instantaneaToMapSnapshot(i: InstantaneaSimulacion | null, almace
   };
 }
 
-export function instantaneaToClock(i: InstantaneaSimulacion): SimulationClock {
+/** `minutoInicial`: minutoSimulado cuenta desde las 00:00 del primer día, no desde el arranque. */
+export function instantaneaToClock(i: InstantaneaSimulacion, minutoInicial = 0): SimulationClock {
   return {
     simTime: i.fechaHoraSimulada,
-    elapsedMinutes: i.minutoSimulado,
+    elapsedMinutes: Math.max(0, i.minutoSimulado - minutoInicial),
     realSeconds: Math.round(i.milisegundosReales / 1000),
     delivered: i.metricas.pedidosEntregados,
   };
