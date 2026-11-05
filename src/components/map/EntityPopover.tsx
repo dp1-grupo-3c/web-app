@@ -68,8 +68,8 @@ function MeterRow({ label, value, max, color, unit }: { label: string; value: nu
   );
 }
 
-export function VehiclePopover({ vehicle: v, anchor, onClose, mapHeight, docked = false }: { vehicle: Vehicle; anchor: Anchor; onClose: () => void; mapHeight: number; docked?: boolean }) {
-  const { color, Icon, meta } = vehicleAppearance(v);
+export function VehiclePopover({ vehicle: v, bands, anchor, onClose, mapHeight, docked = false }: { vehicle: Vehicle; bands: PercentBands; anchor: Anchor; onClose: () => void; mapHeight: number; docked?: boolean }) {
+  const { color, Icon, meta } = vehicleAppearance(v, bands);
   const broken = v.status === "averiado";
   const dest = v.destination;
   const feeding = v.status === "en_alimentacion";

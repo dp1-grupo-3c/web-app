@@ -5,6 +5,7 @@
  * las del backend.
  */
 
+import type { SolicitudMundo, VistaMundo } from "@/lib/backend/types";
 import { addDays, formatDate, formatNumber, parseISODate, toISODate } from "@/lib/format";
 
 export type Check = string | null;
@@ -68,6 +69,75 @@ export function isoFromParts(day: number, month: number, year: number): string |
   const d = new Date(year, month - 1, day);
   if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
   return toISODate(d);
+}
+
+/** Borrador del mapa y los almacenes: los números van como texto del campo. */
+export type WorldDraft = {
+  width: string;
+  height: string;
+  warehouses: { id: number; name: string; central: boolean; x: string; y: string; capacity: string }[];
+};
+
+/** Lado máximo del mapa en km (ParametrosMundo.LADO_MAXIMO_KM). */
+export const WORLD_MAX_SIDE_KM = 500;
+
+export function worldDraft(v: VistaMundo): WorldDraft {
+  return {
+    width: String(v.mapa.largoKm),
+    height: String(v.mapa.anchoKm),
+    warehouses: v.almacenes.map((a) => ({ id: a.id, name: a.nombre, central: a.central, x: String(a.x), y: String(a.y), capacity: a.capacidad == null ? "" : String(a.capacidad) })),
+  };
+}
+
+export function worldRequest(d: WorldDraft): SolicitudMundo {
+  return {
+    mapa: { largoKm: Number(d.width), anchoKm: Number(d.height) },
+    almacenes: d.warehouses.map((w) => ({ id: w.id, x: Number(w.x), y: Number(w.y), ...(w.central ? {} : { capacidad: Number(w.capacity) }) })),
+  };
+}
+
+/** Primer error del mapa y de cada almacén (por id); vacío si todo es coherente. */
+export function validateWorld(d: WorldDraft): { width?: string; height?: string; warehouses?: Record<number, string> } {
+  const out: { width?: string; height?: string; warehouses?: Record<number, string> } = {};
+  const width = integerInRange(d.width, 1, WORLD_MAX_SIDE_KM);
+  const height = integerInRange(d.height, 1, WORLD_MAX_SIDE_KM);
+  if (width) out.width = width;
+  if (height) out.height = height;
+  const warehouses: Record<number, string> = {};
+  const seen = new Set<string>();
+  for (const w of d.warehouses) {
+    const x = integerInRange(w.x, 0, width ? WORLD_MAX_SIDE_KM : Number(d.width));
+    const y = integerInRange(w.y, 0, height ? WORLD_MAX_SIDE_KM : Number(d.height));
+    const capacity = w.central ? null : integerInRange(w.capacity, 1, Number.MAX_SAFE_INTEGER);
+    const place = `${Number(w.x)},${Number(w.y)}`;
+    const problem = x ? `X: ${x}` : y ? `Y: ${y}` : capacity ? `Capacidad: ${capacity}` : seen.has(place) ? "Ya hay otro almacén en esa ubicación." : null;
+    if (problem) warehouses[w.id] = problem;
+    seen.add(place);
+  }
+  if (Object.keys(warehouses).length) out.warehouses = warehouses;
+  return out;
+}
+
+/**
+ * Nodos de un tramo bloqueado, escritos como "12,20 13,20 13,25". Exige al
+ * menos dos, dentro de la retícula, sin repetir y con tramos rectos: la ciudad
+ * no tiene diagonales. Es el mismo criterio con el que valida el servidor.
+ */
+export function blockageNodes(raw: string, grid: { width: number; height: number }): { nodes: { x: number; y: number }[]; error: Check } {
+  const parts = raw.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { nodes: [], error: REQUIRED_MESSAGE };
+  const nodes: { x: number; y: number }[] = [];
+  for (const part of parts) {
+    const m = /^(\d+),(\d+)$/.exec(part);
+    if (!m) return { nodes: [], error: `«${part}» no es un nodo: escribe cada uno como x,y y sepáralos con espacios.` };
+    const node = { x: Number(m[1]), y: Number(m[2]) };
+    if (node.x > grid.width || node.y > grid.height) return { nodes: [], error: `El nodo ${part} está fuera del mapa (x de 0 a ${grid.width}, y de 0 a ${grid.height}).` };
+    const last = nodes.at(-1);
+    if (last && last.x !== node.x && last.y !== node.y) return { nodes: [], error: `El tramo hasta ${part} es diagonal: cada tramo debe ser horizontal o vertical.` };
+    if (nodes.some((n) => n.x === node.x && n.y === node.y)) return { nodes: [], error: `El nodo ${part} está repetido.` };
+    nodes.push(node);
+  }
+  return nodes.length < 2 ? { nodes: [], error: "Indica al menos dos nodos." } : { nodes, error: null };
 }
 
 export const INCOMPLETE_DATE = "Completa la fecha con el formato dd/mm/aaaa.";

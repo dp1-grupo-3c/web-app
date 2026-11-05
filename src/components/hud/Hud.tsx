@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { VEHICLE_META, VEHICLE_ORDER } from "@/components/domain/vehicle";
 import { Alert } from "@/components/ui/feedback";
 import { cn } from "@/lib/cn";
-import { formatNumber } from "@/lib/format";
-import type { ConnectionState, OpsKpis } from "@/lib/types";
+import { formatElapsed, formatNumber, formatTime, formatWeekdayDate } from "@/lib/format";
+import type { ConnectionState, OpsClock, OpsKpis } from "@/lib/types";
 
 /** Barra flotante sobre el mapa, dividida en secciones. */
 export function HudBar({ children, dimmed }: { children: ReactNode; dimmed?: boolean }) {
@@ -73,12 +73,30 @@ export function ConnectionBanner({ state }: { state: ConnectionState }) {
 
 const dash = "—";
 
-/** Resumen de operaciones diarias: conexión, flota, pedidos, entregados y alertas. */
-export function OpsHud({ connection, kpis, onOpenOrders, onOpenBreakdowns }: { connection: ConnectionState; kpis: OpsKpis | null; onOpenOrders: () => void; onOpenBreakdowns: () => void }) {
+/** Fecha y hora de un reloj y su tiempo transcurrido, al minuto. */
+function ClockKpi({ label, date, elapsedLabel, elapsed }: { label: string; date: Date | null; elapsedLabel: string; elapsed: number | null }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs whitespace-nowrap text-n500">{label}</span>
+      <b className="text-[15px] leading-tight whitespace-nowrap text-white tabular-nums">{date ? `${formatWeekdayDate(date)} · ${formatTime(date)}` : dash}</b>
+      <span className="text-xs whitespace-nowrap text-n500 tabular-nums">{elapsedLabel}: <span className="text-white">{elapsed == null ? dash : formatElapsed(elapsed)}</span></span>
+    </div>
+  );
+}
+
+/**
+ * Resumen de operaciones diarias: conexión, relojes, flota, pedidos, entregados
+ * y alertas. Con `compact` (panel abierto) se ocultan la flota y los entregados para dar espacio a los relojes.
+ */
+export function OpsHud({ connection, clock, kpis, compact, onOpenOrders, onOpenBreakdowns }: { connection: ConnectionState; clock: OpsClock | null; kpis: OpsKpis | null; compact: boolean; onOpenOrders: () => void; onOpenBreakdowns: () => void }) {
   return (
     <HudBar>
       <HudSection><ConnectionStatus state={connection} /></HudSection>
       <HudSection>
+        <ClockKpi label="Fecha y hora simulada" date={clock?.simTime ?? null} elapsedLabel="Transcurrido simulado" elapsed={clock?.simElapsedMinutes ?? null} />
+        <ClockKpi label="Fecha y hora actual" date={clock?.now ?? null} elapsedLabel="Transcurrido real" elapsed={clock?.realElapsedMinutes ?? null} />
+      </HudSection>
+      {!compact && <HudSection>
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-n500">Flota activa</span>
           <div className="flex items-center gap-3 text-base font-semibold text-white tabular-nums">
@@ -94,10 +112,10 @@ export function OpsHud({ connection, kpis, onOpenOrders, onOpenBreakdowns }: { c
             })}
           </div>
         </div>
-      </HudSection>
+      </HudSection>}
       <HudSection>
         <Kpi label="Pedidos activos" value={kpis ? formatNumber(kpis.activeOrders) : dash} onClick={onOpenOrders} />
-        <Kpi label="Entregados hoy" value={kpis ? formatNumber(kpis.deliveredToday) : dash} />
+        {!compact && <Kpi label="Entregados hoy" value={kpis ? formatNumber(kpis.deliveredToday) : dash} />}
         <Kpi label="Alertas" labelIcon={<TriangleAlert className="size-3 text-critic" aria-hidden />} value={kpis ? kpis.alerts : dash} onClick={onOpenBreakdowns} />
       </HudSection>
     </HudBar>

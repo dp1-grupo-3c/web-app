@@ -11,11 +11,12 @@ import {
   WAREHOUSE_FILL_DEFAULTS,
 } from "@/config/simulacion";
 import { pad2 } from "./format";
-import type { BreakdownDurations, BreakdownType, PercentBands, SimSettings, VehicleKind } from "./types";
+import type { FichaAveria, SolicitudAtributosAveria } from "./backend/types";
+import type { BreakdownDurations, BreakdownField, PercentBands, SimSettings, VehicleKind } from "./types";
 import { integerInRange, type Check } from "./validation";
 
 const KINDS: VehicleKind[] = ["auto", "moto", "bicicleta"];
-const BREAKDOWNS: BreakdownType[] = ["T1", "T2", "T3"];
+const BREAKDOWNS: BreakdownField[] = ["T1", "T2", "T2Shifts", "T3OnSite", "T3"];
 
 /** Nuevo objeto en cada llamada: nadie comparte (ni muta) el valor por defecto. */
 export function defaultSimSettings(): SimSettings {
@@ -62,14 +63,47 @@ export function validateBands(b: PercentBands): { message: string; keys: (keyof 
 
 // ---- Duración de averías ---------------------------------------------------------
 
-/** Mensaje para la duración del tipo de avería (texto del campo, o número; NaN = vacío). */
-export function breakdownDuration(type: BreakdownType, raw: string | number): Check {
-  const { min, max } = BREAKDOWN_DURATION_LIMITS[type];
+/** Mensaje para un atributo de avería (texto del campo, o número; NaN = vacío). */
+export function breakdownDuration(field: BreakdownField, raw: string | number): Check {
+  const { min, max } = BREAKDOWN_DURATION_LIMITS[field];
   return integerInRange(typeof raw === "number" ? (Number.isNaN(raw) ? "" : String(raw)) : raw, min, max);
 }
 
-/** T1 y T2 en horas, T3 en días → minutos simulados. */
-export const breakdownMinutes = (type: BreakdownType, value: number) => value * (type === "T3" ? 1440 : 60);
+/**
+ * Cuerpos de PUT /parametros/averias, uno por tipo y solo con lo que usa su
+ * regla: T1 vuelve tras su tiempo en el lugar; T2 al cierre de los turnos
+ * indicados; T3 tras sus días de mantenimiento. Las horas viajan en minutos.
+ */
+export const breakdownRequests = (d: BreakdownDurations): SolicitudAtributosAveria[] => [
+  { tipo: 1, minutosEnElLugar: d.T1 * 60 },
+  { tipo: 2, minutosEnElLugar: d.T2 * 60, turnosHastaReincorporacion: d.T2Shifts },
+  { tipo: 3, minutosEnElLugar: d.T3OnSite * 60, diasMantenimiento: d.T3 },
+];
+
+/** Solo los cuerpos que cambian algo: lo que ya rige no se vuelve a escribir. */
+export function changedBreakdownRequests(d: BreakdownDurations, vigentes: FichaAveria[] | undefined) {
+  return breakdownRequests(d).filter((s) => {
+    const a = vigentes?.find((f) => f.tipo === s.tipo)?.atributos;
+    return !a
+      || a.minutosEnElLugar !== s.minutosEnElLugar
+      || (s.turnosHastaReincorporacion !== undefined && a.turnosHastaReincorporacion !== s.turnosHastaReincorporacion)
+      || (s.diasMantenimiento !== undefined && a.diasMantenimiento !== s.diasMantenimiento);
+  });
+}
+
+/** Valores vigentes de GET /parametros en las unidades del formulario; null si faltan tipos. */
+export function breakdownDurationsFrom(averias: FichaAveria[] | undefined): BreakdownDurations | null {
+  const a = (tipo: number) => averias?.find((f) => f.tipo === tipo)?.atributos;
+  const [t1, t2, t3] = [a(1), a(2), a(3)];
+  if (!t1 || !t2 || !t3) return null;
+  return {
+    T1: t1.minutosEnElLugar / 60,
+    T2: t2.minutosEnElLugar / 60,
+    T2Shifts: t2.turnosHastaReincorporacion,
+    T3OnSite: t3.minutosEnElLugar / 60,
+    T3: t3.diasMantenimiento,
+  };
+}
 
 /** Toda la configuración: primer error por sección, o null si es válida. */
 export function validateSimSettings(s: SimSettings): Partial<Record<"startTime" | "breakdowns" | "vehicleOccupancy" | "warehouseFill", string>> {
@@ -86,16 +120,9 @@ export function validateSimSettings(s: SimSettings): Partial<Record<"startTime" 
 }
 
 /**
- * Campos propuestos de POST /simulaciones para la configuración ampliada.
- * Solo incluye lo que el servidor ya acepta (BACKEND_ACCEPTS); una hora vacía
- * se envía como 00:00.
+ * Campo `inicio` de POST /simulaciones: fecha y hora al minuto, sin segundos
+ * (el servidor los rechaza). Una hora vacía se envía como 00:00.
  */
-export function proposedRunFields(s: SimSettings, accepts: { startTime: boolean; breakdownDurations: boolean }) {
-  const d = s.breakdownDurations;
-  return {
-    ...(accepts.startTime ? { horaInicio: formatTimeOfDay(parseTimeOfDay(s.startTime) ?? 0) } : {}),
-    ...(accepts.breakdownDurations
-      ? { minutosPorTipoAveria: { "1": breakdownMinutes("T1", d.T1), "2": breakdownMinutes("T2", d.T2), "3": breakdownMinutes("T3", d.T3) } }
-      : {}),
-  };
+export function runStartFields(s: SimSettings, startDate: string, accepts: { startTime: boolean }) {
+  return accepts.startTime ? { inicio: `${startDate}T${formatTimeOfDay(parseTimeOfDay(s.startTime) ?? 0)}` } : {};
 }

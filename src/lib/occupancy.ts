@@ -29,6 +29,11 @@ export function occupancyPercent(used: number | undefined, capacity: number | un
 /** Paquetes a bordo / capacidad del vehículo, en %. */
 export const vehicleOccupancy = (v: { load: number; capacity: number }) => occupancyPercent(v.load, v.capacity);
 
+/** Semáforo de un vehículo: "empty" sin carga a bordo; null si no se conoce su capacidad. */
+export function vehicleTone(v: { load: number; capacity: number }, bands: PercentBands): StatusTone | "empty" | null {
+  return v.load <= 0 ? "empty" : percentTone(vehicleOccupancy(v), bands, "lowIsGreen");
+}
+
 /** Stock actual / capacidad del almacén, en %. El central (ilimitado) no tiene ocupación: NaN. */
 export const warehouseOccupancy = (w: { kind: string; stock?: number; capacity?: number }) =>
   w.kind === "principal" ? NaN : occupancyPercent(w.stock, w.capacity);

@@ -33,7 +33,7 @@ function modules() {
   const documento = load(resolve(root, "src/lib/documento.ts"));
   const clientes = load(resolve(root, "src/lib/data/clientes.ts"));
   operacion.ESPERA_COMANDO.intervaloMs = 1;
-  return { api, store, operacion, actions, adapters, documento, clientes };
+  return { api, store, operacion, actions, adapters, documento, clientes, load };
 }
 
 const input = {
@@ -367,17 +367,124 @@ test("un conflicto al registrar se informa con el mensaje del servidor", async (
   assert.equal(clientes.getSnapshot().clientes.length, 0);
 });
 
-test("iniciar con configuración ampliada: no envía campos que el servidor aún no acepta y la recuerda por corrida", async () => {
+test("iniciar con configuración ampliada: envía fecha y hora en `inicio` y la recuerda por corrida", async () => {
   const { api, store, actions } = modules();
   let body = null;
   api.cambiarSemaforo = async () => ({});
   api.arrancarCorrida = async (b) => { body = b; return { id: "c-1", estado: "EN_CURSO", tipo: "SIMULACION_5D" }; };
-  const settings = { startTime: "08:30", breakdownDurations: { T1: 2, T2: 4, T3: 2 }, vehicleOccupancy: {}, warehouseFill: { low: 25, high: 50 } };
+  const averias = [];
+  api.cambiarAverias = async (s) => { averias.push(s); return {}; };
+  const settings = { startTime: "08:30", breakdownDurations: { T1: 2, T2: 4, T2Shifts: 1, T3OnSite: 4, T3: 2 }, vehicleOccupancy: {}, warehouseFill: { low: 25, high: 50 } };
   const fleet = { auto: { quantity: 10, speed: 40 }, moto: { quantity: 15, speed: 25 }, bicicleta: { quantity: 12, speed: 12 } };
   assert.equal((await actions.startSimulation({ mode: "5d", ...input, settings, fleet })).ok, true);
-  assert.equal("horaInicio" in body, false);
-  assert.equal("minutosPorTipoAveria" in body, false);
+  assert.equal(averias.length, 3);
+  assert.equal(body.inicio, "2026-09-01T08:30");
+  assert.equal(body.primerDia, "2026-09-01");
   assert.deepEqual(store.getSnapshot().ajustesCorrida, { runId: "c-1", settings, fleet });
+});
+
+test("si el servidor rechaza las averías, la simulación no se inicia", async () => {
+  const { api, actions } = modules();
+  const calls = fakeApi(api);
+  api.cambiarAverias = async () => { throw new api.ErrorServicio(400, "minutosEnElLugar no puede pasar de 480"); };
+  const settings = { startTime: "", breakdownDurations: { T1: 2, T2: 9, T2Shifts: 1, T3OnSite: 4, T3: 2 }, vehicleOccupancy: {}, warehouseFill: { low: 25, high: 50 } };
+  assert.deepEqual(await actions.startSimulation({ mode: "5d", ...input, settings }), { ok: false, message: "minutosEnElLugar no puede pasar de 480" });
+  assert.equal(calls.start, 0);
+});
+
+function modulosDatos() {
+  const m = modules();
+  return { ...m, datos: m.load(resolve(root, "src/lib/data/datos.ts")) };
+}
+
+test("mundo: al leerlo o guardarlo actualiza la retícula y los almacenes en reposo", async () => {
+  const { api, load, store, operacion } = modules();
+  const mundo = load(resolve(root, "src/lib/data/mundo.ts"));
+  const { GRID } = load(resolve(root, "src/lib/constants.ts"));
+  const vista = (largoKm, anchoKm) => ({ version: 1, mapa: { largoKm, anchoKm }, almacenes: [], ejecucionActiva: null });
+  api.obtenerMundo = async () => vista(90, 60);
+  await mundo.cargarMundo();
+  assert.deepEqual([GRID.width, GRID.height], [90, 60]);
+  api.cambiarMundo = async () => vista(100, 80);
+  api.obtenerAlmacenes = async () => [{ id: 1, x: 80, y: 55 }];
+  assert.equal((await mundo.guardarMundo({ mapa: { largoKm: 100, anchoKm: 80 }, almacenes: [] })).ok, true);
+  assert.deepEqual([GRID.width, GRID.height], [100, 80]);
+  assert.equal(store.getSnapshot().almacenes[0].x, 80);
+  assert.equal(operacion.getSnapshot().almacenes[0].x, 80);
+  GRID.width = 70;
+  GRID.height = 50;
+});
+
+test("mundo: con una corrida activa muestra el rechazo del servidor y no cambia la retícula", async () => {
+  const { api, load } = modules();
+  const mundo = load(resolve(root, "src/lib/data/mundo.ts"));
+  const { GRID } = load(resolve(root, "src/lib/constants.ts"));
+  api.cambiarMundo = async () => { throw new api.ErrorServicio(409, "Ya hay una ejecucion activa de simulacion"); };
+  assert.deepEqual(await mundo.guardarMundo({ mapa: { largoKm: 10, anchoKm: 10 }, almacenes: [] }), { ok: false, message: "Ya hay una ejecucion activa de simulacion" });
+  assert.deepEqual([GRID.width, GRID.height], [70, 50]);
+});
+
+test("datos: informa los registros validados y si reemplazó un archivo", async () => {
+  const { api, datos } = modulosDatos();
+  let mes;
+  api.subirBloqueos = async (_, m) => { mes = m; return { ruta: "bloqueos/bloqueo.2609.txt", registros: 12, reemplazado: true }; };
+  const r = await datos.subirArchivo("bloqueos", {}, "2026-09");
+  assert.equal(r.ok, true);
+  assert.equal(mes, "2026-09");
+  assert.equal(datos.resumenGuardado(r.data), "12 registros validados en bloqueos/bloqueo.2609.txt (reemplazó al archivo anterior).");
+  assert.equal(datos.resumenGuardado({ ruta: "flota.txt", registros: 1, reemplazado: false }), "1 registro validado en flota.txt.");
+});
+
+test("datos: muestra el error del servidor y al subir la flota relee los parámetros", async () => {
+  const { api, datos, store } = modulosDatos();
+  api.subirMantenimiento = async () => { throw new api.ErrorServicio(400, "El plan de mantenimiento debe llamarse mant.preventivo.m1.m2"); };
+  assert.deepEqual(await datos.subirArchivo("mantenimiento", {}), { ok: false, message: "El plan de mantenimiento debe llamarse mant.preventivo.m1.m2" });
+  api.subirFlota = async () => ({ ruta: "flota.txt", registros: 3, reemplazado: true });
+  api.obtenerParametros = async () => ({ version: 7 });
+  assert.equal((await datos.subirArchivo("flota", {})).ok, true);
+  assert.equal(store.getSnapshot().parametros.version, 7);
+});
+
+test("datos: un bloqueo manual informa cada archivo o el error del servidor", async () => {
+  const { api, datos } = modulosDatos();
+  let cuerpo;
+  api.registrarBloqueo = async (s) => { cuerpo = s; return [{ ruta: "bloqueos/bloqueo.2609.txt" }, { ruta: "bloqueos/bloqueo.2610.txt" }]; };
+  const s = { nodos: [{ x: 1, y: 1 }, { x: 2, y: 1 }], inicio: "2026-09-30T22:00", fin: "2026-10-01T02:00" };
+  const r = await datos.registrarBloqueo(s);
+  assert.deepEqual(cuerpo, s);
+  assert.equal(datos.resumenBloqueo(r.data), "Bloqueo guardado en bloqueos/bloqueo.2609.txt y bloqueos/bloqueo.2610.txt. Rige desde la siguiente corrida.");
+  api.registrarBloqueo = async () => { throw new api.ErrorServicio(400, "el tramo es diagonal"); };
+  assert.deepEqual(await datos.registrarBloqueo(s), { ok: false, message: "el tramo es diagonal" });
+});
+
+test("datos: el mes es opcional y debe ser AAAA-MM", () => {
+  const { datos } = modulosDatos();
+  assert.equal(datos.mesValido(""), true);
+  assert.equal(datos.mesValido("2026-09"), true);
+  assert.equal(datos.mesValido("2026-13"), false);
+  assert.equal(datos.mesValido("09/2026"), false);
+});
+
+test("relojes de la operación: simulado y real por separado, en la zona de la operación y al minuto", () => {
+  const { adapters } = modules();
+  const clock = adapters.vistaOperacionToClock({
+    zonaHoraria: "America/Lima",
+    horaServidor: "2026-11-05T21:40:30Z",
+    fechaHoraOperativa: "2026-11-05T16:35:59",
+    fechaHoraInicio: "2026-11-05T14:00:10",
+    minutosTranscurridos: 160,
+  });
+  assert.equal(clock.simElapsedMinutes, 155);
+  assert.equal(clock.realElapsedMinutes, 160);
+  assert.deepEqual([clock.now.getFullYear(), clock.now.getMonth(), clock.now.getDate(), clock.now.getHours(), clock.now.getMinutes()], [2026, 10, 5, 16, 40]);
+  assert.deepEqual([clock.simTime.getHours(), clock.simTime.getMinutes()], [16, 35]);
+});
+
+test("el reloj mide lo transcurrido desde el arranque, no desde las 00:00", () => {
+  const { adapters } = modules();
+  const foto = { fechaHoraSimulada: "2026-09-02T11:00:00", minutoSimulado: 660, milisegundosReales: 2000, metricas: { pedidosEntregados: 0 } };
+  assert.equal(adapters.instantaneaToClock(foto, 630).elapsedMinutes, 30);
+  assert.equal(adapters.instantaneaToClock(foto).elapsedMinutes, 660);
 });
 
 test("iniciar sin configuración ampliada conserva el comportamiento anterior", async () => {
