@@ -1,19 +1,23 @@
 "use client";
 
-import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, Truck } from "lucide-react";
-import { useState } from "react";
+import { Activity, CircleAlert, CircleHelp, Layers, Package, Settings, Truck, Warehouse } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { SimHud } from "@/components/hud/SimHud";
 import { GridMap } from "@/components/map/GridMap";
 import { PendingChangeChip } from "@/components/map/PendingChangeChip";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
-import { FleetPanel } from "@/components/panels/FleetPanel";
+import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft } from "@/components/panels/FleetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
-import { EMPTY_DRAFT, OrdersPanel } from "@/components/panels/OrdersPanel";
+import { OccupancyMetrics } from "@/components/panels/OccupancyMetrics";
+import { EMPTY_DRAFT, type OrdersHighlight } from "@/components/panels/OrdersPanel";
+import { SimOrdersPanel } from "@/components/panels/SimOrdersPanel";
 import { SectionsPanel } from "@/components/panels/SectionsPanel";
-import { SimConfigPanel } from "@/components/panels/SimConfigPanel";
+import { SimConfigPanel, type ConfigTab } from "@/components/panels/SimConfigPanel";
+import { VehiclesPanel } from "@/components/panels/VehiclesPanel";
+import { WarehousesPanel } from "@/components/panels/WarehousesPanel";
 import { BufferingDialog } from "@/components/simulation/BufferingDialog";
 import { ConfirmCancelDialog } from "@/components/simulation/ConfirmCancelDialog";
 import { OtherRunNotice, RUN_TITLE } from "@/components/simulation/OtherRunNotice";
@@ -26,18 +30,21 @@ import { usePanelParam } from "@/components/workspace/usePanelParam";
 import { Workspace } from "@/components/workspace/Workspace";
 import { DEFAULT_TRAFFIC_LIGHT, PANEL_WIDTH } from "@/lib/constants";
 import { esFinal } from "@/lib/backend/estado";
-import { cancelSimulation, forgetSimulation, startSimulation } from "@/lib/data/actions";
+import { DEFAULT_START_TIME } from "@/config/simulacion";
+import { cancelSimulation, forgetSimulation, saveFleet, startSimulation } from "@/lib/data/actions";
 import { TIPO_POR_MODO } from "@/lib/data/adapters";
-import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
+import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useRunSettings, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
+import { defaultSimSettings } from "@/lib/sim-settings";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 
-const PANELS = ["menu", "config", "flota", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
+const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
 const DESCRIPTIONS: Partial<Record<Panel, string>> = {
-  config: "Fecha de inicio y rangos del semáforo.",
-  flota: "Cantidad de vehículos y velocidad por tipo.",
+  config: "Fecha y hora de inicio, flota, semáforos y averías.",
+  vehiculos: "Ocupación, carga y avance de cada vehículo.",
+  almacenes: "Stock, ocupación y pedidos de cada almacén.",
   metricas: "Indicadores acumulados de la simulación.",
   pedidos: "Pedidos activos y su destino en el mapa.",
   averias: "Registra averías y revisa las recientes.",
@@ -76,6 +83,17 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const [selected, setSelected] = useState<EntityRef | null>(null);
   const [layers, setLayers] = useState(ALL_LAYERS);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [configTab, setConfigTab] = useState<ConfigTab>("general");
+  const [settings, setSettings] = useState(defaultSimSettings);
+  // Respaldo estable (no un objeto nuevo en cada render) para las corridas sin configuración conocida.
+  const [fallbackSettings] = useState(defaultSimSettings);
+  // Borrador de la flota: se reinicia cuando el servidor confirma otros valores.
+  const [fleetDraft, setFleetDraft] = useState(() => ({ version: fleet.version, draft: toFleetDraft(fleet.value) }));
+  if (fleetDraft.version !== fleet.version) setFleetDraft({ version: fleet.version, draft: toFleetDraft(fleet.value) });
+
+  // La flota ahora es una pestaña de la configuración: ?panel=flota sigue funcionando.
+  if (panel === "flota" && configTab !== "flota") setConfigTab("flota");
+  useEffect(() => { if (panel === "flota") setPanel("config"); }, [panel, setPanel]);
 
   // El backend ejecuta una sola corrida a la vez: la fase sale de esa corrida,
   // no de si se inició desde esta pantalla, para retomarla al recargar,
@@ -90,13 +108,28 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const effectivePhase: Phase = !own ? "idle" : ended ? "ended" : "running";
   const runStartDate = own?.primerDia ?? startDate;
   const runTrafficLight = own ? savedTrafficLight : trafficLight;
+  // Durante la corrida se muestran los valores con los que el usuario la comenzó.
+  const runSettings = useRunSettings(own?.id);
+  const shownSettings = own ? runSettings?.settings ?? fallbackSettings : settings;
+  const shownFleet = own ? toFleetDraft(runSettings?.fleet ?? fleet.value) : fleetDraft.draft;
 
   const width = panel === "config" ? PANEL_WIDTH.wide : PANEL_WIDTH.default;
   const close = () => setPanel(null);
 
   const start = async () => {
     setStarting(true);
-    const res = await startSimulation({ mode, startDate, trafficLight });
+    // La flota se aplica justo antes de comenzar; si el servidor la rechaza, no se inicia.
+    const chosenFleet = parseFleetDraft(fleetDraft.draft);
+    if (!sameFleet(chosenFleet, fleet.value)) {
+      const saved = await saveFleet(chosenFleet, fleet.value);
+      if (!saved.ok) {
+        setStarting(false);
+        setConfigTab("flota");
+        return toast.error(saved.message);
+      }
+    }
+    const chosen = { ...settings, startTime: settings.startTime.trim() || DEFAULT_START_TIME };
+    const res = await startSimulation({ mode, startDate, trafficLight, settings: chosen, fleet: chosenFleet });
     setStarting(false);
     if (!res.ok) return toast.error(res.message);
     setPanel(null);
@@ -122,10 +155,11 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
 
   const idle = effectivePhase === "idle";
   const items: RailItem<Panel>[] = idle
-    ? [{ id: "config", label: "Configurar", Icon: Settings }, { id: "flota", label: "Flota", Icon: Truck }]
+    ? [{ id: "config", label: "Configurar", Icon: Settings }]
     : [
         { id: "config", label: "Configurar", Icon: Settings },
-        { id: "flota", label: "Flota", Icon: Truck },
+        { id: "vehiculos", label: "Vehículos", Icon: Truck },
+        { id: "almacenes", label: "Almacenes", Icon: Warehouse },
         { id: "metricas", label: "Métricas", Icon: Activity },
         { id: "pedidos", label: "Pedidos", Icon: Package },
         { id: "averias", label: "Averías", Icon: CircleAlert, badge: breakdowns.filter((b) => b.status === "activa").length },
@@ -135,7 +169,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     { id: "leyenda", label: "Leyenda", Icon: Layers },
   ];
   // Durante la configuración solo se ofrecen los paneles disponibles.
-  const requested = idle && panel && !["menu", "config", "flota", "ayuda", "leyenda"].includes(panel) ? null : panel;
+  const requested = panel === "flota" ? "config" : idle && panel && !["menu", "config", "ayuda", "leyenda"].includes(panel) ? null : panel;
   // Fijado, el panel no se cierra: sin una sección elegida muestra el menú de secciones.
   const shown = requested ?? (pinned ? "menu" : null);
   const section = shown === "menu" ? null : shown;
@@ -145,15 +179,59 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     onBack: shown === "menu" ? undefined : () => setPanel("menu"),
   };
 
+  // Con el listado de almacenes abierto, el almacén elegido se resalta en el mapa.
+  const selectedWarehouse = selected?.type === "warehouse" ? selected.id : null;
+  // Con el listado de pedidos abierto: el pedido elegido resalta los vehículos
+  // que lo entregan, y el vehículo elegido en el mapa resalta sus pedidos.
+  const selectedVehicle = selected?.type === "vehicle" ? selected.id : null;
+  const orderCarriers = useMemo(() => {
+    if (shown !== "pedidos" || !orderId) return null;
+    return new Set(snapshot.vehicles.filter((v) => v.orders.some((o) => o.orderId === orderId)).map((v) => v.id));
+  }, [shown, orderId, snapshot.vehicles]);
+  const ordersHighlight = useMemo((): OrdersHighlight | null => {
+    if (shown !== "pedidos" || !selectedVehicle) return null;
+    const v = snapshot.vehicles.find((x) => x.id === selectedVehicle);
+    return v ? { vehicle: v.plate, ids: new Set(v.orders.map((o) => o.orderId)) } : null;
+  }, [shown, selectedVehicle, snapshot.vehicles]);
+  const emphasis = useMemo(
+    () => (shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]) }
+      : orderCarriers?.size ? { vehicles: orderCarriers }
+      : undefined),
+    [shown, selectedWarehouse, orderCarriers],
+  );
+
   const panelNode =
     shown === "menu" ? <SectionsPanel items={[...items, ...bottom]} descriptions={DESCRIPTIONS} onPick={setPanel} onClose={close} width={width} />
     : shown === "config" ? (
-      <SimConfigPanel mode={mode} readOnly={!idle || !!other || syncing} startDate={runStartDate} onStartDate={setStartDate} trafficLight={runTrafficLight} onTrafficLight={setTrafficLight} starting={starting} onStart={start} onClose={close} width={width} />
+      <SimConfigPanel
+        mode={mode}
+        readOnly={!idle || !!other || syncing}
+        tab={configTab}
+        onTab={setConfigTab}
+        startDate={runStartDate}
+        onStartDate={setStartDate}
+        trafficLight={runTrafficLight}
+        onTrafficLight={setTrafficLight}
+        settings={shownSettings}
+        onSettings={setSettings}
+        fleet={shownFleet}
+        onFleet={(draft) => setFleetDraft((f) => ({ ...f, draft }))}
+        fleetErrors={fleetDraftErrors(shownFleet)}
+        starting={starting}
+        onStart={start}
+        onClose={close}
+        width={width}
+      />
     )
-    : shown === "flota" ? <FleetPanel key={fleet.version} saved={fleet.value} onClose={close} width={width} />
-    : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} />
+    : shown === "vehiculos" ? (
+      <VehiclesPanel scope={scope} settings={shownSettings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} onClose={close} width={width} />
+    )
+    : shown === "almacenes" ? (
+      <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} />
+    )
+    : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} occupancy={<OccupancyMetrics scope={scope} settings={shownSettings} />} />
     : shown === "pedidos" ? (
-      <OrdersPanel audience="simulacion" orders={orders} selectedId={orderId} onSelect={setOrderId} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
+      <SimOrdersPanel scope={scope} orders={orders} selectedId={orderId} onSelect={setOrderId} highlight={ordersHighlight} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
     )
     : shown === "averias" ? <BreakdownsPanel plates={plates} recent={breakdowns} onClose={close} width={width} />
     : shown === "ayuda" ? <HelpPanel audience="simulacion" onClose={close} width={width} />
@@ -171,6 +249,9 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             trafficLight={runTrafficLight}
             layers={layers}
             neutralWarehouses={idle}
+            vehicleBands={shownSettings.vehicleOccupancy}
+            emphasis={emphasis}
+            warehouseFillBands={shownSettings.warehouseFill}
             selected={selected}
             onSelect={setSelected}
             highlight={highlightFor(orders, orderId)}

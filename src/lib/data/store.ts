@@ -16,6 +16,7 @@ import { abrirCanal, type EstadoCanal } from "@/lib/backend/canal";
 import { esFinal, inicial, reducir, type Accion, type EstadoSim } from "@/lib/backend/estado";
 import type { InstantaneaSimulacion, RespuestaAveria, RespuestaSalud, VistaAlmacen, VistaParametros } from "@/lib/backend/types";
 import {
+  BACKEND_ACCEPTS,
   BUFFER_FILL_TIMEOUT_MS,
   BUFFER_SIZE,
   BURST_GAP_MS,
@@ -28,13 +29,16 @@ import {
   PLAYBACK_CONTROL,
   PLAYBACK_RATE_WINDOW,
   PLAYBACK_TICK_MS,
+  RECENT_DELIVERIES_WINDOW_MIN,
   type BufferVariant,
 } from "@/config/simulacion";
 import * as playback from "@/lib/data/playback";
-import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO } from "@/lib/data/adapters";
+import { emptyTripLog, observe, type TripLog } from "@/lib/data/trips";
+import { filaPedidoToFirstLate, fleetToFlotaBody, TIPO_POR_KIND, TIPO_POR_MODO, vistaUnidadToVehicle } from "@/lib/data/adapters";
 import { SIMULATION_DAYS_5D } from "@/lib/constants";
+import { proposedRunFields } from "@/lib/sim-settings";
 import { addDays, parseISODate, toISODate } from "@/lib/format";
-import type { FirstLateOrder, FleetCount, FleetSettings, SimulationMode, TrafficLight, VehicleKind } from "@/lib/types";
+import type { FirstLateOrder, FleetCount, FleetSettings, SimSettings, SimulationMode, TrafficLight, VehicleKind } from "@/lib/types";
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; message: string };
 
@@ -80,7 +84,13 @@ export interface Store {
   cantidadesFlota: FleetCount | null;
   reproduccion: Reproduccion;
   cambiosPendientes: CambioPendiente[];
+  /** Origen, salida y entregas estimados a partir de la foto reproducida (ver trips.ts). */
+  recorridos: TripLog;
+  /** Configuración que eligió el usuario al iniciar la corrida (se muestra en solo lectura). */
+  ajustesCorrida: AjustesCorrida | null;
 }
+
+export type AjustesCorrida = { runId: string; settings: SimSettings; fleet: FleetSettings | null };
 
 const initialStore: Store = {
   estado: inicial,
@@ -94,6 +104,8 @@ const initialStore: Store = {
   cantidadesFlota: null,
   reproduccion: { instantanea: null, duracionMs: 0, fase: "inactiva", enCola: 0, objetivo: BUFFER_SIZE[DEFAULT_BUFFER_VARIANT], variante: DEFAULT_BUFFER_VARIANT, retrasoMs: 0 },
   cambiosPendientes: [],
+  recorridos: emptyTripLog(),
+  ajustesCorrida: null,
 };
 
 let state: Store = initialStore;
@@ -178,8 +190,20 @@ function publicarReproduccion() {
     variante,
     retrasoMs: playback.expectedLagMs(pb, cfg),
   };
+  // El registro de recorridos sigue a la foto que se muestra (no a la última recibida).
+  const recorridos = next.instantanea && next.instantanea !== r.instantanea ? registrarRecorridos(next.instantanea) : state.recorridos;
   if (next.instantanea === r.instantanea && next.fase === r.fase && next.enCola === r.enCola && next.objetivo === r.objetivo && next.variante === r.variante && Math.round(next.retrasoMs / 1000) === Math.round(r.retrasoMs / 1000)) return;
-  set({ reproduccion: next });
+  set({ reproduccion: next, recorridos });
+}
+
+function registrarRecorridos(foto: InstantaneaSimulacion): TripLog {
+  return observe(state.recorridos, {
+    runId: state.estado.idActual,
+    minute: foto.minutoSimulado,
+    vehicles: foto.unidades.map(vistaUnidadToVehicle),
+    warehouses: foto.almacenes.map((a) => ({ id: String(a.id), position: { x: a.x, y: a.y } })),
+    windowMin: RECENT_DELIVERIES_WINDOW_MIN,
+  });
 }
 
 /**
@@ -244,7 +268,7 @@ function fetchFirstLateIfNeeded(estado: EstadoSim) {
 export function olvidarCorrida() {
   olvidada = state.estado.idActual;
   reiniciarReproduccion(null);
-  set({ estado: inicial, averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null, cambiosPendientes: [] });
+  set({ estado: inicial, averiasSesion: [], firstLateOrder: null, firstLateOrderFor: null, cambiosPendientes: [], recorridos: emptyTripLog() });
   publicarReproduccion();
 }
 
@@ -275,6 +299,7 @@ let canalCtrl: ReturnType<typeof abrirCanal> | null = null;
 export function ensureStarted() {
   if (started || typeof window === "undefined") return;
   started = true;
+  set({ ajustesCorrida: leerAjustes() });
 
   sincronizarActiva();
   setInterval(sincronizarActiva, 5000);
@@ -310,7 +335,32 @@ export const reintentarCanal = () => canalCtrl?.reintentar();
 
 // ---- Acciones --------------------------------------------------------------
 
-export async function arrancar(mode: SimulationMode, input: { startDate: string; trafficLight: TrafficLight }): Promise<Result<{ id: string }>> {
+// La configuración ampliada solo vive en el frontend (el backend aún no la
+// guarda): se recuerda por pestaña para mostrarla tras recargar la página.
+const CLAVE_AJUSTES = "kindbox.ajustesCorrida";
+
+function leerAjustes(): AjustesCorrida | null {
+  try {
+    const raw = window.sessionStorage.getItem(CLAVE_AJUSTES);
+    return raw ? (JSON.parse(raw) as AjustesCorrida) : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarAjustes(a: AjustesCorrida) {
+  set({ ajustesCorrida: a });
+  try {
+    window.sessionStorage.setItem(CLAVE_AJUSTES, JSON.stringify(a));
+  } catch {
+    // sin almacenamiento: se conserva solo en memoria
+  }
+}
+
+export async function arrancar(
+  mode: SimulationMode,
+  input: { startDate: string; trafficLight: TrafficLight; settings?: SimSettings; fleet?: FleetSettings },
+): Promise<Result<{ id: string }>> {
   ensureStarted();
   if (state.estado.idActual && !esFinal(state.estado.corrida?.estado)) {
     return { ok: false, message: "Ya hay una corrida activa. Para iniciar otra, cancélala explícitamente desde su pantalla." };
@@ -328,7 +378,9 @@ export async function arrancar(mode: SimulationMode, input: { startDate: string;
         ? { ultimoDia: toISODate(addDays(start, SIMULATION_DAYS_5D - 1)) }
         // Escenario abierto: el backend carga mes a mes desde primerDia hasta el colapso.
         : { minutosEntreFotografias: COLLAPSE_SNAPSHOT_MINUTES }),
+      ...(input.settings ? proposedRunFields(input.settings, BACKEND_ACCEPTS) : {}),
     });
+    if (input.settings) guardarAjustes({ runId: r.id, settings: input.settings, fleet: input.fleet ?? null });
     dispatch({ t: "seleccionar", id: r.id });
     dispatch({ t: "ws", m: { tipo: "corrida", corrida: r.id, carga: r } });
     return { ok: true, data: { id: r.id } };

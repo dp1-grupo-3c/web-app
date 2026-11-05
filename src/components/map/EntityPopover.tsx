@@ -5,7 +5,7 @@ import { IconButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { TONE_COLOR, TONE_LABEL, breakdownInfo } from "@/lib/constants";
 import { formatCoord } from "@/lib/format";
-import type { Blockage, TrafficLight, Vehicle, VehicleOrderLoad, Warehouse } from "@/lib/types";
+import type { Blockage, PercentBands, TrafficLight, Vehicle, VehicleOrderLoad, Warehouse } from "@/lib/types";
 import { PINK, VEHICLE_STATUS_LABEL, vehicleAppearance, warehouseAppearance } from "./layers";
 
 export const POPOVER_WIDTH = 320;
@@ -157,8 +157,8 @@ function VehicleOrdersTable({ orders }: { orders: VehicleOrderLoad[] }) {
   );
 }
 
-export function WarehousePopover({ warehouse: w, trafficLight, neutral, anchor, onClose, mapHeight, vehicles = [], onSelectVehicle }: { warehouse: Warehouse; trafficLight: TrafficLight; neutral: boolean; anchor: Anchor; onClose: () => void; mapHeight: number; vehicles?: Vehicle[]; onSelectVehicle?: (id: string) => void }) {
-  const { color, tone } = warehouseAppearance(w, trafficLight, neutral);
+export function WarehousePopover({ warehouse: w, trafficLight, fillBands, neutral, anchor, onClose, mapHeight, vehicles = [], onSelectVehicle }: { warehouse: Warehouse; trafficLight: TrafficLight; fillBands?: PercentBands; neutral: boolean; anchor: Anchor; onClose: () => void; mapHeight: number; vehicles?: Vehicle[]; onSelectVehicle?: (id: string) => void }) {
+  const { color, tone } = warehouseAppearance(w, trafficLight, neutral, fillBands);
   const principal = w.kind === "principal";
   return (
     <Shell

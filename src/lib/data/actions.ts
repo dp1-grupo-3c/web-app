@@ -12,7 +12,7 @@
 import * as clientes from "@/lib/data/clientes";
 import * as operacion from "@/lib/data/operacion";
 import * as store from "@/lib/data/store";
-import type { BreakdownType, Client, Coord, FleetSettings, PriorityCode, SimulationMode, TrafficLight } from "@/lib/types";
+import type { BreakdownType, Client, Coord, FleetSettings, PriorityCode, SimSettings, SimulationMode, TrafficLight } from "@/lib/types";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T } | { ok: false; message: string };
 
@@ -28,7 +28,8 @@ export type NewOrderInput = {
 
 export type NewBreakdownInput = { plate: string; type: BreakdownType };
 
-export type StartSimulationInput = { mode: SimulationMode; startDate: string; trafficLight: TrafficLight };
+/** `settings` y `fleet` son opcionales: sin ellos se inicia como antes. */
+export type StartSimulationInput = { mode: SimulationMode; startDate: string; trafficLight: TrafficLight; settings?: SimSettings; fleet?: FleetSettings };
 
 const BREAKDOWN_TIPO: Record<BreakdownType, 1 | 2 | 3> = { T1: 1, T2: 2, T3: 3 };
 
@@ -41,7 +42,7 @@ export const uploadBreakdownFile = (file: File) => store.cargarAveriasMasivo(fil
 /** Cantidad y velocidad por tipo de vehículo; la cantidad depende de un endpoint pendiente (ver store.guardarFlota). */
 export const saveFleet = (next: FleetSettings, previous: FleetSettings) => store.guardarFlota(next, previous);
 
-export const startSimulation = (input: StartSimulationInput) => store.arrancar(input.mode, { startDate: input.startDate, trafficLight: input.trafficLight });
+export const startSimulation = ({ mode, ...input }: StartSimulationInput) => store.arrancar(mode, input);
 
 export const cancelSimulation = (expectedId?: string) => store.cancelar(expectedId);
 
