@@ -183,10 +183,11 @@ export function SimConfigPanel(p: Props) {
             </p>
           </PanelSection>
           <PanelSection title="Llenado de almacenes (%)" icon={<WarehouseIcon className="size-[18px]" aria-hidden />}>
-            <p className="text-xs leading-snug text-n500">Stock actual sobre la capacidad de los almacenes intermedios. Se usa en el llenado global y en el listado de almacenes.</p>
+            <p className="text-xs leading-snug text-n500">Stock actual sobre la capacidad de los almacenes intermedios. Colorea los almacenes en el mapa, su ficha, el listado de almacenes y el llenado global.</p>
             <PercentBandsEditor id="fill" label="Almacenes intermedios" value={settings.warehouseFill} onChange={(b) => set("warehouseFill", b)} direction="highIsGreen" readOnly={readOnly} />
           </PanelSection>
           <TrafficLightEditor value={p.trafficLight} onChange={p.onTrafficLight} readOnly={readOnly} />
+          <p className="-mt-2 text-xs leading-snug text-n600">Este semáforo en paquetes se envía al servidor (activaciones del reporte de la simulación); en el mapa se usa el llenado en %.</p>
         </>
       )}
 

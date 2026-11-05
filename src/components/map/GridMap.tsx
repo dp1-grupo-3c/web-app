@@ -63,13 +63,15 @@ type GridMapProps = {
   status?: ReactNode;
   /** Semáforo de ocupación por tipo de vehículo (tooltip); por defecto, el de la configuración. */
   vehicleBands?: Record<VehicleKind, PercentBands>;
+  /** Umbrales de llenado en % para el color de los almacenes (simulación); sin ellos, el semáforo en paquetes. */
+  warehouseFillBands?: PercentBands;
   /** Marcadores resaltados con un anillo (elegidos en un listado lateral). */
   emphasis?: { warehouses?: ReadonlySet<string>; vehicles?: ReadonlySet<string> };
 };
 
 const NO_EMPHASIS: NonNullable<GridMapProps["emphasis"]> = {};
 
-export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS }: GridMapProps) {
+export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands }: GridMapProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
@@ -197,7 +199,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
       if (v && !idle) popover = <VehiclePopover vehicle={v} anchor={anchorFor(shownAt(v))} onClose={close} mapHeight={size.h} docked />;
     } else if (selected.type === "warehouse") {
       const w = snapshot.warehouses.find((x) => x.id === selected.id);
-      if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
+      if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} fillBands={warehouseFillBands} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
     } else {
       const b = blockages.find((x) => x.id === selected.id);
       if (b && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
@@ -219,7 +221,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
       const w = snapshot.warehouses.find((x) => x.id === hovered.id);
       if (w && layers.almacenes && w.kind === "secundario") {
         const [px, py] = project(g, w.position);
-        tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={warehouseAppearance(w, trafficLight, idle).tone} x={px} y={py} mapWidth={size.w} />;
+        tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={warehouseAppearance(w, trafficLight, idle, warehouseFillBands).tone} x={px} y={py} mapWidth={size.w} />;
       }
     }
   }
@@ -278,7 +280,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
           })}
 
           {layers.almacenes && snapshot.warehouses.map((w) => {
-            const a = warehouseAppearance(w, trafficLight, idle);
+            const a = warehouseAppearance(w, trafficLight, idle, warehouseFillBands);
             const [x, y] = project(g, w.position);
             const intermediate = w.kind === "secundario";
             const stock = intermediate ? warehouseStockText(w) : "";
