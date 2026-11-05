@@ -52,4 +52,4 @@ export function reducir(s: EstadoSim, a: Accion): EstadoSim {
 }
 
 export const esFinal = (e?: EstadoCorrida) =>
-  e === "CULMINADA" || e === "CANCELADA" || e === "COLAPSADA" || e === "FALLIDA";
+  e === "CULMINADA" || e === "CANCELADA" || e === "COLAPSADA" || e === "DATOS_AGOTADOS" || e === "FALLIDA";

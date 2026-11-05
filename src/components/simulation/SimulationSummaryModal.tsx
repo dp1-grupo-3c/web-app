@@ -20,6 +20,7 @@ const HERO: Record<SimulationOutcome, { box: string; icon: string; Icon: typeof 
   exito: { box: "border-success/30 bg-success/6", icon: "bg-success/14 text-success", Icon: CircleCheck },
   cancelada: { box: "border-warning/30 bg-warning/6", icon: "bg-warning/14 text-warning", Icon: CircleAlert },
   colapso: { box: "border-critic/35 bg-critic/7", icon: "bg-critic/14 text-critic", Icon: TriangleAlert },
+  sin_datos: { box: "border-warning/30 bg-warning/6", icon: "bg-warning/14 text-warning", Icon: CircleAlert },
   fallida: { box: "border-critic/35 bg-critic/7", icon: "bg-critic/14 text-critic", Icon: TriangleAlert },
 };
 

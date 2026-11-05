@@ -28,7 +28,7 @@ import { DEFAULT_TRAFFIC_LIGHT, PANEL_WIDTH } from "@/lib/constants";
 import { esFinal } from "@/lib/backend/estado";
 import { cancelSimulation, forgetSimulation, startSimulation } from "@/lib/data/actions";
 import { TIPO_POR_MODO } from "@/lib/data/adapters";
-import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrders, usePlayback, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
+import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useSavedTrafficLight, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
@@ -55,7 +55,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const [panel, setPanel] = usePanelParam(PANELS);
   const [pinned, setPinned] = usePinnedPreference();
   const snapshot = useMapSnapshot(scope);
-  const orders = useOrders(scope);
+  const { orders, destinations: knownDestinations } = useOrdersWithDestinations(scope);
   const metrics = useMetrics(scope);
   const breakdowns = useBreakdowns(scope);
   const plates = useVehiclePlates(scope);
@@ -167,6 +167,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
           <GridMap
             snapshot={snapshot}
           orders={orders}
+          knownDestinations={knownDestinations}
             trafficLight={runTrafficLight}
             layers={layers}
             neutralWarehouses={idle}

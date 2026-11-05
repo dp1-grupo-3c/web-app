@@ -7,7 +7,8 @@
  */
 
 export type TipoEscenario = "DIA_A_DIA" | "SIMULACION_5D" | "COLAPSO";
-export type EstadoCorrida = "PREPARADA" | "EN_CURSO" | "CULMINADA" | "CANCELADA" | "COLAPSADA" | "FALLIDA";
+/** DATOS_AGOTADOS: el colapso se quedó sin archivos de ventas antes de que venciera ningún pedido. */
+export type EstadoCorrida = "PREPARADA" | "EN_CURSO" | "CULMINADA" | "CANCELADA" | "COLAPSADA" | "DATOS_AGOTADOS" | "FALLIDA";
 export type TipoUnidad = "AUTO" | "MOTO" | "BICICLETA";
 export type EstadoUnidad =
   | "DISPONIBLE" | "EN_RUTA" | "ENTREGANDO" | "EN_ALIMENTACION"
@@ -44,7 +45,11 @@ export interface VistaUnidad {
   destinoX: number;
   destinoY: number;
   minutosHastaDestino: number;
-  pedidosABordo: { idPedido: number; enLaUnidad: number; totalDelPedido: number }[];
+  /**
+   * Entregas pendientes del itinerario, en orden. `viaje` cuenta las recargas en
+   * almacén que la preceden: solo `viaje === 0` va de verdad a bordo.
+   */
+  pedidosABordo: { idPedido: number; enLaUnidad: number; totalDelPedido: number; viaje: number }[];
   tipoAveria: number;
 }
 
