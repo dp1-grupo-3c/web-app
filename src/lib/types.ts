@@ -183,7 +183,7 @@ export type SimulationSummary = {
 };
 
 /** Qué conjunto de datos se consulta. */
-export type DataScope = { kind: "live" } | { kind: "client" } | { kind: "sim"; mode: SimulationMode };
+export type DataScope = { kind: "live" } | { kind: "client" } | { kind: "sim"; mode: SimulationMode } | { kind: "ops" };
 
 export type EntityRef = { type: "vehicle" | "warehouse" | "blockage"; id: string };
 

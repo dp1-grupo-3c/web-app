@@ -1,13 +1,14 @@
 import { CircleX, House, Package, PackageCheck, Utensils, Wrench } from "lucide-react";
 import { VEHICLE_META } from "@/components/domain/vehicle";
-import { TONE_COLOR } from "@/lib/constants";
+import { BREAKDOWN_COLOR, TONE_COLOR } from "@/lib/constants";
 import { percentTone, vehicleTone, warehouseOccupancy } from "@/lib/occupancy";
 import { warehouseTone } from "@/lib/traffic-light";
 import type { PercentBands, TrafficLight, Vehicle, VehicleStatus, Warehouse } from "@/lib/types";
 
-export type MapLayer = "almacenes" | "flota" | "rutas" | "bloqueos";
+/** Capas del mapa; "auto", "moto" y "bicicleta" filtran la flota (y sus rutas) por tipo de vehículo. */
+export type MapLayer = "almacenes" | "flota" | "rutas" | "bloqueos" | "auto" | "moto" | "bicicleta";
 export type MapLayers = Record<MapLayer, boolean>;
-export const ALL_LAYERS: MapLayers = { almacenes: true, flota: true, rutas: true, bloqueos: true };
+export const ALL_LAYERS: MapLayers = { almacenes: true, flota: true, rutas: true, bloqueos: true, auto: true, moto: true, bicicleta: true };
 
 export const PINK = "var(--color-pink)";
 /** Vehículo sin carga: gris, para no confundirlo con un verde de poca ocupación. */
@@ -41,12 +42,15 @@ export function warehouseAppearance(w: Warehouse, t: TrafficLight, neutral: bool
 export function vehicleAppearance(v: Vehicle, bands: PercentBands) {
   const meta = VEHICLE_META[v.kind];
   const tone = vehicleTone(v, bands);
+  const broken = v.status === "averiado" ? BREAKDOWN_COLOR[v.breakdownType ?? "T2"] : undefined;
   return {
     color: tone === "empty" || !tone ? VEHICLE_EMPTY_COLOR : TONE_COLOR[tone],
     Icon: meta.Icon,
     BadgeIcon: v.status === "averiado" ? Wrench : v.status === "en_alimentacion" ? Utensils : v.status === "entregando" ? PackageCheck : undefined,
-    // Rojo para la avería; ámbar para la pausa de alimentación; verde para la entrega en curso.
-    badgeColor: v.status === "averiado" ? "var(--color-critic)" : v.status === "entregando" ? "var(--color-success)" : "var(--color-warning)",
+    // Avería: color de su tipo (ámbar, rojo, rojo oscuro); ámbar para la pausa de
+    // alimentación; verde para la entrega en curso.
+    badgeColor: broken ? broken.color : v.status === "entregando" ? "var(--color-success)" : "var(--color-warning)",
+    badgeGlyph: broken?.glyph,
     meta,
   };
 }

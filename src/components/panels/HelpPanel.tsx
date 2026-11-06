@@ -1,4 +1,4 @@
-import { Activity, CircleAlert, CircleHelp, Database, Layers, Package, Settings, SlidersVertical, Truck, Users, Warehouse, type LucideIcon } from "lucide-react";
+import { Activity, CircleAlert, CircleHelp, Database, Layers, Package, Settings, Truck, Users, Warehouse, type LucideIcon } from "lucide-react";
 import { Alert, Tile } from "@/components/ui/feedback";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 
@@ -6,8 +6,11 @@ type Audience = "operador" | "cliente" | "simulacion";
 
 const ITEMS: Record<Audience, [LucideIcon, string, string][]> = {
   operador: [
-    [SlidersVertical, "Semáforo", "Ajusta los rangos de ocupación de los almacenes."],
-    [Activity, "Métricas", "Revisa tiempos de entrega y costos del día."],
+    [Settings, "Configurar", "Antes de iniciar, ajusta la flota y el semáforo (%) e inicia la operación; el semáforo se puede cambiar en curso."],
+    [Database, "Datos", "Revisa los archivos del servidor y sube flota, bloqueos o mantenimiento."],
+    [Truck, "Vehículos", "Ocupación, carga y avance de cada vehículo (con la operación en curso)."],
+    [Warehouse, "Almacenes", "Stock y ocupación de cada almacén; sin operación en curso, edita el mapa y los almacenes."],
+    [Activity, "Métricas", "Revisa tiempos de entrega, costos y ocupación del día."],
     [Users, "Clientes", "Registra personas naturales (DNI) y empresas (RUC)."],
     [Package, "Pedidos", "Registra pedidos con el DNI o RUC del cliente y busca los activos."],
     [CircleAlert, "Averías", "Reporta la avería de un vehículo."],

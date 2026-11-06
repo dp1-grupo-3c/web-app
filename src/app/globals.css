@@ -26,6 +26,8 @@
 
   /* Sistema: alertas y notificaciones */
   --color-critic: #fd4576;
+  /* Avería grave (T3): rojo oscuro, distinto del rojo de alerta (T2). */
+  --color-breakdown-severe: #a50f2a;
   --color-warning: #fdc045;
   --color-success: #27e040;
 

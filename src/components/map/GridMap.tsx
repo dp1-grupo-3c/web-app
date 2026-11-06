@@ -1,7 +1,7 @@
 "use client";
 
 import { Crosshair, Flag, Focus, Hourglass, MapPin as MapPinIcon, Minus, Package, Plus, Utensils } from "lucide-react";
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Button, ControlButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { BLOCKAGE_BLINK_PERIOD_MS, VEHICLE_OCCUPANCY_DEFAULTS } from "@/config/simulacion";
@@ -73,7 +73,12 @@ type GridMapProps = {
 
 const NO_EMPHASIS: NonNullable<GridMapProps["emphasis"]> = {};
 
-export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands }: GridMapProps) {
+export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands }: GridMapProps) {
+  // Filtro por tipo de vehículo (Leyenda): los ocultos no se dibujan, ni sus rutas ni sus grupos.
+  const snapshot = useMemo(
+    () => (layers.auto && layers.moto && layers.bicicleta ? fullSnapshot : { ...fullSnapshot, vehicles: fullSnapshot.vehicles.filter((v) => layers[v.kind]) }),
+    [fullSnapshot, layers],
+  );
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
@@ -312,10 +317,10 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
           {!idle && layers.flota && snapshot.vehicles.map((v) => {
             if (atWarehouse(v)) return null;
             if (isWaiting(v) && !isExpanded(nodeKey(shownAt(v)))) return null;
-            const { color, Icon, BadgeIcon, badgeColor, meta } = vehicleAppearance(v, vehicleBands[v.kind]);
+            const { color, Icon, BadgeIcon, badgeColor, badgeGlyph, meta } = vehicleAppearance(v, vehicleBands[v.kind]);
             const [px, y] = project(g, shownAt(v));
             const x = px + fanOffset(v);
-            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id)} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
+            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id)} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} badgeGlyph={badgeGlyph} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]}${v.status === "averiado" && v.breakdownType ? ` ${v.breakdownType}` : ""} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
           })}
 
           {!idle && layers.flota && [...waitingGroups].map(([key, group]) => {

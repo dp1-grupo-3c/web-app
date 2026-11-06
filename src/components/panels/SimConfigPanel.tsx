@@ -1,24 +1,21 @@
 "use client";
 
-import { Calendar, CircleAlert, CircleHelp, Gauge, Play, Truck, Warehouse as WarehouseIcon, Wrench } from "lucide-react";
+import { Calendar, CircleAlert, CircleHelp, Play, Wrench } from "lucide-react";
 import { useState } from "react";
-import { VEHICLE_META, VEHICLE_ORDER } from "@/components/domain/vehicle";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/choice";
 import { Alert } from "@/components/ui/feedback";
 import { DateInput, Field, TextInput, TimeInput } from "@/components/ui/form";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
-import { DATA_DATE_RANGE, DEFAULT_START_TIME, FLEET_OCCUPANCY_BANDS } from "@/config/simulacion";
+import { DATA_DATE_RANGE, DEFAULT_START_TIME } from "@/config/simulacion";
 import { SIMULATION_DAYS_5D, SIMULATION_TITLE } from "@/lib/constants";
 import { addDays, formatDate, formatWeekdayDate, parseISODate } from "@/lib/format";
 import { formatTimeOfDay, parseTimeOfDay, validateSimSettings } from "@/lib/sim-settings";
-import { validateTrafficLight } from "@/lib/traffic-light";
 import { INCOMPLETE_DATE, simulationStart } from "@/lib/validation";
-import type { SimSettings, SimulationMode, TrafficLight } from "@/lib/types";
+import type { SimSettings, SimulationMode } from "@/lib/types";
 import { BreakdownDurationsEditor } from "./config/BreakdownDurationsEditor";
-import { PercentBandsEditor } from "./config/PercentBandsEditor";
+import { OccupancyBandsEditor } from "./config/OccupancyBandsEditor";
 import { FleetEditor, hasFleetErrors, type FleetDraft, type FleetErrors } from "./FleetPanel";
-import { TrafficLightEditor } from "./TrafficLight";
 
 export type ConfigTab = "general" | "flota" | "semaforo" | "averias";
 const TABS: { value: ConfigTab; label: string }[] = [
@@ -35,8 +32,6 @@ type Props = {
   onTab: (t: ConfigTab) => void;
   startDate: string;
   onStartDate: (v: string) => void;
-  trafficLight: TrafficLight;
-  onTrafficLight: (t: TrafficLight) => void;
   settings: SimSettings;
   onSettings: (s: SimSettings) => void;
   fleet: FleetDraft;
@@ -76,7 +71,7 @@ export function SimConfigPanel(p: Props) {
   const invalidTabs = (attempted: boolean): Record<ConfigTab, boolean> => ({
     general: !!check(attempted) || !!se.startTime,
     flota: !readOnly && hasFleetErrors(p.fleetErrors),
-    semaforo: !readOnly && (!!validateTrafficLight(p.trafficLight) || !!se.vehicleOccupancy || !!se.warehouseFill),
+    semaforo: !readOnly && (!!se.vehicleOccupancy || !!se.warehouseFill),
     averias: !!se.breakdowns,
   });
   const bad = invalidTabs(tried);
@@ -153,38 +148,11 @@ export function SimConfigPanel(p: Props) {
       {tab === "flota" && <FleetEditor draft={p.fleet} onChange={p.onFleet} errors={p.fleetErrors} readOnly={readOnly} />}
 
       {tab === "semaforo" && (
-        <>
-          <PanelSection title="Ocupación de vehículos" icon={<Truck className="size-[18px]" aria-hidden />}>
-            <p className="text-xs leading-snug text-n500">Porcentaje de la capacidad ocupado por los paquetes a bordo, por tipo de vehículo. Se usa en el mapa y en el listado de vehículos.</p>
-            <div>
-              {VEHICLE_ORDER.map((k) => {
-                const { plural, Icon, color } = VEHICLE_META[k];
-                return (
-                  <PercentBandsEditor
-                    key={k}
-                    id={`occ-${k}`}
-                    label={plural}
-                    icon={<Icon className="size-4" style={{ color }} aria-hidden />}
-                    value={settings.vehicleOccupancy[k]}
-                    onChange={(b) => set("vehicleOccupancy", { ...settings.vehicleOccupancy, [k]: b })}
-                    direction="lowIsGreen"
-                    readOnly={readOnly}
-                  />
-                );
-              })}
-            </div>
-            <p className="flex items-start gap-1.5 text-xs leading-snug text-n600">
-              <Gauge className="mt-px size-3.5 shrink-0" aria-hidden />
-              La ocupación global de la flota usa un semáforo fijo: verde por debajo de {FLEET_OCCUPANCY_BANDS.low} %, ámbar de {FLEET_OCCUPANCY_BANDS.low} % a {FLEET_OCCUPANCY_BANDS.high} % y rojo por encima de {FLEET_OCCUPANCY_BANDS.high} %.
-            </p>
-          </PanelSection>
-          <PanelSection title="Llenado de almacenes (%)" icon={<WarehouseIcon className="size-[18px]" aria-hidden />}>
-            <p className="text-xs leading-snug text-n500">Stock actual sobre la capacidad de los almacenes intermedios. Colorea los almacenes en el mapa, su ficha, el listado de almacenes y el llenado global.</p>
-            <PercentBandsEditor id="fill" label="Almacenes intermedios" value={settings.warehouseFill} onChange={(b) => set("warehouseFill", b)} direction="highIsGreen" readOnly={readOnly} />
-          </PanelSection>
-          <TrafficLightEditor value={p.trafficLight} onChange={p.onTrafficLight} readOnly={readOnly} />
-          <p className="-mt-2 text-xs leading-snug text-n600">Este semáforo en paquetes se envía al servidor (activaciones del reporte de la simulación); en el mapa se usa el llenado en %.</p>
-        </>
+        <OccupancyBandsEditor
+          value={settings}
+          onChange={(v) => onSettings({ ...settings, ...v })}
+          readOnly={readOnly}
+        />
       )}
 
       {tab === "averias" && (

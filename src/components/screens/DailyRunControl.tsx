@@ -3,22 +3,17 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
-import { startOperation, stopOperation } from "@/lib/data/actions";
+import { stopOperation } from "@/lib/data/actions";
 import { formatoFechaOperativa } from "@/lib/data/adapters";
 import { useOperacion } from "@/lib/data/hooks";
 
-export function DailyRunControl() {
+/** Estado de la operación: en curso muestra su hora y "Detener"; si no, lleva a la configuración. */
+export function DailyRunControl({ onConfigure }: { onConfigure: () => void }) {
   const { vista, cargado, running } = useOperacion();
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const toast = useToast();
 
-  const start = async () => {
-    setBusy(true);
-    const result = await startOperation();
-    setBusy(false);
-    if (!result.ok) toast.error(result.message);
-  };
   const stop = async () => {
     if (!vista) return;
     setBusy(true);
@@ -48,8 +43,8 @@ export function DailyRunControl() {
       ) : (
         <>
           {vista && <p role="status">Operación {vista.estado.toLowerCase()}.{vista.error ? ` ${vista.error}` : ""}</p>}
-          <Button className={vista ? "mt-2" : undefined} size="sm" loading={busy} disabled={!cargado} onClick={start}>Iniciar operación</Button>
-          <p className="mt-2 text-xs text-n500">La operación inicia en la hora actual del servidor, sin pedidos, con toda la flota en el almacén central. Registra pedidos desde el panel Pedidos mientras está en curso.</p>
+          <Button className={vista ? "mt-2" : undefined} size="sm" disabled={!cargado} onClick={onConfigure}>Configurar operación</Button>
+          <p className="mt-2 text-xs text-n500">Revisa la flota y el semáforo en Configurar y pulsa “Iniciar operación”. Los paneles de pedidos, vehículos y métricas aparecen cuando la operación está en curso.</p>
         </>
       )}
     </section>

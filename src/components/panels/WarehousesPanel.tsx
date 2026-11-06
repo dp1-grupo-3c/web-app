@@ -1,19 +1,22 @@
 "use client";
 
-import { House, Package, PackageCheck, Truck, Warehouse as WarehouseIcon } from "lucide-react";
-import { memo, useEffect, useRef } from "react";
+import { House, Package, PackageCheck, SearchX, Truck, Warehouse as WarehouseIcon } from "lucide-react";
+import { memo, useEffect, useRef, useState } from "react";
+import { Chip } from "@/components/ui/choice";
 import { EmptyState, Meter } from "@/components/ui/feedback";
-import { ToneBadge } from "@/components/ui/ToneBadge";
+import { TONE_ICON, ToneBadge } from "@/components/ui/ToneBadge";
 import { SidePanel } from "@/components/workspace/SidePanel";
 import { RECENT_DELIVERIES_WINDOW_MIN } from "@/config/simulacion";
 import { WorldEditor } from "./config/WorldEditor";
 import { cn } from "@/lib/cn";
-import { TONE_COLOR } from "@/lib/constants";
+import { TONE_COLOR, TONE_LABEL } from "@/lib/constants";
 import { useSimulationRows } from "@/lib/data/hooks";
 import type { WarehouseRow } from "@/lib/data/selectors";
 import { formatCoord } from "@/lib/format";
-import { sortBy } from "@/lib/list-tools";
-import type { DataScope, SimSettings } from "@/lib/types";
+import { filterBy, inSet, sortBy, toggleIn } from "@/lib/list-tools";
+import type { DataScope, SimSettings, StatusTone } from "@/lib/types";
+
+const TONES: StatusTone[] = ["ok", "warn", "crit"];
 
 const HOURS = RECENT_DELIVERIES_WINDOW_MIN / 60;
 
@@ -28,11 +31,30 @@ export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose
   locked: boolean;
 }) {
   const data = useSimulationRows(scope, settings);
+  // Filtro por semáforo de llenado: sin colores elegidos se ven todos (el central no tiene semáforo).
+  const [tones, setTones] = useState<ReadonlySet<StatusTone>>(() => new Set());
+  const filtered = filterBy(data.warehouses, [inSet(tones, (w) => w.tone)]);
   // El central primero; luego los intermedios por nombre.
-  const rows = sortBy(data.warehouses, (w) => `${w.kind === "principal" ? 0 : 1}${w.name}`);
+  const rows = sortBy(filtered, (w) => `${w.kind === "principal" ? 0 : 1}${w.name}`);
+  const count = (t: StatusTone) => data.warehouses.filter((w) => w.tone === t).length;
   return (
     <SidePanel title="Almacenes" subtitle="Stock, ocupación, ubicación y capacidad de cada almacén." onClose={onClose} width={width}>
-      {rows.length === 0 ? (
+      {data.warehouses.some((w) => w.tone) && (
+        <div role="group" aria-label="Filtrar por semáforo de llenado" className="flex flex-wrap items-center gap-1.5">
+          {TONES.map((t) => {
+            const Icon = TONE_ICON[t];
+            return (
+              <Chip key={t} on={tones.has(t)} onClick={() => setTones((s) => toggleIn(s, t))}>
+                <Icon className="size-3.5" style={{ color: TONE_COLOR[t] }} aria-hidden />{TONE_LABEL[t]} <span className="text-n500 tabular-nums">{count(t)}</span>
+              </Chip>
+            );
+          })}
+          {tones.size > 0 && <button type="button" className="px-1 text-xs text-n400 underline-offset-2 hover:underline" onClick={() => setTones(new Set())}>Ver todos</button>}
+        </div>
+      )}
+      {data.warehouses.length > 0 && rows.length === 0 ? (
+        <EmptyState icon={<SearchX className="size-8" aria-hidden />} title="Ningún almacén con ese color">Prueba con otro color o pulsa “Ver todos”.</EmptyState>
+      ) : rows.length === 0 ? (
         locked && <EmptyState icon={<WarehouseIcon className="size-8" aria-hidden />} title="Aún no hay almacenes">Aparecerán en cuanto el servidor envíe la primera fotografía.</EmptyState>
       ) : (
         <>

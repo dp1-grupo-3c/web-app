@@ -1,119 +1,46 @@
 "use client";
 
-import { CircleHelp, SlidersVertical } from "lucide-react";
-import { useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/Button";
-import { ErrorMessage, NumberInput } from "@/components/ui/form";
-import { useToast } from "@/components/ui/Toast";
-import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
-import { DEFAULT_TRAFFIC_LIGHT, TRAFFIC_LIGHT_MAX } from "@/lib/constants";
-import { saveOperationTrafficLight } from "@/lib/data/actions";
-import { linkedKey, sameTrafficLight, setLimit, validateTrafficLight, type TrafficLightKey } from "@/lib/traffic-light";
-import type { TrafficLight } from "@/lib/types";
-import { integerInRange } from "@/lib/validation";
+import { useEffect, useState } from "react";
+import { defaultSimSettings, validateBands } from "@/lib/sim-settings";
+import type { VehicleKind } from "@/lib/types";
+import type { OccupancyBands } from "./config/OccupancyBandsEditor";
 
-/** Barra de los tres rangos sobre la escala 0–1000. */
-export function TrafficLightPreview({ value }: { value: TrafficLight }) {
-  // Un límite en edición (NaN) se dibuja como 0 hasta que sea válido.
-  const t = Object.fromEntries(Object.entries(value).map(([k, n]) => [k, Number.isFinite(n) ? n : 0])) as TrafficLight;
-  const pct = (n: number) => `${(n / TRAFFIC_LIGHT_MAX) * 100}%`;
-  return (
-    <div>
-      <div role="img" aria-label={`Rojo de 0 a ${t.redTo}, ámbar de ${t.amberFrom} a ${t.amberTo}, verde de ${t.greenFrom} a ${TRAFFIC_LIGHT_MAX}`} className="flex h-3 gap-0.5">
-        <i className="min-w-1 rounded bg-critic" style={{ flex: t.redTo }} />
-        <i className="min-w-1 rounded bg-warning" style={{ flex: Math.max(0, t.amberTo - t.amberFrom) }} />
-        <i className="min-w-1 rounded bg-success" style={{ flex: Math.max(0, TRAFFIC_LIGHT_MAX - t.greenFrom) }} />
-      </div>
-      <div aria-hidden className="relative mt-1.5 h-4 text-[11px] text-n400 tabular-nums">
-        <span className="absolute left-0">0</span>
-        <span className="absolute -translate-x-1/2" style={{ left: pct(t.redTo) }}>{t.redTo}</span>
-        <span className="absolute -translate-x-1/2" style={{ left: pct(t.amberTo) }}>{t.amberTo}</span>
-        <span className="absolute right-0">{TRAFFIC_LIGHT_MAX}</span>
-      </div>
-    </div>
-  );
-}
+const KEY = "kindbox.operacion.semaforo";
+const KINDS: VehicleKind[] = ["auto", "moto", "bicicleta"];
 
-/** Editor de rangos. Los límites contiguos se enlazan solos. */
-export function TrafficLightEditor({ value, onChange, readOnly }: { value: TrafficLight; onChange: (t: TrafficLight) => void; readOnly?: boolean }) {
-  // Texto tal como se escribió: un vacío o "-5" ya no se convierte en 0 en
-  // silencio. Solo se muestra mientras el valor externo sea el que produjo
-  // (así "Restablecer" lo descarta).
-  const [raw, setRaw] = useState<Partial<Record<TrafficLightKey, { text: string; value: number }>>>({});
-  const shownText = (k: TrafficLightKey) => (raw[k] && Object.is(raw[k].value, value[k]) ? raw[k].text : Number.isNaN(value[k]) ? "" : String(value[k]));
-  const rawError = (Object.keys(raw) as TrafficLightKey[])
-    .map((k) => ({ k, e: raw[k] && Object.is(raw[k].value, value[k]) ? integerInRange(raw[k].text, 0, TRAFFIC_LIGHT_MAX) : null }))
-    .find((x) => x.e);
-  const error = rawError ? { message: rawError.e!, keys: [rawError.k, linkedKey(rawError.k)] } : validateTrafficLight(value);
-  const bad = (k: TrafficLightKey) => !!error?.keys.includes(k);
-  const edit = (k: TrafficLightKey, text: string) => {
-    const next = setLimit(value, k, integerInRange(text, 0, TRAFFIC_LIGHT_MAX) ? NaN : Number(text));
-    setRaw((r) => ({ ...r, [k]: { text, value: next[k] }, [linkedKey(k)]: undefined }));
-    onChange(next);
-  };
-  const num = (k: TrafficLightKey, label: string) => (
-    <NumberInput aria-label={label} value={shownText(k)} step={10} min={0} max={TRAFFIC_LIGHT_MAX} disabled={readOnly} error={bad(k)} onValueChange={(v) => edit(k, v)} />
-  );
-  const fixed = (n: number) => <div className="flex h-10 items-center rounded-lg border border-dashed border-line-strong px-3 text-base text-n300 tabular-nums">{n}</div>;
-  const row = (color: string, name: string, hint: string, from: ReactNode, to: ReactNode) => (
-    <div className="grid grid-cols-[1fr_92px_14px_92px] items-center gap-2 border-b border-line py-2.5 last:border-b-0">
-      <div className="flex items-center gap-2">
-        <i className="size-2.5 shrink-0 rounded-[3px]" style={{ background: color }} />
-        <div><b className="block text-sm leading-tight font-semibold text-white">{name}</b><small className="block text-xs text-n500">{hint}</small></div>
-      </div>
-      {from}
-      <span aria-hidden className="text-center text-n600">–</span>
-      {to}
-    </div>
-  );
-  return (
-    <PanelSection
-      title="Semáforo de almacenes"
-      icon={<SlidersVertical className="size-[18px]" aria-hidden />}
-      action={<span title="Define en qué rango de ocupación (en paquetes, de 0 a 1000) un almacén se muestra en verde, ámbar o rojo. Los límites contiguos se enlazan solos." className="cursor-help text-n400"><CircleHelp className="size-5" aria-label="Ayuda" /></span>}
-    >
-      <div className="rounded-xl border border-line bg-night p-4"><TrafficLightPreview value={value} /></div>
-      <div>
-        <div className="grid grid-cols-[1fr_92px_14px_92px] gap-2 pb-1 text-xs text-n600"><span /><span>Desde</span><span /><span>Hasta</span></div>
-        {row("var(--color-success)", "Verde", "Stock suficiente", num("greenFrom", "Verde desde"), fixed(TRAFFIC_LIGHT_MAX))}
-        {row("var(--color-warning)", "Ámbar", "Conviene reabastecer", num("amberFrom", "Ámbar desde"), num("amberTo", "Ámbar hasta"))}
-        {row("var(--color-critic)", "Rojo", "Nivel crítico", fixed(0), num("redTo", "Rojo hasta"))}
-      </div>
-      {error && !readOnly && <ErrorMessage>{error.message}</ErrorMessage>}
-    </PanelSection>
-  );
-}
+export const defaultOccupancyBands = (): OccupancyBands => {
+  const { vehicleOccupancy, warehouseFill } = defaultSimSettings();
+  return { vehicleOccupancy, warehouseFill };
+};
 
-/** Panel de operaciones diarias. Montar con key={JSON del valor guardado} para reiniciar el borrador. */
-export function TrafficLightPanel({ saved, onClose, width }: { saved: TrafficLight; onClose: () => void; width: number }) {
-  const toast = useToast();
-  const [draft, setDraft] = useState(saved);
-  const [busy, setBusy] = useState(false);
-  const dirty = !sameTrafficLight(draft, saved);
-  const invalid = !!validateTrafficLight(draft);
+export const invalidBands = (b: OccupancyBands) => KINDS.some((k) => !!validateBands(b.vehicleOccupancy[k])) || !!validateBands(b.warehouseFill);
 
-  const save = async () => {
-    setBusy(true);
-    const res = await saveOperationTrafficLight(draft);
-    setBusy(false);
-    if (!res.ok) return toast.error(res.message);
-    toast.success("Los rangos del semáforo se guardaron correctamente.");
-  };
-
-  return (
-    <SidePanel
-      title="Semáforo"
-      subtitle="Rangos de ocupación de los almacenes."
-      onClose={onClose}
-      width={width}
-      footer={
-        <>
-          <Button variant="text" onClick={() => setDraft(DEFAULT_TRAFFIC_LIGHT)}>Restablecer</Button>
-          <Button className="flex-1" onClick={save} loading={busy} loadingText="Guardando…" disabled={!dirty || invalid}>Guardar cambios</Button>
-        </>
+/**
+ * Semáforos en % de las operaciones diarias. `bands` es lo que muestra el
+ * editor (puede estar a medio escribir); `applied` es el último valor válido,
+ * el que colorea el mapa y se recuerda en este navegador.
+ */
+export function useOperacionBands(): { bands: OccupancyBands; applied: OccupancyBands; setBands: (b: OccupancyBands) => void } {
+  const [bands, setDraft] = useState(defaultOccupancyBands);
+  const [applied, setApplied] = useState(defaultOccupancyBands);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      const parsed = raw ? (JSON.parse(raw) as OccupancyBands) : null;
+      if (parsed?.vehicleOccupancy && parsed.warehouseFill && !invalidBands(parsed)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage solo existe en el cliente
+        setDraft(parsed);
+        setApplied(parsed);
       }
-    >
-      <TrafficLightEditor value={draft} onChange={setDraft} />
-    </SidePanel>
-  );
+    } catch {
+      // sin almacenamiento o valor corrupto: se usan los valores por defecto
+    }
+  }, []);
+  const setBands = (next: OccupancyBands) => {
+    setDraft(next);
+    if (invalidBands(next)) return;
+    setApplied(next);
+    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* sin almacenamiento */ }
+  };
+  return { bands, applied, setBands };
 }
