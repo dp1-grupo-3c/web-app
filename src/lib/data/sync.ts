@@ -10,7 +10,7 @@
 
 import type { FilaPedido, InstantaneaSimulacion } from "@/lib/backend/types";
 import type { Order } from "@/lib/types";
-import { filaPedidoToOrder, minutosEntre, vistaUnidadToVehicle } from "./adapters";
+import { entregaPrevista, filaPedidoToOrder, llegadaCompleta, minutosEntre, vistaUnidadToVehicle } from "./adapters";
 
 /** Sondeos seguidos (3 s c/u) que se conserva un pedido que el servidor ya no lista. */
 export const RETENCION_SONDEOS = 40;
@@ -48,6 +48,6 @@ export function ordersAtShownTime(vistos: ReadonlyMap<number, PedidoVisto>, show
   const ahora = shown.fechaHoraSimulada;
   return filas
     .filter((v) => (v.ausencias === 0 || pendientes.has(String(v.fila.id))) && minutosEntre(v.fila.registro, ahora) >= 0)
-    .map((v) => ({ ...filaPedidoToOrder(v.fila, vehicles), minutesLeft: minutosEntre(ahora, v.fila.limite) }))
+    .map((v) => ({ ...filaPedidoToOrder(v.fila, vehicles), minutesLeft: minutosEntre(ahora, v.fila.limite), ...entregaPrevista(llegadaCompleta(v.fila.envios, v.fila.pendientes), ahora) }))
     .sort((a, b) => a.minutesLeft - b.minutesLeft || Number(a.id) - Number(b.id));
 }

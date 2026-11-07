@@ -90,6 +90,10 @@ export type Order = {
   deliveredAt?: string;
   /** Placas de los vehículos que lo entregaron; solo en la lista de entregados. */
   deliveredBy?: string[];
+  /** Minutos hasta que se complete la entrega (llegada estimada del último envío); sin dato si falta planificar parte del pedido. */
+  minutesToDelivery?: number;
+  /** Esa llegada estimada, ya formateada ("HH:MM" o "dd/mm HH:MM"). */
+  expectedDeliveryAt?: string;
 };
 
 export type ConnectionState = "live" | "reconnecting" | "offline" | "waiting";

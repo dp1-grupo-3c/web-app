@@ -1,7 +1,7 @@
 "use client";
 
 import { Building2, Clock, Crosshair, MapPin, Package, PackageCheck, Search, Truck, UserPlus, UserRound, Users } from "lucide-react";
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Chip, RadioCardGroup, SegmentedControl } from "@/components/ui/choice";
 import { Alert, Badge, EmptyState } from "@/components/ui/feedback";
@@ -308,6 +308,21 @@ function ClientCard({ client: c }: { client: Client }) {
 
 const PAGE_SIZES = [6, 10, 15];
 
+/** Chip de filtro con su campo de horas; al activarlo usa las horas escritas (o las de por defecto). */
+function HoursChip({ on, icon, label, inputLabel, text, onActivate, onTextChange }: {
+  on: boolean; icon: ReactNode; label: string; inputLabel: string; text: string;
+  onActivate: (hours: number) => void; onTextChange: (text: string, hours: number | null) => void;
+}) {
+  const hours = parseHours(text);
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Chip on={on} onClick={() => onActivate(hours ?? DEFAULT_DELIVERED_HOURS)}>{icon}{label}</Chip>
+      <NumberInput aria-label={inputLabel} className="w-20" min={1} max={MAX_DELIVERED_HOURS} value={text} error={hours == null} onValueChange={(v) => onTextChange(v, parseHours(v))} />
+      <span className="text-[13px] text-n200">h</span>
+    </span>
+  );
+}
+
 /** Horas enteras entre 1 y el máximo; null si el texto no es válido. */
 function parseHours(text: string): number | null {
   const n = Number(text);
@@ -323,7 +338,10 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
   // Con el filtro de entregados la lista pasa a ser la de entregados; el valor se recuerda al apagarlo.
   const deliveredOn = delivered?.hours != null;
   const [hoursText, setHoursText] = useState(String(delivered?.hours ?? DEFAULT_DELIVERED_HOURS));
-  const validHours = parseHours(hoursText);
+  // Próximas entregas: se filtra sobre los activos con su llegada estimada.
+  const [upcomingHours, setUpcomingHours] = useState<number | null>(null);
+  const [upcomingText, setUpcomingText] = useState(String(DEFAULT_DELIVERED_HOURS));
+  const upcomingOn = upcomingHours != null && !deliveredOn;
   const orders = deliveredOn ? delivered.orders : active;
   const [onlyVehicle, setOnlyVehicle] = useState(false);
   const [page, setPage] = useState(1);
@@ -331,10 +349,12 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
   const client = audience === "cliente";
 
   const q = query.trim().toLowerCase().replace(/[()\s]/g, "");
-  const rows = orders
-    .filter((o) => deliveredOn || !urgentOnly || o.minutesLeft < 60)
+  const filtered = orders
+    .filter((o) => deliveredOn || upcomingOn || !urgentOnly || o.minutesLeft < 60)
+    .filter((o) => !upcomingOn || (o.minutesToDelivery != null && o.minutesToDelivery >= 0 && o.minutesToDelivery <= upcomingHours * 60))
     .filter((o) => !onlyVehicle || !highlight || highlight.ids.has(o.id))
     .filter((o) => !q || o.id.toLowerCase().includes(q) || `${o.destination.x},${o.destination.y}`.startsWith(q));
+  const rows = upcomingOn ? [...filtered].sort((a, b) => a.minutesToDelivery! - b.minutesToDelivery!) : filtered;
   const pageCount = Math.max(1, Math.ceil(rows.length / perPage));
   // Al elegir otro vehículo en el mapa, la lista salta a la página de su primer pedido.
   const [followed, setFollowed] = useState<string | null>(null);
@@ -362,26 +382,27 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
       <SearchInput value={query} onChange={(v) => { setQuery(v); setPage(1); }} label="Buscar pedido" placeholder={client ? "Número de pedido" : "Buscar por pedido o coordenada (x, y)"} />
       {!client && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <Chip on={!urgentOnly && !deliveredOn} onClick={() => { setUrgentOnly(false); delivered?.onHoursChange(null); setPage(1); }}>Todos</Chip>
-          <Chip on={urgentOnly && !deliveredOn} onClick={() => { setUrgentOnly(true); delivered?.onHoursChange(null); setPage(1); }}><Clock className="size-3.5 text-warning" aria-hidden />Vencen en menos de 1 h</Chip>
+          <Chip on={!urgentOnly && !deliveredOn && !upcomingOn} onClick={() => { setUrgentOnly(false); setUpcomingHours(null); delivered?.onHoursChange(null); setPage(1); }}>Todos</Chip>
+          <Chip on={urgentOnly && !deliveredOn && !upcomingOn} onClick={() => { setUrgentOnly(true); setUpcomingHours(null); delivered?.onHoursChange(null); setPage(1); }}><Clock className="size-3.5 text-warning" aria-hidden />Vencen en menos de 1 h</Chip>
+          <HoursChip
+            on={upcomingOn}
+            icon={<Truck className="size-3.5 text-pink" aria-hidden />}
+            label="Se entregan en las próximas"
+            inputLabel="Horas hacia adelante de los pedidos por entregar"
+            text={upcomingText}
+            onActivate={(h) => { setUpcomingHours(h); delivered?.onHoursChange(null); setPage(1); }}
+            onTextChange={(v, h) => { setUpcomingText(v); if (h != null && upcomingOn) { setUpcomingHours(h); setPage(1); } }}
+          />
           {delivered && (
-            <span className="inline-flex items-center gap-1.5">
-              <Chip on={deliveredOn} onClick={() => { delivered.onHoursChange(validHours ?? DEFAULT_DELIVERED_HOURS); setPage(1); }}><PackageCheck className="size-3.5 text-success" aria-hidden />Entregados en las últimas</Chip>
-              <NumberInput
-                aria-label="Horas hacia atrás de los pedidos entregados"
-                className="w-20"
-                min={1}
-                max={MAX_DELIVERED_HOURS}
-                value={hoursText}
-                error={validHours == null}
-                onValueChange={(v) => {
-                  setHoursText(v);
-                  const n = parseHours(v);
-                  if (n != null) { delivered.onHoursChange(n); setPage(1); }
-                }}
-              />
-              <span className="text-[13px] text-n200">h</span>
-            </span>
+            <HoursChip
+              on={deliveredOn}
+              icon={<PackageCheck className="size-3.5 text-success" aria-hidden />}
+              label="Entregados en las últimas"
+              inputLabel="Horas hacia atrás de los pedidos entregados"
+              text={hoursText}
+              onActivate={(h) => { setUpcomingHours(null); delivered.onHoursChange(h); setPage(1); }}
+              onTextChange={(v, h) => { setHoursText(v); if (h != null) { delivered.onHoursChange(h); setPage(1); } }}
+            />
           )}
         </div>
       )}
@@ -404,7 +425,7 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
               <th className="px-3 py-2.5 text-left font-medium">Pedido</th>
               <th className="px-3 py-2.5 text-left font-medium">Destino</th>
               <th className="px-3 py-2.5 text-left font-medium">Prioridad</th>
-              <th className="px-3 py-2.5 text-right font-medium">{deliveredOn ? "Entregado" : "Vence en"}</th>
+              <th className="px-3 py-2.5 text-right font-medium">{deliveredOn ? "Entregado" : upcomingOn ? "Entrega" : "Vence en"}</th>
             </tr>
           </thead>
           <tbody>
@@ -412,6 +433,7 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
               <tr>
                 <td colSpan={4} style={{ height: perPage * 64 }}>
                   {q ? <EmptyState icon={<Search className="size-7" aria-hidden />} title={`No encontramos pedidos con “${query}”.`}>Revisa el número e inténtalo nuevamente.</EmptyState>
+                    : upcomingOn ? <EmptyState icon={<Truck className="size-7" aria-hidden />} title={`Ningún pedido se entrega en las próximas ${upcomingHours} h`}>Amplía el número de horas para ver más.</EmptyState>
                     : deliveredOn ? <EmptyState icon={<PackageCheck className="size-7" aria-hidden />} title={`Ningún pedido entregado en las últimas ${delivered.hours} h`}>Amplía el número de horas para ver más.</EmptyState>
                     : <EmptyState icon={<Package className="size-7" aria-hidden />} title="Aún no hay pedidos activos">Aparecerán aquí en cuanto el servidor los envíe.</EmptyState>}
                 </td>
@@ -419,7 +441,7 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
             ) : (
               slice.map((o) => {
                 const on = o.id === selectedId;
-                const urgent = !deliveredOn && o.minutesLeft < 60;
+                const urgent = !deliveredOn && !upcomingOn && o.minutesLeft < 60;
                 const marked = !!highlight?.ids.has(o.id);
                 const plates = tracking?.get(o.id)?.carriers.map((c) => c.plate) ?? (o.vehiclePlate ? [o.vehiclePlate] : []);
                 return (
@@ -440,6 +462,11 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
                     <td className="px-3 py-2.5"><Badge>{o.priority} · {priorityInfo(o.priority).hours} h</Badge></td>
                     {deliveredOn ? (
                       <td className="text-right text-white" title={`Entregado ${o.deliveredAt ?? ""}`}><span className="block truncate">{o.deliveredAt ?? "—"}</span></td>
+                    ) : upcomingOn ? (
+                      <td className="text-right text-white" title={`Entrega estimada ${o.expectedDeliveryAt ?? ""}, en ${formatDuration(o.minutesToDelivery ?? 0)}`}>
+                        <span className="block truncate">{o.expectedDeliveryAt ?? "—"}</span>
+                        <span className="block truncate text-xs text-n500">en {formatDuration(o.minutesToDelivery ?? 0)}</span>
+                      </td>
                     ) : (
                       <td className={cn("text-right", urgent ? "text-warning" : "text-white")} title={formatDuration(o.minutesLeft)}>
                         <span className="block truncate">{urgent ? `${o.minutesLeft} min` : formatDuration(o.minutesLeft)}</span>

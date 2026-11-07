@@ -35,6 +35,7 @@ import type {
 } from "@/lib/types";
 import type {
   Cliente,
+  EnvioPedido,
   EstadoCorrida,
   FilaPedido,
   IncidenteOperacion,
@@ -330,6 +331,21 @@ export const formatoFechaOperativa = (fecha: string) => `${fecha.slice(8, 10)}/$
 export const horaEntrega = (entrega: string, ahora: string) =>
   entrega.slice(0, 10) === ahora.slice(0, 10) ? entrega.slice(11, 16) : formatoFechaOperativa(entrega);
 
+/**
+ * Llegada estimada del último envío del pedido, o null si parte de lo pendiente
+ * aún no va en ninguna unidad o alguna llegada no se conoce.
+ */
+export function llegadaCompleta(envios: EnvioPedido[] | undefined, pendientes: number): string | null {
+  if (!envios?.length || pendientes <= 0) return null;
+  if (envios.reduce((s, e) => s + e.cantidad, 0) < pendientes || envios.some((e) => !e.fechaHoraLlegada)) return null;
+  return envios.map((e) => e.fechaHoraLlegada!).sort().at(-1)!;
+}
+
+/** Campos de entrega prevista de un pedido, medidos desde `ahora`. */
+export function entregaPrevista(llegada: string | null, ahora: string): Pick<Order, "minutesToDelivery" | "expectedDeliveryAt"> {
+  return llegada ? { minutesToDelivery: minutosEntre(ahora, llegada), expectedDeliveryAt: horaEntrega(llegada, ahora) } : {};
+}
+
 /** Un pedido sigue activo mientras le quede cantidad por entregar; los incumplidos conservan su remanente. */
 export const pedidoActivo = (p: VistaPedidoOperacion) => p.pendiente > 0 && p.estado !== "ENTREGADO" && p.estado !== "CANCELADO";
 
@@ -354,6 +370,7 @@ export function pedidoOperacionToOrder(p: VistaPedidoOperacion, vehicles: Vehicl
     minutesLeft: minutosEntre(fechaHoraOperativa, p.limite),
     status,
     vehiclePlate: carrier?.plate,
+    ...entregaPrevista(llegadaCompleta(p.envios, p.pendiente), fechaHoraOperativa),
   };
 }
 

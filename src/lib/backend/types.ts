@@ -173,6 +173,13 @@ export interface PaginaPedidos {
   soloActivos: boolean;
 }
 
+/** Parte de un pedido que lleva una unidad; `fechaHoraLlegada` es la llegada estimada (null si no se conoce). */
+export interface EnvioPedido {
+  codigoUnidad: string;
+  cantidad: number;
+  fechaHoraLlegada: string | null;
+}
+
 export interface FilaPedido {
   id: number;
   cliente: string;
@@ -190,6 +197,7 @@ export interface FilaPedido {
   /** Placas de las unidades que lo descargaron, en orden de descarga. */
   unidadesEntrega: string[];
   semaforo: ColorSemaforo;
+  envios: EnvioPedido[];
 }
 
 export interface RespuestaSalud {
@@ -361,6 +369,7 @@ export interface VistaPedidoOperacion {
   transiciones: { estado: EstadoPedido; fechaHora: string }[];
   /** Placas de las unidades que lo descargaron, en orden de descarga. */
   unidadesEntrega: string[];
+  envios: EnvioPedido[];
 }
 
 export interface IncidenteOperacion {
