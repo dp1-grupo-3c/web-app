@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode
 import { Button, ControlButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { BLOCKAGE_BLINK_PERIOD_MS, VEHICLE_OCCUPANCY_DEFAULTS } from "@/config/simulacion";
-import { endingIn } from "@/lib/blockage";
+import { blockageSchedule, endingIn } from "@/lib/blockage";
 import { VEHICLE_META } from "@/components/domain/vehicle";
 import { GRID } from "@/lib/constants";
 import { useMundo } from "@/lib/data/hooks";
@@ -218,7 +218,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} fillBands={warehouseFillBands} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
     } else {
       const b = blockages.find((x) => x.id === selected.id);
-      if (b && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
+      if (b && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} schedule={blockageSchedule(b, snapshot.sample)} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
     }
   }
 
@@ -238,6 +238,13 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       if (w && layers.almacenes && w.kind === "secundario") {
         const [px, py] = project(g, w.position);
         tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={warehouseAppearance(w, trafficLight, idle, warehouseFillBands).tone} x={px} y={py} mapWidth={size.w} />;
+      }
+    } else if (hovered.type === "blockage") {
+      const b = blockages.find((x) => x.id === hovered.id);
+      if (b && !idle && layers.bloqueos) {
+        const [px, py] = project(g, blockageAnchor(b));
+        // El marcador del bloqueo va centrado: se baja el ancla para que el tooltip quede junto a él.
+        tooltip = <HoverTooltip kind="blockage" schedule={blockageSchedule(b, snapshot.sample)} x={px} y={py + 30} mapWidth={size.w} />;
       }
     }
   }
@@ -307,7 +314,8 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
           {!idle && layers.bloqueos && blockages.map((b) => {
             const [x, y] = project(g, blockageAnchor(b));
             const left = endingSoon(b);
-            const pin = <MapPin x={x} y={y} centered scale={0.72} color="var(--color-critic)" Icon={left != null ? Hourglass : BlockageIcon} label={left != null ? `Vía bloqueada, se libera en ~${left} min` : "Vía bloqueada"} onActivate={() => onSelect({ type: "blockage", id: b.id })} />;
+            const { start, end } = blockageSchedule(b, snapshot.sample);
+            const pin = <MapPin x={x} y={y} centered scale={0.72} color="var(--color-critic)" Icon={left != null ? Hourglass : BlockageIcon} label={`${left != null ? `Vía bloqueada, se libera en ~${left} min` : "Vía bloqueada"} · de ${start} a ${end}`} onActivate={() => onSelect({ type: "blockage", id: b.id })} onHoverChange={hoverOf({ type: "blockage", id: b.id })} />;
             return left != null ? <g key={`bp-${b.id}`} className="blockage-ending" style={blink}>{pin}</g> : <g key={`bp-${b.id}`}>{pin}</g>;
           })}
 

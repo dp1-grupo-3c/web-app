@@ -1,5 +1,7 @@
 import { BLOCKAGE_ENDING_WINDOW } from "@/config/simulacion";
-import type { Blockage } from "@/lib/types";
+import { formatSimClock } from "@/lib/data/selectors";
+import { formatDuration } from "@/lib/format";
+import type { Blockage, MotionSample } from "@/lib/types";
 
 /** Minutos simulados finales en los que un bloqueo de esta duración se marca "por terminar". */
 export function endingWindow(durationMinutes: number): number {
@@ -16,4 +18,14 @@ export function endingIn(b: Blockage, minute: number | undefined): number | null
   if (minute == null || b.startMinute == null || b.endMinute == null) return null;
   const left = b.endMinute - minute;
   return left > 0 && left <= endingWindow(b.endMinute - b.startMinute) ? left : null;
+}
+
+/** Inicio y fin en hora simulada ("HH:MM" o "dd/mm HH:MM") y duración; "—" sin dato. */
+export function blockageSchedule(b: Blockage, sample: MotionSample | undefined) {
+  const clock = (minute: number | undefined) => formatSimClock(sample?.simTime ?? null, sample?.simulatedMinute ?? null, minute ?? null);
+  return {
+    start: clock(b.startMinute),
+    end: clock(b.endMinute),
+    duration: b.startMinute != null && b.endMinute != null ? formatDuration(b.endMinute - b.startMinute) : "—",
+  };
 }

@@ -57,7 +57,8 @@ export type Blockage = {
 };
 
 /** `durationMs`: duración de la transición que fijó el buffer de reproducción (si la hay). */
-export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number; durationMs?: number };
+/** `simTime`: fecha y hora simuladas de la misma foto que `simulatedMinute`. */
+export type MotionSample = { runId: string | null; simulatedMinute: number; realMilliseconds: number; durationMs?: number; simTime?: string };
 export type MapSnapshot = { warehouses: Warehouse[]; vehicles: Vehicle[]; blockages: Blockage[]; sample?: MotionSample };
 
 export type ClientKind = "persona" | "empresa";
@@ -85,6 +86,10 @@ export type Order = {
   status: OrderStatus;
   vehiclePlate?: string;
   etaMinutes?: number;
+  /** Hora simulada de entrega ya formateada ("HH:MM" o "dd/mm HH:MM"); solo en la lista de entregados. */
+  deliveredAt?: string;
+  /** Placas de los vehículos que lo entregaron; solo en la lista de entregados. */
+  deliveredBy?: string[];
 };
 
 export type ConnectionState = "live" | "reconnecting" | "offline" | "waiting";

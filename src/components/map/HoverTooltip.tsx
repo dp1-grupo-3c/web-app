@@ -27,6 +27,7 @@ export function warehouseStockText(w: Warehouse) {
 type Props = { x: number; y: number; mapWidth: number } & (
   | { kind: "vehicle"; vehicle: Vehicle; bands: PercentBands }
   | { kind: "warehouse"; warehouse: Warehouse; tone: StatusTone | null }
+  | { kind: "blockage"; schedule: { start: string; end: string; duration: string } }
 );
 
 /**
@@ -61,6 +62,19 @@ export function HoverTooltip(p: Props) {
           <span>Ocupación <b className="text-white tabular-nums">{pct(occ)}</b></span>
           <ToneBadge tone={tone} />
         </div>
+      </>
+    );
+  } else if (p.kind === "blockage") {
+    const rows: [string, string][] = [["Inicio", p.schedule.start], ["Fin", p.schedule.end], ["Duración", p.schedule.duration]];
+    body = (
+      <>
+        <b className="text-white">Vía bloqueada</b>
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between text-xs text-n400">
+            <span>{k}</span>
+            <b className="text-[13px] text-white tabular-nums">{v}</b>
+          </div>
+        ))}
       </>
     );
   } else {

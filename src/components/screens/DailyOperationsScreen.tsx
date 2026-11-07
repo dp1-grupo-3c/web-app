@@ -36,6 +36,7 @@ import {
   useOperacionKpis,
   useOperacionMapSnapshot,
   useOperacionMetrics,
+  useOperacionDeliveredOrders,
   useOperacionOrders,
   useOperacionPlates,
   useOperacionTrafficLight,
@@ -63,6 +64,8 @@ export function DailyOperationsScreen() {
   const kpis = useOperacionKpis();
   const clock = useOperacionClock();
   const orders = useOperacionOrders();
+  const [deliveredHours, setDeliveredHours] = useState<number | null>(null);
+  const deliveredOrders = useOperacionDeliveredOrders(deliveredHours);
   const metrics = useOperacionMetrics();
   const breakdowns = useOperacionBreakdowns();
   const plates = useOperacionPlates();
@@ -213,6 +216,7 @@ export function DailyOperationsScreen() {
       <OrdersPanel
         audience="operador"
         orders={orders}
+        delivered={{ hours: deliveredHours, onHoursChange: setDeliveredHours, orders: deliveredOrders }}
         selectedId={orderId}
         onSelect={setOrderId}
         draft={draft}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Clock, Crosshair, MapPin, Package, Search, Truck, UserPlus, UserRound, Users } from "lucide-react";
+import { Building2, Clock, Crosshair, MapPin, Package, PackageCheck, Search, Truck, UserPlus, UserRound, Users } from "lucide-react";
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Chip, RadioCardGroup, SegmentedControl } from "@/components/ui/choice";
@@ -12,7 +12,7 @@ import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { DefinitionList } from "@/components/map/EntityPopover";
 import { cn } from "@/lib/cn";
 import { GRID, PRIORITIES, priorityInfo } from "@/lib/constants";
-import { ADDRESS_MAX_LENGTH, MAX_PACKAGES_PER_ORDER } from "@/config/simulacion";
+import { ADDRESS_MAX_LENGTH, MAX_PACKAGES_PER_ORDER, RECENT_DELIVERIES_WINDOW_MIN } from "@/config/simulacion";
 import { findClient, registerOrder } from "@/lib/data/actions";
 import { DOCUMENT_LABEL, documentError, kindForDocument } from "@/lib/documento";
 import { formatCoord, formatDuration } from "@/lib/format";
@@ -74,6 +74,12 @@ export type OrderTracking = {
 /** Pedidos que entrega el vehículo elegido en el mapa. */
 export type OrdersHighlight = { vehicle: string; ids: ReadonlySet<string> };
 
+/** Filtro de entregados recientes: `hours` null = apagado; `orders`, los entregados en esa ventana. */
+export type DeliveredFilter = { hours: number | null; onHoursChange: (hours: number | null) => void; orders: Order[] };
+
+const DEFAULT_DELIVERED_HOURS = RECENT_DELIVERIES_WINDOW_MIN / 60;
+const MAX_DELIVERED_HOURS = 120;
+
 type OrdersPanelProps = {
   audience: "operador" | "cliente" | "simulacion";
   orders: Order[];
@@ -92,9 +98,10 @@ type OrdersPanelProps = {
   onRegisterClient?: (document: string) => void;
   tracking?: ReadonlyMap<string, OrderTracking>;
   highlight?: OrdersHighlight | null;
+  delivered?: DeliveredFilter;
 };
 
-export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onDraftChange, picking, onTogglePick, onClose, width, tab: controlledTab, onTabChange, onRegisterClient, tracking, highlight }: OrdersPanelProps) {
+export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onDraftChange, picking, onTogglePick, onClose, width, tab: controlledTab, onTabChange, onRegisterClient, tracking, highlight, delivered }: OrdersPanelProps) {
   const toast = useToast();
   const canRegister = audience === "operador";
   const [ownTab, setOwnTab] = useState<OrdersTab>("lista");
@@ -157,7 +164,7 @@ export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onD
       {formMode ? (
         <OrderForm draft={draft} errors={errors} change={change} onDraftChange={onDraftChange} picking={picking} onTogglePick={onTogglePick} onRegisterClient={onRegisterClient} />
       ) : (
-        <OrdersList audience={audience} orders={orders} selectedId={selectedId} onSelect={onSelect} tracking={tracking} highlight={highlight ?? null} />
+        <OrdersList audience={audience} orders={orders} selectedId={selectedId} onSelect={onSelect} tracking={tracking} highlight={highlight ?? null} delivered={delivered} />
       )}
     </SidePanel>
   );
@@ -301,12 +308,23 @@ function ClientCard({ client: c }: { client: Client }) {
 
 const PAGE_SIZES = [6, 10, 15];
 
-function OrdersList({ audience, orders, selectedId, onSelect, tracking, highlight }: {
+/** Horas enteras entre 1 y el máximo; null si el texto no es válido. */
+function parseHours(text: string): number | null {
+  const n = Number(text);
+  return Number.isInteger(n) && n >= 1 && n <= MAX_DELIVERED_HOURS ? n : null;
+}
+
+function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, highlight, delivered }: {
   audience: OrdersPanelProps["audience"]; orders: Order[]; selectedId: string | null; onSelect: (id: string | null) => void;
-  tracking?: ReadonlyMap<string, OrderTracking>; highlight: OrdersHighlight | null;
+  tracking?: ReadonlyMap<string, OrderTracking>; highlight: OrdersHighlight | null; delivered?: DeliveredFilter;
 }) {
   const [query, setQuery] = useState("");
   const [urgentOnly, setUrgentOnly] = useState(false);
+  // Con el filtro de entregados la lista pasa a ser la de entregados; el valor se recuerda al apagarlo.
+  const deliveredOn = delivered?.hours != null;
+  const [hoursText, setHoursText] = useState(String(delivered?.hours ?? DEFAULT_DELIVERED_HOURS));
+  const validHours = parseHours(hoursText);
+  const orders = deliveredOn ? delivered.orders : active;
   const [onlyVehicle, setOnlyVehicle] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(PAGE_SIZES[0]);
@@ -314,7 +332,7 @@ function OrdersList({ audience, orders, selectedId, onSelect, tracking, highligh
 
   const q = query.trim().toLowerCase().replace(/[()\s]/g, "");
   const rows = orders
-    .filter((o) => !urgentOnly || o.minutesLeft < 60)
+    .filter((o) => deliveredOn || !urgentOnly || o.minutesLeft < 60)
     .filter((o) => !onlyVehicle || !highlight || highlight.ids.has(o.id))
     .filter((o) => !q || o.id.toLowerCase().includes(q) || `${o.destination.x},${o.destination.y}`.startsWith(q));
   const pageCount = Math.max(1, Math.ceil(rows.length / perPage));
@@ -332,7 +350,7 @@ function OrdersList({ audience, orders, selectedId, onSelect, tracking, highligh
   const slice = rows.slice((current - 1) * perPage, current * perPage);
   const selected = orders.find((o) => o.id === selectedId) ?? null;
 
-  if (orders.length === 0)
+  if (active.length === 0 && !delivered)
     return (
       <EmptyState icon={<Package className="size-8" aria-hidden />} title={client ? "Todavía no vemos pedidos" : "Aún no hay pedidos activos"}>
         {client ? "Cuando tu pedido esté en camino, podrás buscarlo aquí por su número." : "Aparecerán aquí en cuanto el servidor los envíe."}
@@ -343,9 +361,28 @@ function OrdersList({ audience, orders, selectedId, onSelect, tracking, highligh
     <>
       <SearchInput value={query} onChange={(v) => { setQuery(v); setPage(1); }} label="Buscar pedido" placeholder={client ? "Número de pedido" : "Buscar por pedido o coordenada (x, y)"} />
       {!client && (
-        <div className="flex gap-1.5">
-          <Chip on={!urgentOnly} onClick={() => { setUrgentOnly(false); setPage(1); }}>Todos</Chip>
-          <Chip on={urgentOnly} onClick={() => { setUrgentOnly(true); setPage(1); }}><Clock className="size-3.5 text-warning" aria-hidden />Vencen en menos de 1 h</Chip>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Chip on={!urgentOnly && !deliveredOn} onClick={() => { setUrgentOnly(false); delivered?.onHoursChange(null); setPage(1); }}>Todos</Chip>
+          <Chip on={urgentOnly && !deliveredOn} onClick={() => { setUrgentOnly(true); delivered?.onHoursChange(null); setPage(1); }}><Clock className="size-3.5 text-warning" aria-hidden />Vencen en menos de 1 h</Chip>
+          {delivered && (
+            <span className="inline-flex items-center gap-1.5">
+              <Chip on={deliveredOn} onClick={() => { delivered.onHoursChange(validHours ?? DEFAULT_DELIVERED_HOURS); setPage(1); }}><PackageCheck className="size-3.5 text-success" aria-hidden />Entregados en las últimas</Chip>
+              <NumberInput
+                aria-label="Horas hacia atrás de los pedidos entregados"
+                className="w-20"
+                min={1}
+                max={MAX_DELIVERED_HOURS}
+                value={hoursText}
+                error={validHours == null}
+                onValueChange={(v) => {
+                  setHoursText(v);
+                  const n = parseHours(v);
+                  if (n != null) { delivered.onHoursChange(n); setPage(1); }
+                }}
+              />
+              <span className="text-[13px] text-n200">h</span>
+            </span>
+          )}
         </div>
       )}
       {highlight && (
@@ -367,20 +404,22 @@ function OrdersList({ audience, orders, selectedId, onSelect, tracking, highligh
               <th className="px-3 py-2.5 text-left font-medium">Pedido</th>
               <th className="px-3 py-2.5 text-left font-medium">Destino</th>
               <th className="px-3 py-2.5 text-left font-medium">Prioridad</th>
-              <th className="px-3 py-2.5 text-right font-medium">Vence en</th>
+              <th className="px-3 py-2.5 text-right font-medium">{deliveredOn ? "Entregado" : "Vence en"}</th>
             </tr>
           </thead>
           <tbody>
             {slice.length === 0 ? (
               <tr>
                 <td colSpan={4} style={{ height: perPage * 64 }}>
-                  <EmptyState icon={<Search className="size-7" aria-hidden />} title={`No encontramos pedidos con “${query}”.`}>Revisa el número e inténtalo nuevamente.</EmptyState>
+                  {q ? <EmptyState icon={<Search className="size-7" aria-hidden />} title={`No encontramos pedidos con “${query}”.`}>Revisa el número e inténtalo nuevamente.</EmptyState>
+                    : deliveredOn ? <EmptyState icon={<PackageCheck className="size-7" aria-hidden />} title={`Ningún pedido entregado en las últimas ${delivered.hours} h`}>Amplía el número de horas para ver más.</EmptyState>
+                    : <EmptyState icon={<Package className="size-7" aria-hidden />} title="Aún no hay pedidos activos">Aparecerán aquí en cuanto el servidor los envíe.</EmptyState>}
                 </td>
               </tr>
             ) : (
               slice.map((o) => {
                 const on = o.id === selectedId;
-                const urgent = o.minutesLeft < 60;
+                const urgent = !deliveredOn && o.minutesLeft < 60;
                 const marked = !!highlight?.ids.has(o.id);
                 const plates = tracking?.get(o.id)?.carriers.map((c) => c.plate) ?? (o.vehiclePlate ? [o.vehiclePlate] : []);
                 return (
@@ -399,9 +438,13 @@ function OrdersList({ audience, orders, selectedId, onSelect, tracking, highligh
                       {plates.length > 0 && <span className="flex items-center gap-1 truncate text-xs text-n500">{marked && <Truck className="size-3 text-warning" aria-hidden />}{plates[0]}{plates.length > 1 ? ` +${plates.length - 1}` : ""}</span>}
                     </td>
                     <td className="px-3 py-2.5"><Badge>{o.priority} · {priorityInfo(o.priority).hours} h</Badge></td>
-                    <td className={cn("text-right", urgent ? "text-warning" : "text-white")} title={formatDuration(o.minutesLeft)}>
-                      <span className="block truncate">{urgent ? `${o.minutesLeft} min` : formatDuration(o.minutesLeft)}</span>
-                    </td>
+                    {deliveredOn ? (
+                      <td className="text-right text-white" title={`Entregado ${o.deliveredAt ?? ""}`}><span className="block truncate">{o.deliveredAt ?? "—"}</span></td>
+                    ) : (
+                      <td className={cn("text-right", urgent ? "text-warning" : "text-white")} title={formatDuration(o.minutesLeft)}>
+                        <span className="block truncate">{urgent ? `${o.minutesLeft} min` : formatDuration(o.minutesLeft)}</span>
+                      </td>
+                    )}
                   </tr>
                 );
               })
@@ -433,9 +476,15 @@ function OrdersList({ audience, orders, selectedId, onSelect, tracking, highligh
 function OrderDetail({ order: o, tracking: t }: { order: Order; tracking?: OrderTracking }) {
   const st = STATUS[o.status];
   const p = priorityInfo(o.priority);
-  const carriers = t?.carriers.length
+  // Ya entregado: importan la hora y quién lo entregó, no el vencimiento ni la asignación actual.
+  const delivered = o.deliveredAt != null;
+  const deliveredBy = o.deliveredBy?.length ? o.deliveredBy : null;
+  const carriers = delivered
+    ? deliveredBy?.join(", ") ?? o.vehiclePlate ?? "—"
+    : t?.carriers.length
     ? t.carriers.map((c) => `${c.plate} (${c.packages} paq.${c.loaded ? "" : ", tras recarga"})`).join(", ")
     : o.vehiclePlate ?? "Por asignar";
+  const manyVehicles = delivered ? (deliveredBy?.length ?? 0) > 1 : !!t && t.carriers.length > 1;
   return (
     <div className="grid gap-3 rounded-xl border border-line bg-night p-4">
       <div className="flex items-center gap-2.5">
@@ -446,12 +495,12 @@ function OrderDetail({ order: o, tracking: t }: { order: Order; tracking?: Order
         items={[
           ...(t ? ([["Hora de salida", t.departure], ["Llegada estimada", t.arrival]] as [string, string][]) : []),
           ...(!t && o.etaMinutes != null ? ([["Llegada estimada", `~${o.etaMinutes} min`]] as [string, string][]) : []),
-          ["Vence en", formatDuration(o.minutesLeft)],
+          delivered ? ["Hora de entrega", o.deliveredAt!] : ["Vence en", formatDuration(o.minutesLeft)],
           ["Destino", formatCoord(o.destination)],
           ...(t ? ([["Punto actual", t.currentPoint ? formatCoord(t.currentPoint) : "En almacén"]] as [string, string][]) : []),
           ["Prioridad", `${p.name} · ${p.hours} h`],
           [t ? "Cantidad de productos" : "Paquetes", o.packages],
-          [t && t.carriers.length > 1 ? "Vehículos" : "Vehículo", carriers],
+          [manyVehicles ? "Vehículos" : "Vehículo", carriers],
         ]}
       />
       <p className="flex items-center gap-1.5 text-xs text-n600"><MapPin className="size-3.5" aria-hidden /> Lo marcamos en el mapa con un indicador rosado.</p>

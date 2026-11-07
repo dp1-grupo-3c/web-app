@@ -75,7 +75,8 @@ export const arrancarCorrida = (s: Partial<SolicitudSimulacion>) =>
 export const cancelarCorrida = (id: string) => api<ResumenCorrida>(`/simulaciones/${id}`, { metodo: "DELETE" });
 export const detalleCorrida = (id: string) => api<DetalleCorrida>(`/simulaciones/${id}`);
 export const resultadoCorrida = (id: string) => api<ResultadoSimulacion>(`/simulaciones/${id}/resultado`);
-export const paginaPedidos = (id: string, q: { pagina?: number; tamano?: number; busqueda?: string; soloActivos?: boolean }) =>
+/** `entregadosUltimosMinutos`: solo los entregados en esa ventana simulada, del más reciente al más antiguo. */
+export const paginaPedidos = (id: string, q: { pagina?: number; tamano?: number; busqueda?: string; soloActivos?: boolean; entregadosUltimosMinutos?: number }) =>
   api<PaginaPedidos>(`/simulaciones/${id}/pedidos?` + new URLSearchParams(
     Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]),
   ));

@@ -22,10 +22,12 @@ import {
   buildSummary,
   filaPedidoToOrder,
   fleetSettings,
+  horaEntrega,
   incidenteToBreakdown,
   instantaneaToClock,
   instantaneaToMapSnapshot,
   metricasToMetrics,
+  minutosEntre,
   outcomePorEstado,
   parametrosOperacionToTrafficLight,
   parametrosToTrafficLight,
@@ -274,6 +276,54 @@ export function useOrdersWithDestinations(scope: DataScope): { orders: Order[]; 
 
 const NO_DESTINATIONS: ReadonlyMap<string, Coord> = new Map();
 
+/**
+ * Pedidos entregados en las últimas `hours` horas simuladas, medidas desde la
+ * foto que muestra el mapa (del más reciente al más antiguo). Solo consulta al
+ * servidor mientras `hours` no sea null. El servidor va por delante del mapa:
+ * se le pide una ventana ampliada con ese desfase y se recorta aquí.
+ */
+export function useDeliveredOrders(scope: DataScope, hours: number | null): Order[] {
+  const s = useStoreState();
+  const id = matchesScope(s, scope) ? s.estado.idActual : null;
+  const shown = scope.kind === "sim" ? s.reproduccion.instantanea ?? s.estado.instantanea : s.estado.instantanea;
+  const lag = shown && s.estado.instantanea ? Math.max(0, s.estado.instantanea.minutoSimulado - shown.minutoSimulado) : 0;
+  // En horas enteras, para no reiniciar la consulta con cada foto.
+  const ventana = hours == null ? null : Math.ceil((hours * 60 + lag) / 60) * 60;
+  const [result, setResult] = useState<{ key: string; filas: FilaPedido[] } | null>(null);
+  const key = `${id}:${ventana}`;
+
+  useEffect(() => {
+    if (!id || ventana == null) return;
+    let vivo = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const ciclo = async () => {
+      try {
+        const first = await api.paginaPedidos(id, { pagina: 0, tamano: 500, entregadosUltimosMinutos: ventana });
+        const filas = [...first.filas];
+        for (let page = 1; vivo && page < first.totalPaginas; page++) {
+          filas.push(...(await api.paginaPedidos(id, { pagina: page, tamano: 500, entregadosUltimosMinutos: ventana })).filas);
+        }
+        if (vivo) setResult({ key: `${id}:${ventana}`, filas });
+      } catch {
+        // se mantiene la última lista conocida
+      } finally {
+        if (vivo) timer = setTimeout(ciclo, 3000);
+      }
+    };
+    ciclo();
+    return () => { vivo = false; clearTimeout(timer); };
+  }, [id, ventana]);
+
+  const filas = hours != null && result?.key === key ? result.filas : null;
+  return useMemo(() => {
+    const ahora = shown?.fechaHoraSimulada;
+    if (!filas || !ahora || hours == null) return EMPTY_ORDERS;
+    return filas
+      .filter((f) => f.entrega != null && minutosEntre(f.entrega, ahora) >= 0 && minutosEntre(f.entrega, ahora) <= hours * 60)
+      .map((f) => ({ ...filaPedidoToOrder(f, []), status: "entregado" as const, minutesLeft: minutosEntre(ahora, f.limite), deliveredAt: horaEntrega(f.entrega!, ahora), deliveredBy: f.unidadesEntrega ?? [] }));
+  }, [filas, shown, hours]);
+}
+
 export function useMetrics(scope: DataScope): Metrics | null {
   const s = useStoreState();
   return useMemo(() => {
@@ -477,6 +527,26 @@ export function useOperacionOrders(): Order[] {
     const vehicles = vista.instantanea.unidades.map(vistaUnidadToVehicle);
     return vista.pedidos.filter(pedidoActivo).map((p) => pedidoOperacionToOrder(p, vehicles, vista.fechaHoraOperativa));
   }, [vista]);
+}
+
+/** Pedidos de la operación entregados en las últimas `hours` horas, del más reciente al más antiguo. */
+export function useOperacionDeliveredOrders(hours: number | null): Order[] {
+  const { vista } = useOperacionState();
+  return useMemo(() => {
+    if (!vista || hours == null) return EMPTY_ORDERS;
+    const ahora = vista.fechaHoraOperativa;
+    const vehicles = vista.instantanea.unidades.map(vistaUnidadToVehicle);
+    return vista.pedidos
+      .flatMap((p) => {
+        if (p.estado !== "ENTREGADO") return [];
+        const entrega = [...p.transiciones].reverse().find((t) => t.estado === "ENTREGADO")?.fechaHora;
+        if (!entrega) return [];
+        const hace = minutosEntre(entrega, ahora);
+        return hace >= 0 && hace <= hours * 60 ? [{ p, entrega, hace }] : [];
+      })
+      .sort((a, b) => a.hace - b.hace || a.p.id - b.p.id)
+      .map(({ p, entrega }) => ({ ...pedidoOperacionToOrder(p, vehicles, ahora), deliveredAt: horaEntrega(entrega, ahora), deliveredBy: p.unidadesEntrega ?? [] }));
+  }, [vista, hours]);
 }
 
 export function useOperacionKpis(): OpsKpis | null {

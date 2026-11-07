@@ -152,7 +152,7 @@ export function instantaneaToMapSnapshot(i: InstantaneaSimulacion | null, almace
     // Mantener también la flota en almacenes: puede estar alimentándose o abasteciendo.
     vehicles: i ? i.unidades.map(vistaUnidadToVehicle) : [],
     blockages: i ? i.bloqueosVigentes.map(vistaBloqueoToBlockage) : [],
-    sample: i ? { runId, simulatedMinute: i.minutoSimulado, realMilliseconds: i.milisegundosReales, durationMs } : undefined,
+    sample: i ? { runId, simulatedMinute: i.minutoSimulado, realMilliseconds: i.milisegundosReales, durationMs, simTime: i.fechaHoraSimulada } : undefined,
   };
 }
 
@@ -325,6 +325,10 @@ export function vistaOperacionToClock(v: VistaOperacion): OpsClock {
 
 /** "2026-10-28T14:05:00" → "28/10 14:05", sin pasar por la zona del navegador. */
 export const formatoFechaOperativa = (fecha: string) => `${fecha.slice(8, 10)}/${fecha.slice(5, 7)} ${fecha.slice(11, 16)}`;
+
+/** "HH:MM" si la entrega fue el mismo día que `ahora`; si no, "dd/mm HH:MM". */
+export const horaEntrega = (entrega: string, ahora: string) =>
+  entrega.slice(0, 10) === ahora.slice(0, 10) ? entrega.slice(11, 16) : formatoFechaOperativa(entrega);
 
 /** Un pedido sigue activo mientras le quede cantidad por entregar; los incumplidos conservan su remanente. */
 export const pedidoActivo = (p: VistaPedidoOperacion) => p.pendiente > 0 && p.estado !== "ENTREGADO" && p.estado !== "CANCELADO";

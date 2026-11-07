@@ -5,9 +5,12 @@ import { BreakdownChip } from "@/components/ui/BreakdownChip";
 import { IconButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { TONE_COLOR, TONE_LABEL, breakdownInfo } from "@/lib/constants";
+import type { blockageSchedule } from "@/lib/blockage";
 import { formatCoord } from "@/lib/format";
 import type { Blockage, PercentBands, TrafficLight, Vehicle, VehicleOrderLoad, Warehouse } from "@/lib/types";
 import { PINK, VEHICLE_STATUS_LABEL, vehicleAppearance, warehouseAppearance } from "./layers";
+
+type BlockageSchedule = ReturnType<typeof blockageSchedule>;
 
 export const POPOVER_WIDTH = 320;
 
@@ -194,7 +197,7 @@ export function WarehousePopover({ warehouse: w, trafficLight, fillBands, neutra
   );
 }
 
-export function BlockagePopover({ blockage: b, endsIn, anchor, onClose, mapHeight }: { blockage: Blockage; endsIn?: number | null; anchor: Anchor; onClose: () => void; mapHeight: number }) {
+export function BlockagePopover({ blockage: b, endsIn, schedule, anchor, onClose, mapHeight }: { blockage: Blockage; endsIn?: number | null; schedule: BlockageSchedule; anchor: Anchor; onClose: () => void; mapHeight: number }) {
   return (
     <Shell
       anchor={anchor}
@@ -210,6 +213,9 @@ export function BlockagePopover({ blockage: b, endsIn, anchor, onClose, mapHeigh
       <DefinitionList
         items={[
           ["Tramo", `${formatCoord(b.from)} → ${formatCoord(b.to)}`],
+          ["Inicio", schedule.start],
+          ["Fin", schedule.end],
+          ["Duración", schedule.duration],
           ...(b.until ? ([["Bloqueada hasta", b.until]] as [string, ReactNode][]) : []),
         ]}
       />

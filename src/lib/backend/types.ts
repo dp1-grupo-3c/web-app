@@ -185,6 +185,10 @@ export interface FilaPedido {
   limite: string;
   holguraMinutos: number;
   entregado: boolean;
+  /** Fecha y hora simuladas en que se completó; null si aún no se entrega. */
+  entrega: string | null;
+  /** Placas de las unidades que lo descargaron, en orden de descarga. */
+  unidadesEntrega: string[];
   semaforo: ColorSemaforo;
 }
 
@@ -355,6 +359,8 @@ export interface VistaPedidoOperacion {
   registro: string;
   limite: string;
   transiciones: { estado: EstadoPedido; fechaHora: string }[];
+  /** Placas de las unidades que lo descargaron, en orden de descarga. */
+  unidadesEntrega: string[];
 }
 
 export interface IncidenteOperacion {

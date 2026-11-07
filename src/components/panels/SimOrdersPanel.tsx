@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, type ComponentProps } from "react";
-import { useOrderRows } from "@/lib/data/hooks";
+import { useMemo, useState, type ComponentProps } from "react";
+import { useDeliveredOrders, useOrderRows } from "@/lib/data/hooks";
 import { formatSimClock } from "@/lib/data/selectors";
 import type { DataScope } from "@/lib/types";
 import { OrdersPanel, type OrderTracking } from "./OrdersPanel";
@@ -11,7 +11,9 @@ import { OrdersPanel, type OrderTracking } from "./OrdersPanel";
  * lo entregan, el punto actual, la hora de salida y la llegada estimada.
  * Se calcula solo mientras el panel está abierto, una vez por fotografía.
  */
-export function SimOrdersPanel({ scope, ...props }: { scope: DataScope } & Omit<ComponentProps<typeof OrdersPanel>, "tracking" | "audience">) {
+export function SimOrdersPanel({ scope, ...props }: { scope: DataScope } & Omit<ComponentProps<typeof OrdersPanel>, "tracking" | "audience" | "delivered">) {
+  const [deliveredHours, setDeliveredHours] = useState<number | null>(null);
+  const deliveredOrders = useDeliveredOrders(scope, deliveredHours);
   const { rows, simTime, minute } = useOrderRows(scope, props.orders);
   const tracking = useMemo(() => {
     const map = new Map<string, OrderTracking>();
@@ -25,5 +27,5 @@ export function SimOrdersPanel({ scope, ...props }: { scope: DataScope } & Omit<
     }
     return map;
   }, [rows, simTime, minute]);
-  return <OrdersPanel audience="simulacion" tracking={tracking} {...props} />;
+  return <OrdersPanel audience="simulacion" tracking={tracking} delivered={{ hours: deliveredHours, onHoursChange: setDeliveredHours, orders: deliveredOrders }} {...props} />;
 }
