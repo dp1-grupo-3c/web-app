@@ -15,7 +15,7 @@ import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from
 import { computeGeometry, nearestCoord, polylineMidpoint, project, toPath, zoomView, type View } from "./geometry";
 import { BlockageIcon, PINK, VEHICLE_STATUS_LABEL, vehicleAppearance, warehouseAppearance, type MapLayers } from "./layers";
 import { HoverTooltip, vehicleOccupancyText, warehouseStockText } from "./HoverTooltip";
-import { MapPin } from "./MapPin";
+import { MapPin, type Heading } from "./MapPin";
 import { useVehicleMotion } from "./motion";
 import { pendingFromShown, samePoint } from "./trajectory";
 import { assignedDestinations } from "./selection";
@@ -94,6 +94,14 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
     ? snapshot.blockages
     : motion.blockages.filter((b) => (b.startMinute ?? -Infinity) <= shownMinute && shownMinute < (b.endMinute ?? Infinity));
   const shownAt = (v: Vehicle) => motion.positions[v.id] ?? v.position;
+  // Sentido del primer tramo pendiente; en la grilla y crece hacia arriba.
+  const headingOf = (v: Vehicle): Heading => {
+    const [from, to] = pendingFromShown(shownAt(v), v, motion.remaining[v.id]);
+    if (!from || !to) return "right";
+    const dx = to.x - from.x, dy = to.y - from.y;
+    if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? "left" : "right";
+    return dy > 0 ? "up" : "down";
+  };
   const atWarehouse = (v: Vehicle) => snapshot.warehouses.find((w) => samePoint(w.position, shownAt(v)));
   // Vehículos en espera fuera de los almacenes: se agrupan en un punto por intersección
   // y se despliegan al pulsarlo. Los de un almacén ya van en la ficha de ese almacén.
@@ -315,7 +323,7 @@ export function GridMap({ snapshot, orders = [], knownDestinations, trafficLight
             const { color, Icon, BadgeIcon, badgeColor, meta } = vehicleAppearance(v, vehicleBands[v.kind]);
             const [px, y] = project(g, shownAt(v));
             const x = px + fanOffset(v);
-            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id)} color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
+            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id)} color={color} Icon={Icon} heading={headingOf(v)} BadgeIcon={BadgeIcon} badgeColor={badgeColor} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
           })}
 
           {!idle && layers.flota && [...waitingGroups].map(([key, group]) => {
