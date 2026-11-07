@@ -30,7 +30,13 @@ const TONES: StatusTone[] = ["ok", "warn", "crit"];
 /** Semáforo de ocupación o "vacío" (sin carga a bordo); un vacío también cuenta como verde. */
 type Filter = StatusTone | "empty";
 const isEmpty = (r: VehicleRow) => r.load <= 0;
-const PAGE_SIZE = 8;
+const PAGE_SIZES = [4, 6, 8];
+/**
+ * Alto fijo de cada tarjeta, suma exacta de sus filas: borde 2 + relleno 24 +
+ * cabecera 24 + estado 16 + barra 8 + datos 4 × 20 + 3 separaciones de 8 = 178 px.
+ * Así las páginas miden lo mismo aunque la última traiga menos vehículos.
+ */
+const CARD_HEIGHT = "h-[178px]";
 
 const km = (n: number | null) => (n == null ? "—" : `${Math.round(n)} km`);
 
@@ -50,22 +56,26 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
   const [sort, setSort] = useState<SortKey>("occupancy");
   const [dir, setDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(PAGE_SIZES[PAGE_SIZES.length - 1]);
+  // Vehículo al que hay que llevar la vista: solo cuando cambia la selección, no cada vez que su tarjeta se vuelve a montar.
+  const [reveal, setReveal] = useState<string | null>(null);
 
   const rows = sortBy(
     filterBy(data.vehicles, [tones.size ? (r) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r)) : null, inSet(bands, (r) => distanceBand(r.remainingKm))]),
     SORTS.find((s) => s.value === sort)!.key,
     dir,
   );
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(rows.length / perPage));
   // Un vehículo elegido en el mapa salta a su página.
   const selectedIndex = selectedId ? rows.findIndex((r) => r.id === selectedId) : -1;
   const [followed, setFollowed] = useState<string | null>(null);
   if (selectedId !== followed) {
     setFollowed(selectedId);
-    if (selectedIndex >= 0) setPage(Math.floor(selectedIndex / PAGE_SIZE) + 1);
+    setReveal(selectedIndex >= 0 ? selectedId : null);
+    if (selectedIndex >= 0) setPage(Math.floor(selectedIndex / perPage) + 1);
   }
   const current = Math.min(page, pageCount);
-  const slice = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const slice = rows.slice((current - 1) * perPage, current * perPage);
   const count = (pred: (r: VehicleRow) => boolean) => data.vehicles.filter(pred).length;
   const reset = () => setPage(1);
 
@@ -119,10 +129,25 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
       ) : (
         <>
           <p className="text-xs text-n500" aria-live="polite">{rows.length} de {data.vehicles.length} vehículos</p>
-          <ul role="listbox" className="grid gap-2" aria-label="Vehículos (elige uno para resaltarlo en el mapa)">
-            {slice.map((r) => <VehicleItem key={r.id} row={r} selected={r.id === selectedId} onSelect={onSelect} simTime={data.simTime} now={data.minute} />)}
+          {/* Sin anclaje de scroll: la lista se reordena con cada foto y el navegador movería la vista siguiendo a la tarjeta anclada. */}
+          <ul role="listbox" className="grid grid-cols-1 gap-2 [overflow-anchor:none]" aria-label="Vehículos (elige uno para resaltarlo en el mapa)">
+            {slice.map((r) => <VehicleItem key={r.id} row={r} selected={r.id === selectedId} reveal={r.id === reveal} onRevealed={setReveal} onSelect={onSelect} simTime={data.simTime} now={data.minute} />)}
+            {Array.from({ length: perPage - slice.length }, (_, i) => <li key={`empty-${i}`} aria-hidden className={CARD_HEIGHT} />)}
           </ul>
-          {pageCount > 1 && <div className="flex justify-center"><Pagination page={current} pageCount={pageCount} onChange={setPage} /></div>}
+          <div className="flex items-center justify-between gap-2 text-[11px] text-n400">
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              Por página
+              <select
+                aria-label="Vehículos por página"
+                value={perPage}
+                onChange={(e) => { setPerPage(+e.target.value); reset(); }}
+                className="h-7 rounded-md border border-line-strong bg-field px-1 text-xs text-white"
+              >
+                {PAGE_SIZES.map((n) => <option key={n}>{n}</option>)}
+              </select>
+            </span>
+            <Pagination page={current} pageCount={pageCount} onChange={setPage} />
+          </div>
           <p className="text-xs leading-snug text-n600">La salida y el almacén de origen se estiman con lo observado desde que abriste esta pantalla. La distancia recorrida corresponde al itinerario vigente.</p>
         </>
       )}
@@ -130,9 +155,15 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
   );
 }
 
-const VehicleItem = memo(function VehicleItem({ row: r, selected, onSelect, simTime, now }: { row: VehicleRow; selected: boolean; onSelect: (id: string | null) => void; simTime: string | null; now: number | null }) {
+const VehicleItem = memo(function VehicleItem({ row: r, selected, reveal, onRevealed, onSelect, simTime, now }: {
+  row: VehicleRow; selected: boolean; reveal: boolean; onRevealed: (id: null) => void; onSelect: (id: string | null) => void; simTime: string | null; now: number | null;
+}) {
   const ref = useRef<HTMLLIElement>(null);
-  useEffect(() => { if (selected) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [selected]);
+  useEffect(() => {
+    if (!reveal) return;
+    ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    onRevealed(null);
+  }, [reveal, onRevealed]);
   const { label, Icon, color } = VEHICLE_META[r.kind];
   const pct = Number.isFinite(r.occupancy) ? `${Math.round(r.occupancy)} %` : "—";
   const toggle = () => onSelect(selected ? null : r.id);
@@ -146,18 +177,19 @@ const VehicleItem = memo(function VehicleItem({ row: r, selected, onSelect, simT
       onClick={toggle}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}
       className={cn(
-        "grid cursor-pointer gap-2 rounded-xl border bg-night p-3 text-[13px] outline-none hover:border-n900 focus-visible:border-warning",
+        "grid min-w-0 cursor-pointer content-start gap-2 overflow-hidden rounded-xl border bg-night p-3 text-[13px] outline-none hover:border-n900 focus-visible:border-warning",
+        CARD_HEIGHT,
         selected ? "border-pink shadow-[inset_3px_0_0_var(--color-pink)]" : "border-line",
       )}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex h-6 items-center gap-2 leading-6">
         <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
-        <b className="text-white">{r.plate}</b>
-        <span className="truncate text-xs text-n500">{VEHICLE_STATUS_LABEL[r.status]}</span>
-        <span className="ml-auto flex items-center gap-1.5"><b className="text-white tabular-nums">{pct}</b><ToneBadge tone={r.tone} /></span>
+        <b className="min-w-0 truncate text-white">{r.plate}</b>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="text-white tabular-nums">{pct}</b><ToneBadge tone={r.tone} /></span>
       </div>
+      <p className="h-4 truncate text-xs leading-4 text-n500" title={VEHICLE_STATUS_LABEL[r.status]}>{label} · {VEHICLE_STATUS_LABEL[r.status]}</p>
       <Meter value={Number.isFinite(r.occupancy) ? r.occupancy / 100 : 0} color={r.tone ? TONE_COLOR[r.tone] : "var(--color-line-strong)"} label={`Ocupación de ${r.plate}`} />
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs [&_dd]:text-right [&_dd]:text-white [&_dd]:tabular-nums [&_div]:flex [&_div]:justify-between [&_div]:gap-2 [&_dt]:flex [&_dt]:items-center [&_dt]:gap-1 [&_dt]:text-n500">
+      <dl className="grid grid-cols-2 gap-x-4 text-xs leading-5 [&_dd]:min-w-0 [&_dd]:truncate [&_dd]:text-right [&_dd]:text-white [&_dd]:tabular-nums [&_div]:flex [&_div]:h-5 [&_div]:min-w-0 [&_div]:items-center [&_div]:justify-between [&_div]:gap-2 [&_dt]:flex [&_dt]:shrink-0 [&_dt]:items-center [&_dt]:gap-1 [&_dt]:whitespace-nowrap [&_dt]:text-n500">
         <div><dt><Package className="size-3" aria-hidden />A bordo</dt><dd>{r.load} / {r.capacity}</dd></div>
         <div><dt>Pedidos asignados</dt><dd>{r.orderIds.length}</dd></div>
         <div className="col-span-2"><dt><Flag className="size-3" aria-hidden />Faltan para el destino</dt><dd>{r.etaMinutes != null ? formatDuration(r.etaMinutes) : "—"} · {km(r.remainingKm)}</dd></div>
