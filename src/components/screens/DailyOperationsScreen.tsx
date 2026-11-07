@@ -144,9 +144,14 @@ export function DailyOperationsScreen() {
   const close = () => open(null);
   const activeBreakdowns = breakdowns.filter((b) => b.status === "activa").length;
   const selectedWarehouse = selected?.type === "warehouse" ? selected.id : null;
+  // Vehículo fijado en el panel de vehículos: se resalta en el mapa aunque el panel esté cerrado.
+  const [pinnedVehicle, setPinnedVehicle] = useState<string | null>(null);
   const emphasis = useMemo(
-    () => (shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]) } : undefined),
-    [shown, selectedWarehouse],
+    () => {
+      const vehicles = pinnedVehicle ? { vehicles: new Set([pinnedVehicle]) } : {};
+      return shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]), ...vehicles } : pinnedVehicle ? vehicles : undefined;
+    },
+    [shown, selectedWarehouse, pinnedVehicle],
   );
 
   const items: RailItem<Panel>[] = running
@@ -191,7 +196,7 @@ export function DailyOperationsScreen() {
       />
     )
     : shown === "vehiculos" ? (
-      <VehiclesPanel scope={SCOPE} settings={settings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} onClose={close} width={width} />
+      <VehiclesPanel scope={SCOPE} settings={settings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} pinnedId={pinnedVehicle} onPinChange={setPinnedVehicle} onClose={close} width={width} />
     )
     : shown === "almacenes" ? (
       <WarehousesPanel scope={SCOPE} settings={settings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={running || !cargado} />

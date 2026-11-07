@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import * as mundo from "@/lib/data/mundo";
 import { breakdownDurationsFrom } from "@/lib/sim-settings";
 import * as api from "@/lib/backend/api";
-import type { FilaPedido, VistaUnidad } from "@/lib/backend/types";
+import type { EntregaRegistrada, FilaPedido, VistaUnidad } from "@/lib/backend/types";
 import {
   buildSummary,
   filaPedidoToOrder,
@@ -127,6 +127,65 @@ export function useMapSnapshot(scope: DataScope): MapSnapshot {
 }
 
 const EMPTY_TRIPS = emptyTripLog();
+
+/** Entrega de un pedido desde un almacén, con la hora simulada ya formateada. */
+export type WarehouseDelivery = { orderId: string; plate: string; packages: number; deliveredAt: string };
+
+/** El backend guarda las entregas de las últimas 24 h simuladas. */
+const MAX_DELIVERY_WINDOW_HOURS = 24;
+
+/**
+ * Entregas de los pedidos que salieron de un almacén en las últimas `hours`
+ * horas, de la más reciente a la más antigua; null mientras carga. Se miden
+ * desde la hora que muestra el mapa: en la simulación el servidor va por
+ * delante, así que se le pide una ventana ampliada con ese desfase.
+ */
+export function useWarehouseDeliveries(scope: DataScope, warehouseId: string | null, hours: number): WarehouseDelivery[] | null {
+  const s = useStoreState();
+  const op = useSyncExternalStore(operacion.subscribe, operacion.getSnapshot, operacion.getServerSnapshot);
+  let runId: string | null = null;
+  let ahora: string | null = null;
+  let lag = 0;
+  if (scope.kind === "ops") {
+    if (operacion.enCurso(op.vista)) { runId = op.vista!.contextoId; ahora = op.vista!.fechaHoraOperativa; }
+  } else if (matchesScope(s, scope)) {
+    const shown = s.reproduccion.instantanea ?? s.estado.instantanea;
+    runId = s.estado.idActual;
+    ahora = shown?.fechaHoraSimulada ?? null;
+    if (shown && s.estado.instantanea) lag = Math.max(0, s.estado.instantanea.minutoSimulado - shown.minutoSimulado);
+  }
+  const ventana = Math.min(MAX_DELIVERY_WINDOW_HOURS, hours + Math.ceil(lag / 60));
+  const ops = scope.kind === "ops";
+  const key = `${runId}:${warehouseId}:${ventana}`;
+  const [result, setResult] = useState<{ key: string; entregas: EntregaRegistrada[] } | null>(null);
+
+  useEffect(() => {
+    if (!runId || warehouseId == null) return;
+    let vivo = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const ciclo = async () => {
+      try {
+        const r = await (ops ? api.enviosAlmacenOperacion : api.enviosAlmacen)(runId, Number(warehouseId), ventana);
+        if (vivo) setResult({ key: `${runId}:${warehouseId}:${ventana}`, entregas: r.entregados });
+      } catch {
+        // se mantiene la última lista conocida
+      } finally {
+        if (vivo) timer = setTimeout(ciclo, 3000);
+      }
+    };
+    ciclo();
+    return () => { vivo = false; clearTimeout(timer); };
+  }, [runId, warehouseId, ventana, ops]);
+
+  const entregas = result?.key === key ? result.entregas : null;
+  return useMemo(() => {
+    if (!entregas || !ahora) return null;
+    return entregas
+      .filter((e) => { const hace = minutosEntre(e.fechaHora, ahora); return hace >= 0 && hace <= hours * 60; })
+      .sort((a, b) => b.minuto - a.minuto || a.idPedido - b.idPedido)
+      .map((e) => ({ orderId: String(e.idPedido), plate: e.codigoUnidad, packages: e.cantidad, deliveredAt: horaEntrega(e.fechaHora, ahora) }));
+  }, [entregas, ahora, hours]);
+}
 
 export type SimulationRows = {
   /** Minuto y hora simulados de la foto mostrada (null sin datos). */

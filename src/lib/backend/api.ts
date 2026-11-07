@@ -9,6 +9,7 @@ import type {
   ArchivoGuardado,
   Cliente,
   DetalleCorrida,
+  EnviosAlmacen,
   InventarioDatos,
   SolicitudAtributosAveria,
   SolicitudBloqueo,
@@ -74,6 +75,9 @@ export const arrancarCorrida = (s: Partial<SolicitudSimulacion>) =>
   api<ResumenCorrida>("/simulaciones", { metodo: "POST", cuerpo: s });
 export const cancelarCorrida = (id: string) => api<ResumenCorrida>(`/simulaciones/${id}`, { metodo: "DELETE" });
 export const detalleCorrida = (id: string) => api<DetalleCorrida>(`/simulaciones/${id}`);
+/** Envíos de un almacén; `horas` (1–24) es la ventana de las entregas hacia atrás. */
+export const enviosAlmacen = (id: string, almacen: number, horas: number) =>
+  api<EnviosAlmacen>(`/simulaciones/${id}/almacenes/${almacen}/envios?horas=${horas}`);
 export const resultadoCorrida = (id: string) => api<ResultadoSimulacion>(`/simulaciones/${id}/resultado`);
 /** `entregadosUltimosMinutos`: solo los entregados en esa ventana simulada, del más reciente al más antiguo. */
 export const paginaPedidos = (id: string, q: { pagina?: number; tamano?: number; busqueda?: string; soloActivos?: boolean; entregadosUltimosMinutos?: number }) =>
@@ -144,6 +148,8 @@ export const paginaPedidosOperacion = (id: string, q: { pagina?: number; tamano?
     Object.entries(q).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]),
   ));
 export const metricasOperacion = (id: string) => api<MetricasSimulacion>(`${op(id)}/metricas`);
+export const enviosAlmacenOperacion = (id: string, almacen: number, horas: number) =>
+  api<EnviosAlmacen>(`${op(id)}/almacenes/${almacen}/envios?horas=${horas}`);
 
 // ---- Clientes ------------------------------------------------------------------
 

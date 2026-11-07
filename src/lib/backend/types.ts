@@ -54,6 +54,24 @@ export interface VistaUnidad {
   tipoAveria: number;
 }
 
+/** Entrega registrada por el motor (las de las últimas 24 h simuladas). */
+export interface EntregaRegistrada {
+  minuto: number;
+  fechaHora: string;
+  idPedido: number;
+  codigoUnidad: string;
+  idAlmacenCarga: number;
+  cantidad: number;
+}
+
+/** Respuesta de …/almacenes/{almacen}/envios; aquí solo se usan las entregas. */
+export interface EnviosAlmacen {
+  horas: number;
+  minuto: number;
+  entregados: EntregaRegistrada[];
+  paquetesEntregados: number;
+}
+
 export interface VistaAlmacen {
   id: number;
   nombre: string;

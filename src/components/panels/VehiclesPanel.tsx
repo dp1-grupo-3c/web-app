@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, CircleDashed, Clock, Flag, House, Package, Route, Search, Truck } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, CircleDashed, Clock, Flag, House, Package, Pin, Route, Search, Truck } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { VEHICLE_META } from "@/components/domain/vehicle";
 import { VEHICLE_STATUS_LABEL } from "@/components/map/layers";
@@ -47,8 +47,11 @@ const km = (n: number | null) => (n == null ? "—" : `${Math.round(n)} km`);
  * rango de la distancia restante al destino; ordena por un criterio a la vez.
  * Lee la foto que muestra el mapa y solo se calcula mientras está abierto.
  */
-export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, width }: {
-  scope: DataScope; settings: SimSettings; selectedId: string | null; onSelect: (id: string | null) => void; onClose: () => void; width: number;
+export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId, onPinChange, onClose, width }: {
+  scope: DataScope; settings: SimSettings; selectedId: string | null; onSelect: (id: string | null) => void;
+  /** Vehículo fijado: va antes de la lista, siempre visible, sin importar filtros, orden ni página. */
+  pinnedId: string | null; onPinChange: (id: string | null) => void;
+  onClose: () => void; width: number;
 }) {
   const data = useSimulationRows(scope, settings);
   const [tones, setTones] = useState<ReadonlySet<Filter>>(() => new Set());
@@ -61,7 +64,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
   const [reveal, setReveal] = useState<string | null>(null);
 
   const rows = sortBy(
-    filterBy(data.vehicles, [tones.size ? (r) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r)) : null, inSet(bands, (r) => distanceBand(r.remainingKm))]),
+    filterBy(data.vehicles, [(r) => r.id !== pinnedId, tones.size ? (r) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r)) : null, inSet(bands, (r) => distanceBand(r.remainingKm))]),
     SORTS.find((s) => s.value === sort)!.key,
     dir,
   );
@@ -77,6 +80,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
   const current = Math.min(page, pageCount);
   const slice = rows.slice((current - 1) * perPage, current * perPage);
   const count = (pred: (r: VehicleRow) => boolean) => data.vehicles.filter(pred).length;
+  const pinned = pinnedId ? data.vehicles.find((r) => r.id === pinnedId) ?? null : null;
   const reset = () => setPage(1);
 
   return (
@@ -122,6 +126,15 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
         </div>
       </PanelSection>
 
+      {pinned && (
+        <section aria-label="Vehículo fijado" className="grid gap-2">
+          <span className="flex items-center gap-1.5 text-xs text-n500"><Pin className="size-3.5 text-pink" fill="currentColor" aria-hidden />Vehículo fijado</span>
+          <ul role="listbox" className="grid grid-cols-1" aria-label="Vehículo fijado (elígelo para resaltarlo en el mapa)">
+            <VehicleItem row={pinned} selected={pinned.id === selectedId} reveal={false} onRevealed={setReveal} pinned onPinChange={onPinChange} onSelect={onSelect} simTime={data.simTime} now={data.minute} />
+          </ul>
+        </section>
+      )}
+
       {data.vehicles.length === 0 ? (
         <EmptyState icon={<Truck className="size-8" aria-hidden />} title="Aún no hay vehículos">Aparecerán en cuanto el servidor envíe la primera fotografía.</EmptyState>
       ) : rows.length === 0 ? (
@@ -131,7 +144,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
           <p className="text-xs text-n500" aria-live="polite">{rows.length} de {data.vehicles.length} vehículos</p>
           {/* Sin anclaje de scroll: la lista se reordena con cada foto y el navegador movería la vista siguiendo a la tarjeta anclada. */}
           <ul role="listbox" className="grid grid-cols-1 gap-2 [overflow-anchor:none]" aria-label="Vehículos (elige uno para resaltarlo en el mapa)">
-            {slice.map((r) => <VehicleItem key={r.id} row={r} selected={r.id === selectedId} reveal={r.id === reveal} onRevealed={setReveal} onSelect={onSelect} simTime={data.simTime} now={data.minute} />)}
+            {slice.map((r) => <VehicleItem key={r.id} row={r} selected={r.id === selectedId} reveal={r.id === reveal} onRevealed={setReveal} pinned={false} onPinChange={onPinChange} onSelect={onSelect} simTime={data.simTime} now={data.minute} />)}
             {Array.from({ length: perPage - slice.length }, (_, i) => <li key={`empty-${i}`} aria-hidden className={CARD_HEIGHT} />)}
           </ul>
           <div className="flex items-center justify-between gap-2 text-[11px] text-n400">
@@ -155,8 +168,9 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
   );
 }
 
-const VehicleItem = memo(function VehicleItem({ row: r, selected, reveal, onRevealed, onSelect, simTime, now }: {
-  row: VehicleRow; selected: boolean; reveal: boolean; onRevealed: (id: null) => void; onSelect: (id: string | null) => void; simTime: string | null; now: number | null;
+const VehicleItem = memo(function VehicleItem({ row: r, selected, reveal, onRevealed, pinned, onPinChange, onSelect, simTime, now }: {
+  row: VehicleRow; selected: boolean; reveal: boolean; onRevealed: (id: null) => void; pinned: boolean; onPinChange: (id: string | null) => void;
+  onSelect: (id: string | null) => void; simTime: string | null; now: number | null;
 }) {
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => {
@@ -186,6 +200,18 @@ const VehicleItem = memo(function VehicleItem({ row: r, selected, reveal, onReve
         <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
         <b className="min-w-0 truncate text-white">{r.plate}</b>
         <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="text-white tabular-nums">{pct}</b><ToneBadge tone={r.tone} /></span>
+        {/* Solo hay un fijado: fijar otro reemplaza al anterior. */}
+        <button
+          type="button"
+          aria-pressed={pinned}
+          aria-label={pinned ? `Soltar ${r.plate}` : `Fijar ${r.plate} arriba de la lista`}
+          title={pinned ? "Soltar" : "Fijar arriba de la lista"}
+          onClick={(e) => { e.stopPropagation(); onPinChange(pinned ? null : r.id); }}
+          onKeyDown={(e) => e.stopPropagation()}
+          className={cn("grid size-6 shrink-0 place-items-center rounded-md transition-colors hover:bg-field", pinned ? "text-pink" : "text-n500 hover:text-white")}
+        >
+          <Pin className="size-4" fill={pinned ? "currentColor" : "none"} aria-hidden />
+        </button>
       </div>
       <p className="h-4 truncate text-xs leading-4 text-n500" title={VEHICLE_STATUS_LABEL[r.status]}>{label} · {VEHICLE_STATUS_LABEL[r.status]}</p>
       <Meter value={Number.isFinite(r.occupancy) ? r.occupancy / 100 : 0} color={r.tone ? TONE_COLOR[r.tone] : "var(--color-line-strong)"} label={`Ocupación de ${r.plate}`} />

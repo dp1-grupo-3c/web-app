@@ -15,19 +15,23 @@ import { INCOMPLETE_DATE, simulationStart } from "@/lib/validation";
 import type { SimSettings, SimulationMode } from "@/lib/types";
 import { BreakdownDurationsEditor } from "./config/BreakdownDurationsEditor";
 import { OccupancyBandsEditor } from "./config/OccupancyBandsEditor";
+import { WorldEditor } from "./config/WorldEditor";
 import { FleetEditor, hasFleetErrors, type FleetDraft, type FleetErrors } from "./FleetPanel";
 
-export type ConfigTab = "general" | "flota" | "semaforo" | "averias";
+export type ConfigTab = "general" | "flota" | "semaforo" | "averias" | "mapa";
 const TABS: { value: ConfigTab; label: string }[] = [
   { value: "general", label: "General" },
   { value: "flota", label: "Flota" },
   { value: "semaforo", label: "Semáforo" },
   { value: "averias", label: "Averías" },
+  { value: "mapa", label: "Mapa" },
 ];
 
 type Props = {
   mode: SimulationMode;
   readOnly: boolean;
+  /** Hay una corrida activa: el mapa y los almacenes no se pueden editar. */
+  worldLocked: boolean;
   tab: ConfigTab;
   onTab: (t: ConfigTab) => void;
   startDate: string;
@@ -73,6 +77,7 @@ export function SimConfigPanel(p: Props) {
     flota: !readOnly && hasFleetErrors(p.fleetErrors),
     semaforo: !readOnly && (!!se.vehicleOccupancy || !!se.warehouseFill),
     averias: !!se.breakdowns,
+    mapa: false,
   });
   const bad = invalidTabs(tried);
 
@@ -144,6 +149,8 @@ export function SimConfigPanel(p: Props) {
           )}
         </PanelSection>
       )}
+
+      {tab === "mapa" && <WorldEditor locked={p.worldLocked} />}
 
       {tab === "flota" && <FleetEditor draft={p.fleet} onChange={p.onFleet} errors={p.fleetErrors} readOnly={readOnly} />}
 

@@ -197,6 +197,9 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   // Con el listado de pedidos abierto: el pedido elegido resalta los vehículos
   // que lo entregan, y el vehículo elegido en el mapa resalta sus pedidos.
   const selectedVehicle = selected?.type === "vehicle" ? selected.id : null;
+  // Vehículo fijado en el panel de vehículos; se descarta al cambiar de corrida.
+  const [vehiclePin, setVehiclePin] = useState<{ run: string | null; id: string } | null>(null);
+  const pinnedVehicle = vehiclePin && vehiclePin.run === (own?.id ?? null) ? vehiclePin.id : null;
   const orderCarriers = useMemo(() => {
     if (shown !== "pedidos" || !orderId) return null;
     return new Set(snapshot.vehicles.filter((v) => v.orders.some((o) => o.orderId === orderId)).map((v) => v.id));
@@ -207,10 +210,10 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     return v ? { vehicle: v.plate, ids: new Set(v.orders.map((o) => o.orderId)) } : null;
   }, [shown, selectedVehicle, snapshot.vehicles]);
   const emphasis = useMemo(
-    () => (shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]) }
-      : orderCarriers?.size ? { vehicles: orderCarriers }
+    () => (shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]), ...(pinnedVehicle ? { vehicles: new Set([pinnedVehicle]) } : {}) }
+      : orderCarriers?.size || pinnedVehicle ? { vehicles: new Set([...(orderCarriers ?? []), ...(pinnedVehicle ? [pinnedVehicle] : [])]) }
       : undefined),
-    [shown, selectedWarehouse, orderCarriers],
+    [shown, selectedWarehouse, orderCarriers, pinnedVehicle],
   );
 
   const panelNode =
@@ -219,6 +222,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
       <SimConfigPanel
         mode={mode}
         readOnly={!idle || !!other || syncing}
+        worldLocked={effectivePhase === "running" || !!other || syncing}
         tab={configTab}
         onTab={setConfigTab}
         startDate={runStartDate}
@@ -235,7 +239,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
       />
     )
     : shown === "vehiculos" ? (
-      <VehiclesPanel scope={scope} settings={shownSettings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} onClose={close} width={width} />
+      <VehiclesPanel scope={scope} settings={shownSettings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} pinnedId={pinnedVehicle} onPinChange={(id) => setVehiclePin(id ? { run: own?.id ?? null, id } : null)} onClose={close} width={width} />
     )
     : shown === "almacenes" ? (
       <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={effectivePhase === "running" || !!other || syncing} />

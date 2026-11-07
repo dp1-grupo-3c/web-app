@@ -7,14 +7,16 @@ import { SegmentedControl } from "@/components/ui/choice";
 import { Alert } from "@/components/ui/feedback";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { OccupancyBandsEditor, type OccupancyBands } from "./config/OccupancyBandsEditor";
+import { WorldEditor } from "./config/WorldEditor";
 import { FleetEditor, hasFleetErrors, type FleetDraft, type FleetErrors } from "./FleetPanel";
 import { invalidBands } from "./TrafficLight";
 
-export type OpsConfigTab = "general" | "flota" | "semaforo";
+export type OpsConfigTab = "general" | "flota" | "semaforo" | "mapa";
 const TABS: { value: OpsConfigTab; label: string }[] = [
   { value: "general", label: "General" },
   { value: "flota", label: "Flota" },
   { value: "semaforo", label: "Semáforo" },
+  { value: "mapa", label: "Mapa" },
 ];
 
 type Props = {
@@ -49,6 +51,7 @@ export function OpsConfigPanel(p: Props) {
     general: false,
     flota: !readOnly && attempted && hasFleetErrors(p.fleetErrors),
     semaforo: invalidBands(p.bands),
+    mapa: false,
   });
   const bad = invalid(tried);
 
@@ -89,6 +92,8 @@ export function OpsConfigPanel(p: Props) {
           </p>
         </PanelSection>
       )}
+
+      {tab === "mapa" && <WorldEditor locked={readOnly} />}
 
       {tab === "flota" && <FleetEditor draft={p.fleet} onChange={p.onFleet} errors={p.fleetErrors} readOnly={readOnly} />}
 
