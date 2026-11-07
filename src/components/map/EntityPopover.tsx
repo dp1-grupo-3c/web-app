@@ -1,6 +1,7 @@
-import { CircleX, House, Package, PackageCheck, TriangleAlert, Utensils, X } from "lucide-react";
+import { CircleX, House, Package, PackageCheck, Utensils, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge, Meter, Tile, Alert } from "@/components/ui/feedback";
+import { BreakdownChip } from "@/components/ui/BreakdownChip";
 import { IconButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { TONE_COLOR, TONE_LABEL, breakdownInfo } from "@/lib/constants";
@@ -84,7 +85,7 @@ export function VehiclePopover({ vehicle: v, bands, anchor, onClose, mapHeight, 
         <>
           <Tile color={color}><Icon className="size-5" aria-hidden /></Tile>
           <Title title={v.plate} subtitle={meta.label} />
-          {broken ? <Badge tone="crit"><TriangleAlert className="size-3" aria-hidden /> Averiado</Badge> : <Badge tone={feeding ? "warn" : v.status === "en_ruta" || delivering ? "ok" : "neutral"}>{feeding && <Utensils className="size-3" aria-hidden />}{delivering && <PackageCheck className="size-3" aria-hidden />}{feeding ? "Alimentación" : delivering ? "Entregando" : VEHICLE_STATUS_LABEL[v.status]}</Badge>}
+          {broken ? <BreakdownChip type={v.breakdownType} /> : <Badge tone={feeding ? "warn" : v.status === "en_ruta" || delivering ? "ok" : "neutral"}>{feeding && <Utensils className="size-3" aria-hidden />}{delivering && <PackageCheck className="size-3" aria-hidden />}{feeding ? "Alimentación" : delivering ? "Entregando" : VEHICLE_STATUS_LABEL[v.status]}</Badge>}
         </>
       }
     >

@@ -55,6 +55,8 @@ export const startOperation = () => operacion.iniciar();
 
 export const stopOperation = (expectedId: string) => operacion.detener(expectedId);
 
+export const saveOperationSpeeds = (speeds: Parameters<typeof operacion.guardarVelocidades>[0]) => operacion.guardarVelocidades(speeds);
+
 /** Alta en la operación en curso. `orderId` falta si el comando sigue en cola al vencer la espera. */
 export const registerOrder = (input: NewOrderInput): Promise<ActionResult<{ orderId?: string }>> => operacion.registrarPedido(input);
 

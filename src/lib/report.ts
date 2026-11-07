@@ -1,7 +1,26 @@
 import { PRIORITIES, SIMULATION_TITLE, TONE_LABEL } from "./constants";
 import { formatClock, formatElapsed, formatHours, formatMoney, formatNumber, formatPercent, formatSimStamp, formatDate, formatTime, parseISODate } from "./format";
 import { DELIVERY_TONE_LABEL, deliveryTone } from "./traffic-light";
-import type { SimulationOutcome, SimulationSummary } from "./types";
+import type { PercentBands, SimSettings, SimulationOutcome, SimulationSummary, VehicleKind } from "./types";
+
+export type UsedBands = Pick<SimSettings, "vehicleOccupancy" | "warehouseFill">;
+
+const BAND_KINDS: [VehicleKind, string][] = [["auto", "Autos"], ["moto", "Motocicletas"], ["bicicleta", "Bicicletas"]];
+
+/** Rangos en % de un semáforo, en texto (verde/ámbar/rojo). */
+export function describeBands(b: PercentBands, direction: "lowIsGreen" | "highIsGreen"): string {
+  return direction === "lowIsGreen"
+    ? `Verde < ${b.low} % · Ámbar ${b.low}–${b.high} % · Rojo > ${b.high} %`
+    : `Rojo ≤ ${b.low} % · Ámbar ${b.low}–${b.high} % · Verde ≥ ${b.high} %`;
+}
+
+/** Filas [nombre, rangos] de los semáforos en % usados en la corrida. */
+export function bandRows(b: UsedBands): [string, string][] {
+  return [
+    ...BAND_KINDS.map(([k, name]) => [name, describeBands(b.vehicleOccupancy[k], "lowIsGreen")] as [string, string]),
+    ["Almacenes", describeBands(b.warehouseFill, "highIsGreen")],
+  ];
+}
 
 export const OUTCOME_LABEL: Record<SimulationOutcome, string> = {
   exito: "Culminó con éxito",
@@ -38,7 +57,7 @@ export const OUTCOME_DETAIL: Record<SimulationOutcome, string> = {
 };
 
 /** Reporte en texto plano con el mismo contenido que el resumen en pantalla. */
-export function buildReportText(s: SimulationSummary, now = new Date()): string {
+export function buildReportText(s: SimulationSummary, bands: UsedBands, now = new Date()): string {
   const line = "=".repeat(72);
   const sub = "-".repeat(72);
   const km = s.distanceKm;
@@ -89,11 +108,9 @@ export function buildReportText(s: SimulationSummary, now = new Date()): string 
       return `${p.name.padEnd(15)} plazo ${String(p.hours).padStart(2)} h   promedio ${formatHours(avgMinutes).padStart(8)}   ${String(Math.round(ratio * 100)).padStart(3)} % del plazo   ${DELIVERY_TONE_LABEL[tone]}`;
     }),
     "",
-    "RANGOS DEL SEMÁFORO USADOS (paquetes)",
+    "RANGOS DEL SEMÁFORO USADOS (%)",
     sub,
-    `Rojo:   0 – ${s.trafficLight.redTo}`,
-    `Ámbar:  ${s.trafficLight.amberFrom} – ${s.trafficLight.amberTo}`,
-    `Verde:  ${s.trafficLight.greenFrom} – 1000`,
+    ...bandRows(bands).map(([name, text]) => `${name.padEnd(14)} ${text}`),
     "",
     "EVENTOS DE LA SIMULACIÓN",
     sub,

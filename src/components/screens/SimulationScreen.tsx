@@ -31,7 +31,7 @@ import { usePanelParam } from "@/components/workspace/usePanelParam";
 import { Workspace } from "@/components/workspace/Workspace";
 import { DEFAULT_TRAFFIC_LIGHT, PANEL_WIDTH } from "@/lib/constants";
 import { esFinal } from "@/lib/backend/estado";
-import { DEFAULT_START_TIME } from "@/config/simulacion";
+import { DEFAULT_START_TIME, FLEET_DEFAULTS } from "@/config/simulacion";
 import { cancelSimulation, forgetSimulation, saveFleet, startSimulation } from "@/lib/data/actions";
 import { TIPO_POR_MODO } from "@/lib/data/adapters";
 import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useRunSettings, useSavedTrafficLight, useServerBreakdowns, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
@@ -78,7 +78,8 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const [cancelledId, setCancelledId] = useState<string | null>(null);
   const [dismissedId, setDismissedId] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(() => toISODate(new Date()));
-  const [trafficLight, setTrafficLight] = useState(DEFAULT_TRAFFIC_LIGHT);
+  // El servidor aún pide umbrales en paquetes; se envían los de fábrica y la interfaz solo usa %.
+  const trafficLight = DEFAULT_TRAFFIC_LIGHT;
   const [starting, setStarting] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -89,9 +90,9 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const [settings, setSettings] = useState(defaultSimSettings);
   // Respaldo estable (no un objeto nuevo en cada render) para las corridas sin configuración conocida.
   const [fallbackSettings] = useState(defaultSimSettings);
-  // Borrador de la flota: se reinicia cuando el servidor confirma otros valores.
-  const [fleetDraft, setFleetDraft] = useState(() => ({ version: fleet.version, draft: toFleetDraft(fleet.value) }));
-  if (fleetDraft.version !== fleet.version) setFleetDraft({ version: fleet.version, draft: toFleetDraft(fleet.value) });
+  // Borrador de la flota: cada simulación nueva parte de la flota por defecto
+  // (config/simulacion.ts), no de lo que dejó la corrida anterior en el servidor.
+  const [fleetDraft, setFleetDraft] = useState(() => ({ draft: toFleetDraft(FLEET_DEFAULTS) }));
   // Las averías arrancan con lo vigente en el servidor; un cambio allí reemplaza el borrador.
   const serverBreakdowns = useServerBreakdowns();
   const breakdownsKey = JSON.stringify(serverBreakdowns);
@@ -158,6 +159,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   };
   const newSimulation = () => {
     forgetSimulation();
+    setFleetDraft({ draft: toFleetDraft(FLEET_DEFAULTS) });
     setCancelledId(null);
     setDismissedId(null);
     setPanel("config");
@@ -221,8 +223,6 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         onTab={setConfigTab}
         startDate={runStartDate}
         onStartDate={setStartDate}
-        trafficLight={runTrafficLight}
-        onTrafficLight={setTrafficLight}
         settings={shownSettings}
         onSettings={setSettings}
         fleet={shownFleet}
@@ -245,7 +245,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
       <SimOrdersPanel scope={scope} orders={orders} selectedId={orderId} onSelect={setOrderId} highlight={ordersHighlight} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
     )
     : shown === "averias" ? <BreakdownsPanel plates={plates} recent={breakdowns} onClose={close} width={width} />
-    : shown === "datos" ? <DataPanel onClose={close} width={width} />
+    : shown === "datos" ? <DataPanel onClose={close} width={width} locked={!idle || !!other || syncing} />
     : shown === "ayuda" ? <HelpPanel audience="simulacion" onClose={close} width={width} />
     : shown === "leyenda" ? <LegendPanel layers={layers} onToggle={(l, on) => setLayers((x) => ({ ...x, [l]: on }))} onClose={close} width={width} />
     : null;
@@ -315,6 +315,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
               outcome={outcome}
               startDate={feed.summary?.startDate ?? runStartDate}
               summary={feed.summary}
+              bands={shownSettings}
               errorMessage={feed.error}
               onClose={() => setDismissedId(own?.id ?? null)}
               onNew={newSimulation}

@@ -202,6 +202,8 @@ export interface RespuestaSalud {
 
 export interface VistaParametros {
   velocidades: Record<TipoUnidad, number>;
+  /** Cantidad de unidades por tipo vigente en el servidor (PUT /parametros/flota). */
+  cantidades?: Record<TipoUnidad, number>;
   tipos: { tipo: TipoUnidad; prefijo: string; etiqueta: string; capacidad: number; velocidadVigente: number; velocidadDelEnunciado: number; costoPorKm: number }[];
   umbralSemaforoAmbar: number;
   umbralSemaforoVerde: number;

@@ -15,7 +15,7 @@ const HEADING_TRANSFORM: Record<Heading, string | undefined> = {
   down: "rotate(90 0 -30)",
 };
 
-function PinShape({ color, Icon, ring, BadgeIcon, badgeColor = "var(--color-warning)", centered, heading = "right" }: { color: string; Icon: LucideIcon; ring?: boolean; BadgeIcon?: LucideIcon; badgeColor?: string; centered?: boolean; heading?: Heading }) {
+function PinShape({ color, Icon, ring, BadgeIcon, badgeColor = "var(--color-warning)", badgeGlyph = "#161d25", centered, heading = "right" }: { color: string; Icon: LucideIcon; ring?: boolean; BadgeIcon?: LucideIcon; badgeColor?: string; badgeGlyph?: string; centered?: boolean; heading?: Heading }) {
   if (centered) return <><circle r={20} fill={color} stroke="#10161c" strokeWidth={2} /><Icon x={-11} y={-11} size={22} color="#161d25" strokeWidth={2} aria-hidden /></>;
   return (
     <>
@@ -27,7 +27,7 @@ function PinShape({ color, Icon, ring, BadgeIcon, badgeColor = "var(--color-warn
       )}
       <path d="M0 0 L-12 -14 A20 20 0 1 1 12 -14 Z" fill={color} stroke="#10161c" strokeWidth={2} strokeLinejoin="round" />
       <g transform={HEADING_TRANSFORM[heading]}><Icon x={-11} y={-41} size={22} color="#161d25" strokeWidth={2} aria-hidden /></g>
-      {BadgeIcon && <g><circle cx={18} cy={-46} r={11} fill={badgeColor} stroke="#10161c" strokeWidth={2} /><BadgeIcon x={12} y={-52} size={12} color="#161d25" aria-hidden /></g>}
+      {BadgeIcon && <g><circle cx={18} cy={-46} r={11} fill={badgeColor} stroke="#10161c" strokeWidth={2} /><BadgeIcon x={12} y={-52} size={12} color={badgeGlyph} aria-hidden /></g>}
     </>
   );
 }
@@ -43,6 +43,7 @@ type MapPinProps = {
   BadgeIcon?: LucideIcon;
   /** Fondo de la insignia; ámbar por defecto. */
   badgeColor?: string;
+  badgeGlyph?: string;
   /** Centra el glifo sobre la coordenada; útil para bloqueos sobre su línea. */
   centered?: boolean;
   /** Sentido de avance del vehículo; orienta el ícono. */
@@ -52,7 +53,7 @@ type MapPinProps = {
   onHoverChange?: (hovered: boolean) => void;
 };
 
-export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, BadgeIcon, badgeColor, centered, heading, onActivate, onHoverChange }: MapPinProps) {
+export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, BadgeIcon, badgeColor, badgeGlyph, centered, heading, onActivate, onHoverChange }: MapPinProps) {
   const interactive = !!onActivate;
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -76,16 +77,16 @@ export function MapPin({ x, y, color, Icon, label, scale = 0.82, ring, BadgeIcon
       className={interactive ? "cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125" : "pointer-events-none"}
     >
       <title>{label}</title>
-      <PinShape color={color} Icon={Icon} ring={ring} BadgeIcon={BadgeIcon} badgeColor={badgeColor} centered={centered} heading={heading} />
+      <PinShape color={color} Icon={Icon} ring={ring} BadgeIcon={BadgeIcon} badgeColor={badgeColor} badgeGlyph={badgeGlyph} centered={centered} heading={heading} />
     </g>
   );
 }
 
 /** Marcador aislado (leyenda). */
-export function PinGlyph({ color, Icon, size = 28, BadgeIcon, badgeColor }: { color: string; Icon: LucideIcon; size?: number; BadgeIcon?: LucideIcon; badgeColor?: string }) {
+export function PinGlyph({ color, Icon, size = 28, BadgeIcon, badgeColor, badgeGlyph }: { color: string; Icon: LucideIcon; size?: number; BadgeIcon?: LucideIcon; badgeColor?: string; badgeGlyph?: string }) {
   return (
     <svg width={size} height={Math.round((size * 56) / 46)} viewBox="-23 -53 46 56" aria-hidden className="shrink-0 overflow-visible">
-      <PinShape color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} />
+      <PinShape color={color} Icon={Icon} BadgeIcon={BadgeIcon} badgeColor={badgeColor} badgeGlyph={badgeGlyph} />
     </svg>
   );
 }

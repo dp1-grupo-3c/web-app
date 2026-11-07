@@ -63,6 +63,7 @@ import type {
   SimulationOutcome,
   SimulationSummary,
   TrafficLight,
+  VehicleKind,
   VehiclePlates,
   OpsClock,
 } from "@/lib/types";
@@ -79,7 +80,7 @@ function useStoreState() {
 /** true si la corrida activa del store es la que le corresponde a este modo de simulación. */
 const matchesSim = (s: store.Store, mode: SimulationMode) => s.estado.corrida?.tipo === TIPO_POR_MODO[mode];
 const matchesScope = (s: store.Store, scope: DataScope) => scope.kind === "client"
-  || (scope.kind === "live" ? s.estado.corrida?.tipo === "DIA_A_DIA" : matchesSim(s, scope.mode));
+  || (scope.kind === "live" ? s.estado.corrida?.tipo === "DIA_A_DIA" : scope.kind === "sim" && matchesSim(s, scope.mode));
 
 /**
  * Corrida actual del backend, sea del tipo que sea: solo hay una a la vez.
@@ -139,6 +140,12 @@ export type SimulationRows = {
 /** Foto que muestra el mapa de la simulación y registro de recorridos que la acompaña. */
 function useShownSim(scope: DataScope) {
   const s = useStoreState();
+  // Sin ensureStarted: leer la operación no debe abrir su canal desde otras pantallas.
+  const op = useSyncExternalStore(operacion.subscribe, operacion.getSnapshot, operacion.getServerSnapshot);
+  if (scope.kind === "ops") {
+    const foto = operacion.enCurso(op.vista) ? op.vista!.instantanea : null;
+    return { foto, trips: EMPTY_TRIPS };
+  }
   const active = scope.kind === "sim" && matchesScope(s, scope);
   return { foto: active ? s.reproduccion.instantanea : null, trips: active ? s.recorridos : EMPTY_TRIPS };
 }
@@ -335,10 +342,10 @@ export function useSavedTrafficLight(): TrafficLight {
 export function useFleetSettings(): { value: FleetSettings; version: string } {
   const s = useStoreState();
   return useMemo(() => {
-    const value = fleetSettings(s.parametros, s.estado.corrida, FLEET_DEFAULTS);
+    const value = fleetSettings(s.parametros, FLEET_DEFAULTS);
     if (s.cantidadesFlota) for (const k of Object.keys(value) as (keyof FleetSettings)[]) value[k].quantity = s.cantidadesFlota[k];
     return { value, version: `${s.parametros?.version ?? "-"}:${s.estado.idActual ?? "-"}:${JSON.stringify(s.cantidadesFlota)}` };
-  }, [s.parametros, s.estado.corrida, s.estado.idActual, s.cantidadesFlota]);
+  }, [s.parametros, s.estado.idActual, s.cantidadesFlota]);
 }
 
 /** Parámetros del mundo; suscribirse redibuja el mapa si cambia su tamaño. */
@@ -521,6 +528,18 @@ export function useOperacionPlates(): VehiclePlates {
 }
 
 /** Umbrales propios de la operación en curso. */
+/** Flota con la que corre la operación en curso (cantidad por tipo y velocidad vigente); null sin operación. */
+export function useOperacionFleet(): FleetSettings | null {
+  const { vista } = useOperacionState();
+  return useMemo(() => {
+    if (!vista || !operacion.enCurso(vista)) return null;
+    const kinds: VehicleKind[] = ["auto", "moto", "bicicleta"];
+    const out = Object.fromEntries(kinds.map((k, i) => [k, { quantity: 0, speed: vista.parametros.velocidadKmH[i] ?? 0 }])) as FleetSettings;
+    for (const u of vista.instantanea.unidades) out[vistaUnidadToVehicle(u).kind].quantity++;
+    return out;
+  }, [vista]);
+}
+
 export function useOperacionTrafficLight(): TrafficLight {
   const { vista } = useOperacionState();
   return useMemo(() => (vista ? parametrosOperacionToTrafficLight(vista.parametros) : DEFAULT_TRAFFIC_LIGHT), [vista]);

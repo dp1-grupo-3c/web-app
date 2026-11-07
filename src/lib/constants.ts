@@ -22,6 +22,16 @@ export const BREAKDOWN_TYPES: { code: BreakdownType; name: string; description: 
 ];
 export const breakdownInfo = (code: BreakdownType) => BREAKDOWN_TYPES.find((b) => b.code === code)!;
 
+/**
+ * Color de cada tipo de avería: ámbar (leve), rojo (moderada) y rojo oscuro (grave).
+ * `glyph` es el color del ícono sobre ese fondo (el rojo oscuro necesita blanco).
+ */
+export const BREAKDOWN_COLOR: Record<BreakdownType, { color: string; glyph: string }> = {
+  T1: { color: "var(--color-warning)", glyph: "#161d25" },
+  T2: { color: "var(--color-critic)", glyph: "#161d25" },
+  T3: { color: "var(--color-breakdown-severe)", glyph: "#ffffff" },
+};
+
 /** Valores iniciales del semáforo (escala 0–1000 paquetes). */
 export const DEFAULT_TRAFFIC_LIGHT: TrafficLight = { greenFrom: 500, amberFrom: 250, amberTo: 500, redTo: 250 };
 export const TRAFFIC_LIGHT_MAX = 1000;

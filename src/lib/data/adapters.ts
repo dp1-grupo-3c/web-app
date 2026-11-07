@@ -251,11 +251,16 @@ export function metricasToMetrics(m: MetricasSimulacion): Metrics {
  * activas por tipo). Sin corrida, o sin parámetros aún, se usan los valores
  * del enunciado: el backend todavía no expone la cantidad configurada.
  */
-export function fleetSettings(p: VistaParametros | null, c: ResumenCorrida | null, defaults: FleetSettings): FleetSettings {
+/**
+ * Flota vigente en el servidor. La cantidad sale de los parámetros, no de
+ * unidadesActivasPorTipo de la última corrida: esas son las unidades que
+ * seguían en servicio al terminar (sin las averiadas), no la flota configurada.
+ */
+export function fleetSettings(p: VistaParametros | null, defaults: FleetSettings): FleetSettings {
   const out = {} as FleetSettings;
   for (const [kind, tipo] of Object.entries(TIPO_POR_KIND) as [VehicleKind, TipoUnidad][]) {
     out[kind] = {
-      quantity: c?.unidadesActivasPorTipo?.[tipo] ?? defaults[kind].quantity,
+      quantity: p?.cantidades?.[tipo] ?? defaults[kind].quantity,
       speed: p?.velocidades?.[tipo] ?? defaults[kind].speed,
     };
   }

@@ -10,7 +10,8 @@ import { ErrorMessage, Field, Select } from "@/components/ui/form";
 import { useToast } from "@/components/ui/Toast";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { cn } from "@/lib/cn";
-import { BREAKDOWN_TYPES, breakdownInfo } from "@/lib/constants";
+import { BreakdownChip } from "@/components/ui/BreakdownChip";
+import { BREAKDOWN_COLOR, BREAKDOWN_TYPES } from "@/lib/constants";
 import { registerBreakdown, registerOperationBreakdown, uploadBreakdownFile } from "@/lib/data/actions";
 import type { BreakdownRecord, BreakdownType, VehiclePlates } from "@/lib/types";
 
@@ -146,9 +147,9 @@ export function BreakdownsPanel({ plates, recent, onClose, width, live = false }
               const active = r.status === "activa";
               return (
                 <li key={r.id} className="flex items-center gap-3 border-b border-line py-2.5 last:border-b-0">
-                  <Tile color={active ? "var(--color-critic)" : "var(--color-n300)"}><Icon className="size-5" aria-hidden /></Tile>
+                  <Tile color={active ? BREAKDOWN_COLOR[r.type].color : "var(--color-n300)"}><Icon className="size-5" aria-hidden /></Tile>
                   <div className="min-w-0 flex-1">
-                    <b className="block text-sm font-semibold text-white">{r.plate} · {breakdownInfo(r.type).name} ({r.type})</b>
+                    <b className="flex items-center gap-2 text-sm font-semibold text-white">{r.plate} <BreakdownChip type={r.type} /></b>
                     <small className="block text-xs text-n500">{r.when}{r.reassignedOrders ? ` · ${r.reassignedOrders} pedidos reasignados` : ""}</small>
                   </div>
                   {active ? <Badge tone="crit">Activa</Badge> : <Badge tone="ok"><CircleCheck className="size-3" aria-hidden /> Resuelta</Badge>}

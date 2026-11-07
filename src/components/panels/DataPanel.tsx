@@ -17,7 +17,12 @@ import { blockageNodes } from "@/lib/validation";
  * Archivos de datos del servidor. Cada carga se valida allí antes de guardarse
  * y rige desde la siguiente corrida; un archivo inválido no reemplaza al vigente.
  */
-export function DataPanel({ onClose, width }: { onClose: () => void; width: number }) {
+/**
+ * Inventario de archivos y cargas. Los datos solo se cargan antes de los escenarios:
+ * con `locked` (hay una corrida u operación en curso) se ven los archivos, pero no se
+ * pueden subir ni registrar bloqueos. El servidor también lo rechaza.
+ */
+export function DataPanel({ onClose, width, locked = false }: { onClose: () => void; width: number; locked?: boolean }) {
   const [inventory, setInventory] = useState<InventarioDatos | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const reload = useCallback(() => cargarInventario().then((r) => {
@@ -49,10 +54,16 @@ export function DataPanel({ onClose, width }: { onClose: () => void; width: numb
           </div>
         )}
       </PanelSection>
-      <UploadSection kind="flota" title="Subir flota" help="Reemplaza flota.txt. No se puede con una corrida en curso." onSaved={reload} />
-      <UploadSection kind="bloqueos" title="Subir bloqueos" help="Reemplaza el archivo de ese mes. Formato: ##d##h##m-##d##h##m:x1,y1,x2,y2,…" onSaved={reload} withMonth />
-      <ManualBlockageSection onSaved={reload} />
-      <UploadSection kind="mantenimiento" title="Subir mantenimiento" help="El archivo debe llamarse mant.preventivo.m1.m2, por ejemplo mant.preventivo.09.10." onSaved={reload} />
+      {locked ? (
+        <Alert tone="info">Hay un escenario en curso. Los datos solo se pueden cargar antes de comenzar: detén o espera a que termine la corrida para subir archivos o registrar bloqueos.</Alert>
+      ) : (
+        <>
+          <UploadSection kind="flota" title="Subir flota" help="Reemplaza flota.txt." onSaved={reload} />
+          <UploadSection kind="bloqueos" title="Subir bloqueos" help="Reemplaza el archivo de ese mes. Formato: ##d##h##m-##d##h##m:x1,y1,x2,y2,…" onSaved={reload} withMonth />
+          <ManualBlockageSection onSaved={reload} />
+          <UploadSection kind="mantenimiento" title="Subir mantenimiento" help="El archivo debe llamarse mant.preventivo.m1.m2, por ejemplo mant.preventivo.09.10." onSaved={reload} />
+        </>
+      )}
     </SidePanel>
   );
 }
@@ -116,7 +127,7 @@ function ManualBlockageSection({ onSaved }: { onSaved: () => Promise<void> }) {
 
   return (
     <PanelSection title="Registrar un bloqueo" icon={<CircleX className="size-[18px]" aria-hidden />}>
-      <p className="text-xs leading-snug text-n500">Se agrega al archivo de bloqueos del mes y rige desde la siguiente corrida; la que esté en curso no cambia.</p>
+      <p className="text-xs leading-snug text-n500">Se agrega al archivo de bloqueos del mes y rige desde la siguiente corrida.</p>
       <Field label="Nodos del tramo" htmlFor="bq-nodes" required error={tried ? nodesError : null} help={`Cada nodo como x,y separados por espacios, por ejemplo 12,20 13,20 13,25. X de 0 a ${GRID.width} e Y de 0 a ${GRID.height}.`}>
         <TextInput id="bq-nodes" value={draft.nodes} error={tried && !!nodesError} onChange={(e) => change({ nodes: e.target.value })} />
       </Field>

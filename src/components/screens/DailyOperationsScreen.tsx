@@ -1,26 +1,38 @@
 "use client";
 
-import { Activity, CircleAlert, CircleHelp, Database, Layers, Package, SlidersVertical, Users } from "lucide-react";
-import { useState } from "react";
+import { Activity, CircleAlert, CircleHelp, Database, Layers, Package, Settings, Truck, Users, Warehouse } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { ConnectionBanner, OpsHud } from "@/components/hud/Hud";
 import { GridMap } from "@/components/map/GridMap";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
 import { ClientsPanel, EMPTY_CLIENT_DRAFT, type ClientsTab } from "@/components/panels/ClientsPanel";
 import { DataPanel } from "@/components/panels/DataPanel";
+import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft } from "@/components/panels/FleetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
+import { OccupancyMetrics } from "@/components/panels/OccupancyMetrics";
+import { OpsConfigPanel, type OpsConfigTab } from "@/components/panels/OpsConfigPanel";
 import { draftForClient, EMPTY_DRAFT, OrdersPanel, type OrdersTab } from "@/components/panels/OrdersPanel";
-import { TrafficLightPanel } from "@/components/panels/TrafficLight";
+import { useOperacionBands } from "@/components/panels/TrafficLight";
+import { VehiclesPanel } from "@/components/panels/VehiclesPanel";
+import { WarehousesPanel } from "@/components/panels/WarehousesPanel";
+import { useToast } from "@/components/ui/Toast";
 import { SideRail, type RailItem } from "@/components/workspace/SideRail";
 import { usePanelParam } from "@/components/workspace/usePanelParam";
 import { Workspace } from "@/components/workspace/Workspace";
+import { FLEET_DEFAULTS } from "@/config/simulacion";
 import { PANEL_WIDTH } from "@/lib/constants";
+import { saveFleet, saveOperationSpeeds, startOperation } from "@/lib/data/actions";
 import {
+  useActiveRun,
+  useFleetSettings,
+  useOperacion,
   useOperacionBreakdowns,
   useOperacionClock,
   useOperacionConnection,
+  useOperacionFleet,
   useOperacionKpis,
   useOperacionMapSnapshot,
   useOperacionMetrics,
@@ -29,15 +41,23 @@ import {
   useOperacionTrafficLight,
 } from "@/lib/data/hooks";
 import { kindForDocument } from "@/lib/documento";
-import type { Client, EntityRef } from "@/lib/types";
+import { defaultSimSettings } from "@/lib/sim-settings";
+import type { Client, DataScope, EntityRef, FleetSettings, VehicleKind } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 import { DailyRunControl } from "./DailyRunControl";
 
-const PANELS = ["semaforo", "metricas", "clientes", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
+// "semaforo" se mantiene para enlaces antiguos: abre la pestaña Semáforo de Configurar.
+const PANELS = ["config", "semaforo", "vehiculos", "almacenes", "metricas", "clientes", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
+/** Paneles disponibles antes de iniciar la operación. */
+const IDLE_PANELS: Panel[] = ["config", "almacenes", "datos", "ayuda", "leyenda"];
+const SCOPE: DataScope = { kind: "ops" };
+const KINDS: VehicleKind[] = ["auto", "moto", "bicicleta"];
 
 export function DailyOperationsScreen() {
+  const toast = useToast();
   const [panel, setPanel] = usePanelParam(PANELS);
+  const { cargado, running } = useOperacion();
   const connection = useOperacionConnection();
   const snapshot = useOperacionMapSnapshot();
   const kpis = useOperacionKpis();
@@ -47,7 +67,18 @@ export function DailyOperationsScreen() {
   const breakdowns = useOperacionBreakdowns();
   const plates = useOperacionPlates();
   const trafficLight = useOperacionTrafficLight();
+  const opsFleet = useOperacionFleet();
+  const serverFleet = useFleetSettings();
+  // Una simulación en curso (de otra pantalla o sesión) también impide cargar datos.
+  const simulationRunning = useActiveRun().running;
+  const { bands, applied, setBands } = useOperacionBands();
+  // Los listados reciben la configuración completa; solo usan los semáforos en %.
+  const settings = useMemo(() => ({ ...defaultSimSettings(), ...applied }), [applied]);
 
+  const [configTab, setConfigTab] = useState<OpsConfigTab>("general");
+  // Cada operación nueva parte de la flota por defecto (config/simulacion.ts).
+  const [fleetDraft, setFleetDraft] = useState(() => toFleetDraft(FLEET_DEFAULTS));
+  const [starting, setStarting] = useState(false);
   const [selected, setSelected] = useState<EntityRef | null>(null);
   const [layers, setLayers] = useState(ALL_LAYERS);
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -59,7 +90,37 @@ export function DailyOperationsScreen() {
   const [clientFromOrder, setClientFromOrder] = useState(false);
   const [picking, setPicking] = useState(false);
 
+  // Enlaces antiguos a ?panel=semaforo.
+  if (panel === "semaforo" && configTab !== "semaforo") setConfigTab("semaforo");
+  useEffect(() => { if (panel === "semaforo") setPanel("config"); }, [panel, setPanel]);
+
   const open = (p: Panel | null) => { setPicking(false); setClientFromOrder(false); setPanel(p); };
+
+  const start = async () => {
+    setStarting(true);
+    const chosen = parseFleetDraft(fleetDraft);
+    // La cantidad se fija en el servidor antes de iniciar (la operación carga la flota al arrancar);
+    // la velocidad es propia de la operación y se envía en cuanto está en curso.
+    const quantities = Object.fromEntries(KINDS.map((k) => [k, { quantity: chosen[k].quantity, speed: serverFleet.value[k].speed }])) as FleetSettings;
+    if (!sameFleet(quantities, serverFleet.value)) {
+      const saved = await saveFleet(quantities, serverFleet.value);
+      if (!saved.ok) {
+        setStarting(false);
+        setConfigTab("flota");
+        return toast.error(saved.message);
+      }
+    }
+    const res = await startOperation();
+    if (!res.ok) {
+      setStarting(false);
+      return toast.error(res.message);
+    }
+    const speeds = await saveOperationSpeeds(Object.fromEntries(KINDS.map((k) => [k, chosen[k].speed])) as Record<VehicleKind, number>);
+    setStarting(false);
+    if (!speeds.ok) toast.error(`La operación inició, pero no se aplicaron las velocidades: ${speeds.message}`);
+    setFleetDraft(toFleetDraft(FLEET_DEFAULTS));
+    setPanel(null);
+  };
 
   const registerClientFromOrder = (document: string) => {
     setClientDraft({ ...EMPTY_CLIENT_DRAFT, kind: kindForDocument(document) ?? "", document });
@@ -72,29 +133,69 @@ export function DailyOperationsScreen() {
     setOrderTab("nuevo");
     open("pedidos");
   };
-  const toggle = (p: Panel) => open(panel === p ? null : p);
-  const width = panel === "semaforo" ? PANEL_WIDTH.wide : PANEL_WIDTH.default;
+
+  // Antes de iniciar solo se ofrecen los paneles de configuración.
+  const shown = panel === "semaforo" ? "config" : panel && !running && !IDLE_PANELS.includes(panel) ? null : panel;
+  const toggle = (p: Panel) => open(shown === p ? null : p);
+  const width = shown === "config" ? PANEL_WIDTH.wide : PANEL_WIDTH.default;
   const close = () => open(null);
   const activeBreakdowns = breakdowns.filter((b) => b.status === "activa").length;
+  const selectedWarehouse = selected?.type === "warehouse" ? selected.id : null;
+  const emphasis = useMemo(
+    () => (shown === "almacenes" && selectedWarehouse ? { warehouses: new Set([selectedWarehouse]) } : undefined),
+    [shown, selectedWarehouse],
+  );
 
-  const items: RailItem<Panel>[] = [
-    { id: "semaforo", label: "Semáforo", Icon: SlidersVertical },
-    { id: "metricas", label: "Métricas", Icon: Activity },
-    { id: "clientes", label: "Clientes", Icon: Users },
-    { id: "pedidos", label: "Pedidos", Icon: Package },
-    { id: "averias", label: "Averías", Icon: CircleAlert, badge: activeBreakdowns },
-    { id: "datos", label: "Datos", Icon: Database },
-  ];
+  const items: RailItem<Panel>[] = running
+    ? [
+        { id: "config", label: "Configurar", Icon: Settings },
+        { id: "vehiculos", label: "Vehículos", Icon: Truck },
+        { id: "almacenes", label: "Almacenes", Icon: Warehouse },
+        { id: "metricas", label: "Métricas", Icon: Activity },
+        { id: "clientes", label: "Clientes", Icon: Users },
+        { id: "pedidos", label: "Pedidos", Icon: Package },
+        { id: "averias", label: "Averías", Icon: CircleAlert, badge: activeBreakdowns },
+        { id: "datos", label: "Datos", Icon: Database },
+      ]
+    : [
+        { id: "config", label: "Configurar", Icon: Settings },
+        { id: "almacenes", label: "Almacenes", Icon: Warehouse },
+        { id: "datos", label: "Datos", Icon: Database },
+      ];
   const bottom: RailItem<Panel>[] = [
     { id: "ayuda", label: "Ayuda", Icon: CircleHelp },
     { id: "leyenda", label: "Leyenda", Icon: Layers },
   ];
 
+  const shownFleet = running && opsFleet ? toFleetDraft(opsFleet) : fleetDraft;
+
   const panelNode =
-    panel === "semaforo" ? <TrafficLightPanel key={JSON.stringify(trafficLight)} saved={trafficLight} onClose={close} width={width} />
-    : panel === "metricas" ? <MetricsPanel metrics={metrics} simulation={false} onClose={close} width={width} />
-    : panel === "datos" ? <DataPanel onClose={close} width={width} />
-    : panel === "clientes" ? (
+    shown === "config" ? (
+      <OpsConfigPanel
+        running={running}
+        loading={!cargado}
+        tab={configTab}
+        onTab={setConfigTab}
+        fleet={shownFleet}
+        onFleet={setFleetDraft}
+        fleetErrors={fleetDraftErrors(shownFleet)}
+        bands={bands}
+        onBands={setBands}
+        starting={starting}
+        onStart={start}
+        onClose={close}
+        width={width}
+      />
+    )
+    : shown === "vehiculos" ? (
+      <VehiclesPanel scope={SCOPE} settings={settings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} onClose={close} width={width} />
+    )
+    : shown === "almacenes" ? (
+      <WarehousesPanel scope={SCOPE} settings={settings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={running || !cargado} />
+    )
+    : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation={false} onClose={close} width={width} occupancy={<OccupancyMetrics scope={SCOPE} settings={settings} />} />
+    : shown === "datos" ? <DataPanel onClose={close} width={width} locked={running || !cargado || simulationRunning} />
+    : shown === "clientes" ? (
       <ClientsPanel
         tab={clientTab}
         onTabChange={setClientTab}
@@ -108,7 +209,7 @@ export function DailyOperationsScreen() {
         width={width}
       />
     )
-    : panel === "pedidos" ? (
+    : shown === "pedidos" ? (
       <OrdersPanel
         audience="operador"
         orders={orders}
@@ -125,9 +226,9 @@ export function DailyOperationsScreen() {
         width={width}
       />
     )
-    : panel === "averias" ? <BreakdownsPanel live plates={plates} recent={breakdowns} onClose={close} width={width} />
-    : panel === "ayuda" ? <HelpPanel audience="operador" onClose={close} width={width} />
-    : panel === "leyenda" ? <LegendPanel layers={layers} onToggle={(l, on) => setLayers((x) => ({ ...x, [l]: on }))} onClose={close} width={width} />
+    : shown === "averias" ? <BreakdownsPanel live plates={plates} recent={breakdowns} onClose={close} width={width} />
+    : shown === "ayuda" ? <HelpPanel audience="operador" onClose={close} width={width} />
+    : shown === "leyenda" ? <LegendPanel layers={layers} onToggle={(l, on) => setLayers((x) => ({ ...x, [l]: on }))} onClose={close} width={width} />
     : null;
 
   return (
@@ -137,30 +238,34 @@ export function DailyOperationsScreen() {
           snapshot={snapshot}
           orders={orders}
           trafficLight={trafficLight}
+          vehicleBands={applied.vehicleOccupancy}
+          warehouseFillBands={applied.warehouseFill}
+          neutralWarehouses={!running}
+          emphasis={emphasis}
           layers={layers}
           selected={selected}
           onSelect={setSelected}
-          highlight={panel === "clientes" ? highlightFor(orders, null, clientDraft) : highlightFor(orders, orderId, panel === "pedidos" ? draft : undefined)}
+          highlight={shown === "clientes" ? highlightFor(orders, null, clientDraft) : highlightFor(orders, orderId, shown === "pedidos" ? draft : undefined)}
           pickMode={picking}
           onPick={(c) => {
             const coords = { x: String(c.x), y: String(c.y) };
-            if (panel === "clientes") setClientDraft((d) => ({ ...d, ...coords }));
+            if (shown === "clientes") setClientDraft((d) => ({ ...d, ...coords }));
             else setDraft((d) => ({ ...d, ...coords }));
             setPicking(false);
           }}
           onCancelPick={() => setPicking(false)}
-          emptyMessage={WAITING_MESSAGE}
+          emptyMessage={running ? WAITING_MESSAGE : undefined}
         />
       }
       hud={
         <>
-          <OpsHud connection={connection} clock={clock} kpis={kpis} compact={!!panel} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} />
-          <ConnectionBanner state={connection} />
-          <DailyRunControl />
+          {running && <OpsHud connection={connection} clock={clock} kpis={kpis} compact={!!shown} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} />}
+          {running && <ConnectionBanner state={connection} />}
+          <DailyRunControl onConfigure={() => open("config")} />
         </>
       }
       panel={panelNode}
-      rail={<SideRail items={items} bottomItems={bottom} active={panel} onToggle={toggle} homeHref="/operaciones" />}
+      rail={<SideRail items={items} bottomItems={bottom} active={shown} onToggle={toggle} homeHref="/operaciones" />}
     />
   );
 }

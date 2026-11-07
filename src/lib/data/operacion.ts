@@ -16,8 +16,8 @@ import * as api from "@/lib/backend/api";
 import { ErrorServicio } from "@/lib/backend/api";
 import { abrirCanalOperacion, type EstadoCanal } from "@/lib/backend/canal";
 import type { ResultadoComando, SolicitudPedidoOperacion, VistaAlmacen, VistaOperacion } from "@/lib/backend/types";
-import { PRIORIDAD_POR_CODIGO, trafficLightToSemaforoBody } from "@/lib/data/adapters";
-import type { Coord, PriorityCode, TrafficLight } from "@/lib/types";
+import { PRIORIDAD_POR_CODIGO, TIPO_POR_KIND, trafficLightToSemaforoBody } from "@/lib/data/adapters";
+import type { Coord, PriorityCode, TrafficLight, VehicleKind } from "@/lib/types";
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; message: string };
 
@@ -221,5 +221,17 @@ export async function registrarAveria(placa: string, tipo: 1 | 2 | 3): Promise<R
 export async function guardarSemaforo(t: TrafficLight): Promise<Result> {
   const { ambar, verde } = trafficLightToSemaforoBody(t);
   const r = await enviarComando((id, solicitudId) => api.parametrosOperacion(id, { solicitudId, ambar, verde }));
+  return r.ok ? { ok: true } : r;
+}
+
+/** Velocidades (km/h) de la operación en curso; solo se envían las que cambian. */
+export async function guardarVelocidades(next: Record<VehicleKind, number>): Promise<Result> {
+  const v = state.vista;
+  if (!v || !enCurso(v)) return { ok: false, message: "No hay una operación diaria en curso." };
+  const kinds = Object.keys(TIPO_POR_KIND) as VehicleKind[];
+  const cambios = kinds.filter((k, i) => v.parametros.velocidadKmH[i] !== next[k]);
+  if (!cambios.length) return { ok: true };
+  const velocidades = Object.fromEntries(cambios.map((k) => [TIPO_POR_KIND[k], next[k]]));
+  const r = await enviarComando((id, solicitudId) => api.parametrosOperacion(id, { solicitudId, velocidades }));
   return r.ok ? { ok: true } : r;
 }

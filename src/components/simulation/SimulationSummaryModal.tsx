@@ -5,7 +5,6 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { PriorityBars } from "@/components/panels/PriorityBars";
-import { TrafficLightPreview } from "@/components/panels/TrafficLight";
 import { Button, IconButton } from "@/components/ui/Button";
 import { StatCard } from "@/components/ui/feedback";
 import { Overlay } from "@/components/ui/Overlay";
@@ -13,7 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
 import { SIMULATION_TITLE, TONE_COLOR, priorityInfo } from "@/lib/constants";
 import { formatClock, formatCoord, formatElapsed, formatMoney, formatNumber, formatPercent, formatSimStamp } from "@/lib/format";
-import { OUTCOME_DETAIL, buildReportText, downloadTextFile, reportFileName, summaryHeadline } from "@/lib/report";
+import { OUTCOME_DETAIL, bandRows, buildReportText, downloadTextFile, reportFileName, summaryHeadline, type UsedBands } from "@/lib/report";
 import type { SimulationMode, SimulationOutcome, SimulationSummary } from "@/lib/types";
 
 const HERO: Record<SimulationOutcome, { box: string; icon: string; Icon: typeof CircleCheck }> = {
@@ -39,13 +38,15 @@ type Props = {
   startDate: string;
   /** null mientras el servidor no envía el resumen (o si la corrida falló antes de generarlo). */
   summary: SimulationSummary | null;
+  /** Semáforos en % con los que se ejecutó la corrida. */
+  bands: UsedBands;
   /** Detalle del error cuando outcome === "fallida" y el backend no llegó a enviar un resumen. */
   errorMessage?: string | null;
   onClose: () => void;
   onNew: () => void;
 };
 
-export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, errorMessage, onClose, onNew }: Props) {
+export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, bands, errorMessage, onClose, onNew }: Props) {
   const toast = useToast();
   const hero = HERO[outcome];
   const headline = summaryHeadline({ outcome, mode, startDate, firstLateOrder: s?.firstLateOrder });
@@ -53,7 +54,7 @@ export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, e
 
   const download = () => {
     if (!s) return;
-    downloadTextFile(reportFileName(s), buildReportText(s));
+    downloadTextFile(reportFileName(s), buildReportText(s, bands));
     toast.success("Descargamos el reporte en formato .txt.");
   };
 
@@ -117,7 +118,14 @@ export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, e
                 </Box>
                 <div className="flex flex-col gap-3.5">
                   <Box title="Rangos del semáforo usados" icon={<SlidersVertical className="size-4" aria-hidden />}>
-                    <TrafficLightPreview value={s.trafficLight} />
+                    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                      {bandRows(bands).map(([name, text]) => (
+                        <div key={name} className="contents">
+                          <dt className="font-semibold text-n300">{name}</dt>
+                          <dd className="text-n400 tabular-nums">{text}</dd>
+                        </div>
+                      ))}
+                    </dl>
                   </Box>
                   <Box title="Eventos de la simulación" icon={<Activity className="size-4" aria-hidden />} className="flex-1">
                     <ol className="max-h-[150px] overflow-y-auto pr-1">
