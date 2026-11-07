@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, Clock, Flag, House, Package, Route, Search, Truck } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, CircleDashed, Clock, Flag, House, Package, Route, Search, Truck } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { VEHICLE_META } from "@/components/domain/vehicle";
 import { VEHICLE_STATUS_LABEL } from "@/components/map/layers";
@@ -27,6 +27,9 @@ const SORTS: { value: SortKey; label: string; key: (r: VehicleRow) => number | n
   { value: "traveled", label: "Recorrido", key: (r) => r.traveledKm },
 ];
 const TONES: StatusTone[] = ["ok", "warn", "crit"];
+/** Semáforo de ocupación o "vacío" (sin carga a bordo); un vacío también cuenta como verde. */
+type Filter = StatusTone | "empty";
+const isEmpty = (r: VehicleRow) => r.load <= 0;
 const PAGE_SIZE = 8;
 
 const km = (n: number | null) => (n == null ? "—" : `${Math.round(n)} km`);
@@ -42,14 +45,14 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
   scope: DataScope; settings: SimSettings; selectedId: string | null; onSelect: (id: string | null) => void; onClose: () => void; width: number;
 }) {
   const data = useSimulationRows(scope, settings);
-  const [tones, setTones] = useState<ReadonlySet<StatusTone>>(() => new Set());
+  const [tones, setTones] = useState<ReadonlySet<Filter>>(() => new Set());
   const [bands, setBands] = useState<ReadonlySet<DistanceBand>>(() => new Set());
   const [sort, setSort] = useState<SortKey>("occupancy");
   const [dir, setDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
 
   const rows = sortBy(
-    filterBy(data.vehicles, [inSet(tones, (r) => r.tone), inSet(bands, (r) => distanceBand(r.remainingKm))]),
+    filterBy(data.vehicles, [tones.size ? (r) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r)) : null, inSet(bands, (r) => distanceBand(r.remainingKm))]),
     SORTS.find((s) => s.value === sort)!.key,
     dir,
   );
@@ -69,7 +72,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
   return (
     <SidePanel title="Vehículos" subtitle="Ocupación, carga y avance de cada unidad." onClose={onClose} width={width}>
       <PanelSection title="Filtros" icon={<Search className="size-[18px]" aria-hidden />}>
-        <div role="group" aria-label="Filtrar por semáforo de ocupación" className="flex flex-wrap gap-1.5">
+        <div role="group" aria-label="Filtrar por semáforo de ocupación o vehículos vacíos" className="flex flex-wrap gap-1.5">
           {TONES.map((t) => {
             const Icon = TONE_ICON[t];
             return (
@@ -78,6 +81,9 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, onClose, 
               </Chip>
             );
           })}
+          <Chip on={tones.has("empty")} onClick={() => { setTones((s) => toggleIn(s, "empty")); reset(); }}>
+            <CircleDashed className="size-3.5 text-n400" aria-hidden />Vacío <span className="text-n500 tabular-nums">{count(isEmpty)}</span>
+          </Chip>
         </div>
         <div role="group" aria-label="Filtrar por distancia restante al destino" className="grid gap-1.5">
           <span className="text-xs text-n500">Distancia restante al destino</span>
