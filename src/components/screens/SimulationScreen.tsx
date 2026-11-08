@@ -321,6 +321,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
               summary={feed.summary}
               bands={shownSettings}
               errorMessage={feed.error}
+              runId={own?.id ?? null}
               onClose={() => setDismissedId(own?.id ?? null)}
               onNew={newSimulation}
             />

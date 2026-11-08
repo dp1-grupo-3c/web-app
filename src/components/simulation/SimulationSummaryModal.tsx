@@ -1,10 +1,11 @@
 "use client";
 
-import { Activity, CircleAlert, CircleCheck, Clock, Download, LoaderCircle, SlidersVertical, TriangleAlert, X } from "lucide-react";
+import { Activity, CircleAlert, CircleCheck, Clock, Download, LoaderCircle, Route, SlidersVertical, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { PriorityBars } from "@/components/panels/PriorityBars";
+import { PlanReport, usePlanReport } from "@/components/simulation/PlanReport";
 import { Button, IconButton } from "@/components/ui/Button";
 import { StatCard } from "@/components/ui/feedback";
 import { Overlay } from "@/components/ui/Overlay";
@@ -12,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
 import { SIMULATION_TITLE, TONE_COLOR, priorityInfo } from "@/lib/constants";
 import { formatClock, formatCoord, formatElapsed, formatMoney, formatNumber, formatPercent, formatSimStamp } from "@/lib/format";
+import { planReportLines } from "@/lib/plan-report";
 import { OUTCOME_DETAIL, bandRows, buildReportText, downloadTextFile, reportFileName, summaryHeadline, type UsedBands } from "@/lib/report";
 import type { SimulationMode, SimulationOutcome, SimulationSummary } from "@/lib/types";
 
@@ -42,19 +44,23 @@ type Props = {
   bands: UsedBands;
   /** Detalle del error cuando outcome === "fallida" y el backend no llegó a enviar un resumen. */
   errorMessage?: string | null;
+  // Corrida de la que se pide la última planificación estable.
+  runId?: string | null;
   onClose: () => void;
   onNew: () => void;
 };
 
-export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, bands, errorMessage, onClose, onNew }: Props) {
+export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, bands, errorMessage, runId, onClose, onNew }: Props) {
   const toast = useToast();
+  const plan = usePlanReport(runId ? { kind: "simulacion", id: runId } : null);
   const hero = HERO[outcome];
   const headline = summaryHeadline({ outcome, mode, startDate, firstLateOrder: s?.firstLateOrder });
   const late = s?.firstLateOrder;
 
   const download = () => {
     if (!s) return;
-    downloadTextFile(reportFileName(s), buildReportText(s, bands));
+    const text = buildReportText(s, bands);
+    downloadTextFile(reportFileName(s), plan.report ? `${text}\n\n${planReportLines(plan.report, plan.names).join("\n")}\n` : text);
     toast.success("Descargamos el reporte en formato .txt.");
   };
 
@@ -151,6 +157,12 @@ export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, b
               <LoaderCircle className="size-5 animate-spin text-pink" aria-hidden />
               Estamos esperando el resumen del servidor. Los indicadores aparecerán aquí en cuanto lleguen.
             </div>
+          )}
+
+          {runId && (
+            <Box title="Última planificación estable" icon={<Route className="size-4" aria-hidden />}>
+              <PlanReport report={plan.report} names={plan.names} error={plan.error} loading={plan.loading} />
+            </Box>
           )}
         </div>
 

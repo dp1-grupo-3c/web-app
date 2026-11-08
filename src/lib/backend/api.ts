@@ -35,6 +35,7 @@ import type {
   VistaAlmacen,
   VistaMundo,
   VistaParametros,
+  ReportePlan,
 } from "./types";
 
 export class ErrorServicio extends Error {
@@ -79,6 +80,7 @@ export const detalleCorrida = (id: string) => api<DetalleCorrida>(`/simulaciones
 export const enviosAlmacen = (id: string, almacen: number, horas: number) =>
   api<EnviosAlmacen>(`/simulaciones/${id}/almacenes/${almacen}/envios?horas=${horas}`);
 export const resultadoCorrida = (id: string) => api<ResultadoSimulacion>(`/simulaciones/${id}/resultado`);
+export const planCorrida = (id: string) => api<ReportePlan>(`/simulaciones/${id}/plan`);
 /** `entregadosUltimosMinutos`: solo los entregados en esa ventana simulada, del más reciente al más antiguo. */
 export const paginaPedidos = (id: string, q: { pagina?: number; tamano?: number; busqueda?: string; soloActivos?: boolean; entregadosUltimosMinutos?: number }) =>
   api<PaginaPedidos>(`/simulaciones/${id}/pedidos?` + new URLSearchParams(
@@ -150,6 +152,7 @@ export const paginaPedidosOperacion = (id: string, q: { pagina?: number; tamano?
 export const metricasOperacion = (id: string) => api<MetricasSimulacion>(`${op(id)}/metricas`);
 export const enviosAlmacenOperacion = (id: string, almacen: number, horas: number) =>
   api<EnviosAlmacen>(`${op(id)}/almacenes/${almacen}/envios?horas=${horas}`);
+export const planOperacion = (id: string) => api<ReportePlan>(`${op(id)}/plan`);
 
 // ---- Clientes ------------------------------------------------------------------
 

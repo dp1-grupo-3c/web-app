@@ -322,6 +322,51 @@ export interface ArchivoGuardado {
   reemplazado: boolean;
 }
 
+// Reporte de la última planificación estable (GET …/plan).
+export interface ParadaPlan {
+  tipo: "ABASTECIMIENTO" | "ENTREGA" | "ALIMENTACION";
+  x: number;
+  y: number;
+  idPedido: number;
+  idAlmacen: number;
+  cantidad: number;
+  minutoLlegada: number;
+  minutoSalida: number;
+  fechaHoraLlegada: string;
+  fechaHoraSalida: string;
+}
+
+export interface RutaPlan {
+  codigoUnidad: string;
+  tipoUnidad: TipoUnidad;
+  kilometros: number;
+  costo: number;
+  paradas: ParadaPlan[];
+}
+
+export interface PlanVigente {
+  minuto: number;
+  fechaHora: string;
+  algoritmo: string;
+  rutas: RutaPlan[];
+  // Paquetes sin asignar por id de pedido.
+  sinAsignar: Record<string, number>;
+  kilometros: number;
+  costo: number;
+  paquetesPlanificados: number;
+}
+
+export interface ReportePlan {
+  id: string;
+  escenario: string;
+  estado: string;
+  terminado: boolean;
+  fechaHora: string;
+  // Nulo antes de la primera planificación.
+  plan: PlanVigente | null;
+  metricas: MetricasSimulacion;
+}
+
 export interface RespuestaAveria {
   placa: string;
   tipo: number;
