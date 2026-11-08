@@ -162,7 +162,7 @@ function VehicleOrdersTable({ orders }: { orders: VehicleOrderLoad[] }) {
 }
 
 export function WarehousePopover({ warehouse: w, trafficLight, fillBands, neutral, anchor, onClose, mapHeight, vehicles = [], onSelectVehicle }: { warehouse: Warehouse; trafficLight: TrafficLight; fillBands?: PercentBands; neutral: boolean; anchor: Anchor; onClose: () => void; mapHeight: number; vehicles?: Vehicle[]; onSelectVehicle?: (id: string) => void }) {
-  const { color, tone } = warehouseAppearance(w, trafficLight, neutral, fillBands);
+  const { color, tone, empty } = warehouseAppearance(w, trafficLight, neutral, fillBands);
   const principal = w.kind === "principal";
   return (
     <Shell
@@ -173,7 +173,7 @@ export function WarehousePopover({ warehouse: w, trafficLight, fillBands, neutra
         <>
           <Tile color={color}>{principal ? <House className="size-5" aria-hidden /> : <Package className="size-5" aria-hidden />}</Tile>
           <Title title={w.name} subtitle={principal ? "Base de la flota" : "Almacén secundario"} />
-          {tone && <Badge tone={tone}>{TONE_LABEL[tone]}</Badge>}
+          {empty ? <Badge tone="neutral">Vacío</Badge> : tone && <Badge tone={tone}>{TONE_LABEL[tone]}</Badge>}
         </>
       }
     >

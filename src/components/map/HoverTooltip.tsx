@@ -1,6 +1,6 @@
 import { Package } from "lucide-react";
 import { VEHICLE_META } from "@/components/domain/vehicle";
-import { Meter } from "@/components/ui/feedback";
+import { Badge, Meter } from "@/components/ui/feedback";
 import { ToneBadge } from "@/components/ui/ToneBadge";
 import { TONE_COLOR, TONE_LABEL } from "@/lib/constants";
 import { percentTone, vehicleOccupancy, warehouseOccupancy } from "@/lib/occupancy";
@@ -26,7 +26,7 @@ export function warehouseStockText(w: Warehouse) {
 
 type Props = { x: number; y: number; mapWidth: number } & (
   | { kind: "vehicle"; vehicle: Vehicle; bands: PercentBands }
-  | { kind: "warehouse"; warehouse: Warehouse; tone: StatusTone | null }
+  | { kind: "warehouse"; warehouse: Warehouse; tone: StatusTone | null; empty?: boolean }
   | { kind: "blockage"; schedule: { start: string; end: string; duration: string } }
 );
 
@@ -93,7 +93,7 @@ export function HoverTooltip(p: Props) {
         <Meter value={Number.isFinite(occ) ? occ / 100 : 0} color={p.tone ? TONE_COLOR[p.tone] : PINK} label="Ocupación del almacén" />
         <div className="flex items-center justify-between text-xs text-n400">
           <span>Ocupación <b className="text-white tabular-nums">{pct(occ)}</b></span>
-          {p.tone && <ToneBadge tone={p.tone} />}
+          {p.empty ? <Badge tone="neutral">Vacío</Badge> : p.tone && <ToneBadge tone={p.tone} />}
         </div>
       </>
     );

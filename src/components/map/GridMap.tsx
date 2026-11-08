@@ -237,7 +237,8 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       const w = snapshot.warehouses.find((x) => x.id === hovered.id);
       if (w && layers.almacenes && w.kind === "secundario") {
         const [px, py] = project(g, w.position);
-        tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={warehouseAppearance(w, trafficLight, idle, warehouseFillBands).tone} x={px} y={py} mapWidth={size.w} />;
+        const a = warehouseAppearance(w, trafficLight, idle, warehouseFillBands);
+        tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={a.tone} empty={a.empty} x={px} y={py} mapWidth={size.w} />;
       }
     } else if (hovered.type === "blockage") {
       const b = blockages.find((x) => x.id === hovered.id);

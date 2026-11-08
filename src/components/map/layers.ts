@@ -29,10 +29,12 @@ export const VEHICLE_STATUS_LABEL: Record<VehicleStatus, string> = {
  * en paquetes (operación diaria).
  */
 export function warehouseAppearance(w: Warehouse, t: TrafficLight, neutral: boolean, fillBands?: PercentBands) {
-  if (w.kind === "principal") return { color: PINK, Icon: House, tone: null };
-  if (neutral || w.stock == null) return { color: PINK, Icon: Package, tone: null };
+  if (w.kind === "principal") return { color: PINK, Icon: House, tone: null, empty: false };
+  if (neutral || w.stock == null) return { color: PINK, Icon: Package, tone: null, empty: false };
+  // Sin stock va en gris, igual que un vehículo vacío.
+  if (w.stock <= 0) return { color: VEHICLE_EMPTY_COLOR, Icon: Package, tone: null, empty: true };
   const tone = fillBands ? percentTone(warehouseOccupancy(w), fillBands, "highIsGreen") : warehouseTone(w.stock, t);
-  return { color: tone ? TONE_COLOR[tone] : PINK, Icon: Package, tone };
+  return { color: tone ? TONE_COLOR[tone] : PINK, Icon: Package, tone, empty: false };
 }
 
 /**

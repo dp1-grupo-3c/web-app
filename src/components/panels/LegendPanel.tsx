@@ -42,6 +42,7 @@ export function LegendPanel({ layers, onToggle, onClose, width }: { layers: MapL
           <Item glyph={pin("var(--color-success)", Package)}>Verde · stock suficiente</Item>
           <Item glyph={pin("var(--color-warning)", Package)}>Ámbar · conviene reabastecer</Item>
           <Item glyph={pin("var(--color-critic)", Package)}>Rojo · nivel crítico</Item>
+          <Item glyph={pin(VEHICLE_EMPTY_COLOR, Package)}>Gris · vacío, sin stock</Item>
         </ul>
       </PanelSection>
       <PanelSection
