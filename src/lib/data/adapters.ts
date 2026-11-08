@@ -118,6 +118,9 @@ export function vistaUnidadToVehicle(u: VistaUnidad): Vehicle {
     // La exactitud del manifiesto depende del backend: no inferir carga física de la ruta.
     // Incluye las entregas de viajes posteriores a una recarga; `trip` las distingue de la carga real.
     orders: u.pedidosABordo.filter((p) => p.enLaUnidad > 0).map((p) => ({ orderId: String(p.idPedido), packagesInVehicle: p.enLaUnidad, packagesTotal: p.totalDelPedido, trip: p.viaje ?? 0 })),
+    phase: u.fase === "LLEGANDO" ? "llegando" : u.fase === "SALIENDO" ? "saliendo" : undefined,
+    originWarehouseId: u.idAlmacenOrigen != null && u.idAlmacenOrigen >= 0 ? String(u.idAlmacenOrigen) : undefined,
+    originDepartureMinute: u.minutoSalidaAlmacen != null && u.minutoSalidaAlmacen >= 0 ? u.minutoSalidaAlmacen : undefined,
   };
 }
 

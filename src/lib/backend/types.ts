@@ -52,6 +52,13 @@ export interface VistaUnidad {
    */
   pedidosABordo: { idPedido: number; enLaUnidad: number; totalDelPedido: number; viaje: number }[];
   tipoAveria: number;
+  // Llegando va hacia una parada; saliendo espera salir de una.
+  fase?: "LLEGANDO" | "SALIENDO" | "SIN_RUTA";
+  minutoSalidaTramo?: number;
+  minutoLlegadaTramo?: number;
+  // Ultimo almacén donde cargó (-1 sin dato) y minuto en que salió de él.
+  idAlmacenOrigen?: number;
+  minutoSalidaAlmacen?: number;
 }
 
 /** Entrega registrada por el motor (las de las últimas 24 h simuladas). */

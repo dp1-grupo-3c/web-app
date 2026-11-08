@@ -7,6 +7,7 @@ import { VEHICLE_STATUS_LABEL } from "@/components/map/layers";
 import { Button } from "@/components/ui/Button";
 import { Chip, SegmentedControl } from "@/components/ui/choice";
 import { EmptyState, Meter } from "@/components/ui/feedback";
+import { ErrorMessage, TextInput } from "@/components/ui/form";
 import { Pagination } from "@/components/ui/Pagination";
 import { TONE_ICON, ToneBadge } from "@/components/ui/ToneBadge";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
@@ -17,6 +18,7 @@ import { formatSimClock as simClock, type VehicleRow } from "@/lib/data/selector
 import { formatDuration } from "@/lib/format";
 import { filterBy, inSet, sortBy, toggleIn, type SortDir } from "@/lib/list-tools";
 import { DISTANCE_BAND_LABEL, DISTANCE_BANDS, distanceBand } from "@/lib/occupancy";
+import { matchesDistance, parseMaxDistance, type DistanceRef, type DistanceUnit, type PhaseFilter } from "@/lib/vehicle-search";
 import type { DataScope, DistanceBand, SimSettings, StatusTone } from "@/lib/types";
 
 type SortKey = "occupancy" | "departure" | "arrival" | "traveled";
@@ -31,6 +33,8 @@ const TONES: StatusTone[] = ["ok", "warn", "crit"];
 type Filter = StatusTone | "empty";
 const isEmpty = (r: VehicleRow) => r.load <= 0;
 const PAGE_SIZES = [4, 6, 8];
+const PHASES: [PhaseFilter, string][] = [["todas", "Todas"], ["llegando", "Llegando"], ["saliendo", "Saliendo"]];
+const PHASE_TEXT = { llegando: "llegando", saliendo: "saliendo" } as const;
 /**
  * Alto fijo de cada tarjeta, suma exacta de sus filas: borde 2 + relleno 24 +
  * cabecera 24 + estado 16 + barra 8 + datos 4 × 20 + 3 separaciones de 8 = 178 px.
@@ -56,6 +60,13 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId,
   const data = useSimulationRows(scope, settings);
   const [tones, setTones] = useState<ReadonlySet<Filter>>(() => new Set());
   const [bands, setBands] = useState<ReadonlySet<DistanceBand>>(() => new Set());
+  // Búsqueda por distancia: referencia, unidad, máximo y llegada o salida.
+  const [ref, setRef] = useState<DistanceRef>("destino");
+  const [unit, setUnit] = useState<DistanceUnit>("km");
+  const [maxText, setMaxText] = useState("");
+  const [phase, setPhase] = useState<PhaseFilter>("todas");
+  const max = parseMaxDistance(maxText);
+  const searching = max != null || phase !== "todas";
   const [sort, setSort] = useState<SortKey>("occupancy");
   const [dir, setDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
@@ -64,7 +75,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId,
   const [reveal, setReveal] = useState<string | null>(null);
 
   const rows = sortBy(
-    filterBy(data.vehicles, [(r) => r.id !== pinnedId, tones.size ? (r) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r)) : null, inSet(bands, (r) => distanceBand(r.remainingKm))]),
+    filterBy(data.vehicles, [(r) => r.id !== pinnedId, tones.size ? (r) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r)) : null, inSet(bands, (r) => distanceBand(r.remainingKm)), searching ? (r) => matchesDistance(r, { ref, unit, max: max ?? null, phase }) : null]),
     SORTS.find((s) => s.value === sort)!.key,
     dir,
   );
@@ -105,6 +116,23 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId,
             {DISTANCE_BANDS.map((b) => (
               <Chip key={b} on={bands.has(b)} onClick={() => { setBands((s) => toggleIn(s, b)); reset(); }}>
                 {DISTANCE_BAND_LABEL[b]} <span className="text-n500 tabular-nums">{count((r) => distanceBand(r.remainingKm) === b)}</span>
+              </Chip>
+            ))}
+          </div>
+        </div>
+        <div role="group" aria-label="Buscar por distancia" className="grid gap-1.5">
+          <span className="text-xs text-n500">Buscar por distancia</span>
+          <SegmentedControl label="Medir la distancia" value={ref} onChange={(v) => { setRef(v); reset(); }} options={[{ value: "destino", label: "Al destino" }, { value: "origen", label: "Desde el origen" }]} />
+          <div className="flex items-center gap-2">
+            <label htmlFor="veh-max" className="shrink-0 text-xs text-n400">Hasta</label>
+            <TextInput id="veh-max" inputMode="decimal" placeholder="sin límite" value={maxText} error={max === undefined} onChange={(e) => { setMaxText(e.target.value); reset(); }} className="min-w-0 flex-1" />
+            <SegmentedControl label="Unidad de la distancia" value={unit} onChange={(v) => { setUnit(v); reset(); }} options={[{ value: "km", label: "km" }, { value: "min", label: "min" }]} />
+          </div>
+          {max === undefined && <ErrorMessage>Escribe un número de 0 en adelante.</ErrorMessage>}
+          <div role="group" aria-label="Llegada o salida" className="flex flex-wrap gap-1.5">
+            {PHASES.map(([p, text]) => (
+              <Chip key={p} on={phase === p} onClick={() => { setPhase(p); reset(); }}>
+                {text}{p !== "todas" && <span className="text-n500 tabular-nums">{count((r) => r.phase === p)}</span>}
               </Chip>
             ))}
           </div>
@@ -161,7 +189,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId,
             </span>
             <Pagination page={current} pageCount={pageCount} onChange={setPage} />
           </div>
-          <p className="text-xs leading-snug text-n600">La salida y el almacén de origen se estiman con lo observado desde que abriste esta pantalla. La distancia recorrida corresponde al itinerario vigente.</p>
+          <p className="text-xs leading-snug text-n600">El almacén de origen y la salida los informa el servidor; si falta, se estiman con lo observado desde que abriste esta pantalla. La distancia recorrida corresponde al itinerario vigente.</p>
         </>
       )}
     </SidePanel>
@@ -213,7 +241,7 @@ const VehicleItem = memo(function VehicleItem({ row: r, selected, reveal, onReve
           <Pin className="size-4" fill={pinned ? "currentColor" : "none"} aria-hidden />
         </button>
       </div>
-      <p className="h-4 truncate text-xs leading-4 text-n500" title={VEHICLE_STATUS_LABEL[r.status]}>{label} · {VEHICLE_STATUS_LABEL[r.status]}</p>
+      <p className="h-4 truncate text-xs leading-4 text-n500" title={VEHICLE_STATUS_LABEL[r.status]}>{label} · {VEHICLE_STATUS_LABEL[r.status]}{r.phase && ` · ${PHASE_TEXT[r.phase]}`}</p>
       <Meter value={Number.isFinite(r.occupancy) ? r.occupancy / 100 : 0} color={r.tone ? TONE_COLOR[r.tone] : "var(--color-line-strong)"} label={`Ocupación de ${r.plate}`} />
       <dl className="grid grid-cols-2 gap-x-4 text-xs leading-5 [&_dd]:min-w-0 [&_dd]:truncate [&_dd]:text-right [&_dd]:text-white [&_dd]:tabular-nums [&_div]:flex [&_div]:h-5 [&_div]:min-w-0 [&_div]:items-center [&_div]:justify-between [&_div]:gap-2 [&_dt]:flex [&_dt]:shrink-0 [&_dt]:items-center [&_dt]:gap-1 [&_dt]:whitespace-nowrap [&_dt]:text-n500">
         <div><dt><Package className="size-3" aria-hidden />A bordo</dt><dd>{r.load} / {r.capacity}</dd></div>

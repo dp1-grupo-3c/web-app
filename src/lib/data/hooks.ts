@@ -226,7 +226,7 @@ export function useSimulationRows(scope: DataScope, settings: Pick<SimSettings, 
     return {
       minute,
       simTime: foto?.fechaHoraSimulada ?? null,
-      vehicles: selectVehicleRows(vehicles, trips, minute, vehicleOccupancy),
+      vehicles: selectVehicleRows(vehicles, trips, minute, vehicleOccupancy, warehouses),
       warehouses: selectWarehouseRows(warehouses, vehicles, trips, fillBands),
       fleetOccupancy: fleetOccupancy(vehicles),
       warehouseFill: warehouseFill(warehouses),

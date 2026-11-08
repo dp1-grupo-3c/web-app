@@ -9,7 +9,7 @@
  */
 
 import { aggregateOccupancy, manhattan, pathKm, percentTone, vehicleOccupancy, warehouseOccupancy } from "@/lib/occupancy";
-import type { Coord, Order, PercentBands, StatusTone, Vehicle, VehicleKind, VehicleStatus, Warehouse } from "@/lib/types";
+import type { Coord, Order, PercentBands, StatusTone, Vehicle, VehicleKind, VehiclePhase, VehicleStatus, Warehouse } from "@/lib/types";
 import { loadedOrders, type TripLog } from "./trips";
 
 export type VehicleRow = {
@@ -35,17 +35,23 @@ export type VehicleRow = {
   traveledKm: number;
   /** Manhattan desde el almacén de origen estimado (null = sin dato). */
   fromOriginKm: number | null;
+  // Minutos desde que salió del almacén de origen (null = sin dato o aún no sale).
+  fromOriginMinutes: number | null;
   originId: string | null;
   departureMinute: number | null;
   arrivalMinute: number | null;
+  // Llegando o saliendo, según el servidor (null = sin ruta).
+  phase: VehiclePhase | null;
 };
 
-export function selectVehicleRows(vehicles: Vehicle[], trips: TripLog, minute: number | null, bands: Record<VehicleKind, PercentBands>): VehicleRow[] {
+export function selectVehicleRows(vehicles: Vehicle[], trips: TripLog, minute: number | null, bands: Record<VehicleKind, PercentBands>, warehouses: Warehouse[] = []): VehicleRow[] {
   return vehicles.map((v) => {
     const trip = trips.vehicles[v.id];
     const occupancy = vehicleOccupancy(v);
-    // El primer nodo recorrido es un respaldo del origen cuando no se vio el almacén.
-    const origin = trip?.originPosition ?? v.route?.traveled[0] ?? null;
+    // El origen que informa el servidor manda; si no, el estimado y luego el primer nodo recorrido.
+    const reported = v.originWarehouseId ? warehouses.find((w) => w.id === v.originWarehouseId)?.position : undefined;
+    const origin = reported ?? trip?.originPosition ?? v.route?.traveled[0] ?? null;
+    const departed = v.originDepartureMinute ?? trip?.departedAt ?? null;
     return {
       id: v.id,
       plate: v.plate,
@@ -62,9 +68,11 @@ export function selectVehicleRows(vehicles: Vehicle[], trips: TripLog, minute: n
       remainingKm: pathKm(v.route?.pending),
       traveledKm: pathKm(v.route?.traveled),
       fromOriginKm: origin ? manhattan(origin, v.position) : null,
-      originId: trip?.originId ?? null,
-      departureMinute: trip?.departedAt ?? null,
+      fromOriginMinutes: departed != null && minute != null && minute >= departed ? minute - departed : null,
+      originId: v.originWarehouseId ?? trip?.originId ?? null,
+      departureMinute: departed,
       arrivalMinute: v.etaMinutes != null && minute != null ? minute + v.etaMinutes : null,
+      phase: v.phase ?? null,
     };
   });
 }

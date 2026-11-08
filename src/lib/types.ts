@@ -31,7 +31,14 @@ export type Vehicle = {
   destination?: Coord;
   breakdownType?: BreakdownType;
   orders: VehicleOrderLoad[];
+  // Del servidor: si va llegando a una parada o espera salir de ella.
+  phase?: VehiclePhase;
+  // Último almacén donde cargó y minuto simulado en que salió de él.
+  originWarehouseId?: string;
+  originDepartureMinute?: number;
 };
+
+export type VehiclePhase = "llegando" | "saliendo";
 
 export type Warehouse = {
   id: string;
