@@ -60,6 +60,12 @@ test("mundo: mapa en rango, almacenes dentro del mapa, en lugares distintos y co
   assert.match(con((d) => { d.warehouses[1].x = "27"; d.warehouses[1].y = "14"; }).warehouses[1], /otro almacén/);
 });
 
+test("un bloqueo guardado vuelve al formulario para editarlo", () => {
+  const draft = v.blockageDraft({ nodos: [{ x: 12, y: 20 }, { x: 13, y: 20 }], inicio: "2026-09-02T10:30:00", fin: "2026-09-03T08:05" });
+  assert.deepEqual(draft, { nodes: "12,20 13,20", startDate: "2026-09-02", startTime: "10:30", endDate: "2026-09-03", endTime: "08:05" });
+  assert.deepEqual(v.blockageNodes(draft.nodes, { width: 70, height: 50 }).nodes, [{ x: 12, y: 20 }, { x: 13, y: 20 }]);
+});
+
 test("nodos de un bloqueo: pares x,y con tramos rectos dentro del mapa", () => {
   const grid = { width: 70, height: 50 };
   assert.deepEqual(v.blockageNodes("12,20  13,20 13,25", grid), { nodes: [{ x: 12, y: 20 }, { x: 13, y: 20 }, { x: 13, y: 25 }], error: null });

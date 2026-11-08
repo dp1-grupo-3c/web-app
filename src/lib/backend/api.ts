@@ -36,6 +36,7 @@ import type {
   VistaMundo,
   VistaParametros,
   ReportePlan,
+  VistaRegistroBloqueo,
 } from "./types";
 
 export class ErrorServicio extends Error {
@@ -127,6 +128,15 @@ export const subirMantenimiento = (archivo: File) => api<ArchivoGuardado>("/dato
 /** Un bloqueo que cruza de mes se guarda en un archivo por cada mes. */
 export const registrarBloqueo = (s: SolicitudBloqueo) =>
   api<ArchivoGuardado[]>("/datos/bloqueos/manual", { metodo: "POST", cuerpo: s });
+export const registrosBloqueo = (mes: string) =>
+  api<VistaRegistroBloqueo[]>(`/datos/bloqueos/registros?mes=${encodeURIComponent(mes)}`);
+// El registro listado viaja para que el servidor rechace la edición si la línea cambió.
+const registroBloqueo = (r: VistaRegistroBloqueo) =>
+  `/datos/bloqueos/registros/${encodeURIComponent(r.mes)}/${r.linea}?registro=${encodeURIComponent(r.registro)}`;
+export const reemplazarBloqueo = (r: VistaRegistroBloqueo, s: SolicitudBloqueo) =>
+  api<ArchivoGuardado[]>(registroBloqueo(r), { metodo: "PUT", cuerpo: s });
+export const quitarBloqueo = (r: VistaRegistroBloqueo) =>
+  api<ArchivoGuardado>(registroBloqueo(r), { metodo: "DELETE" });
 
 // ---- Operaciones diarias -----------------------------------------------------
 

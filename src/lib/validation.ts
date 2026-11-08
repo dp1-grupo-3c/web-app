@@ -140,6 +140,17 @@ export function blockageNodes(raw: string, grid: { width: number; height: number
   return nodes.length < 2 ? { nodes: [], error: "Indica al menos dos nodos." } : { nodes, error: null };
 }
 
+// Bloqueo guardado → campos del formulario: nodos "x,y x,y", fecha AAAA-MM-DD y hora hh:mm.
+export function blockageDraft(b: { nodos: { x: number; y: number }[]; inicio: string; fin: string }) {
+  const parte = (t: string) => ({ date: t.slice(0, 10), time: t.slice(11, 16) });
+  const inicio = parte(b.inicio);
+  const fin = parte(b.fin);
+  return {
+    nodes: b.nodos.map((n) => `${n.x},${n.y}`).join(" "),
+    startDate: inicio.date, startTime: inicio.time, endDate: fin.date, endTime: fin.time,
+  };
+}
+
 export const INCOMPLETE_DATE = "Completa la fecha con el formato dd/mm/aaaa.";
 
 /** Texto dd/mm/aaaa (con o sin barras) → problema de calendario, o null si es una fecha real o está vacío. */

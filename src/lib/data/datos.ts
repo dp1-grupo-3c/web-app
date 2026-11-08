@@ -6,7 +6,7 @@
 
 import * as api from "@/lib/backend/api";
 import { ErrorServicio } from "@/lib/backend/api";
-import type { ArchivoGuardado, InventarioDatos, SolicitudBloqueo } from "@/lib/backend/types";
+import type { ArchivoGuardado, InventarioDatos, SolicitudBloqueo, VistaRegistroBloqueo } from "@/lib/backend/types";
 import { recargarParametros } from "@/lib/data/store";
 
 type Result<T = undefined> = { ok: true; data: T } | { ok: false; message: string };
@@ -41,6 +41,31 @@ export async function subirArchivo(kind: DataKind, archivo: File, mes?: string):
 export async function registrarBloqueo(s: SolicitudBloqueo): Promise<Result<ArchivoGuardado[]>> {
   try {
     return { ok: true, data: await api.registrarBloqueo(s) };
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+}
+
+export async function listarBloqueos(mes: string): Promise<Result<VistaRegistroBloqueo[]>> {
+  try {
+    return { ok: true, data: await api.registrosBloqueo(mes) };
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+}
+
+// Si otro usuario cambió la línea desde que se listó, el servidor responde 409 y no la toca.
+export async function editarBloqueo(r: VistaRegistroBloqueo, s: SolicitudBloqueo): Promise<Result<ArchivoGuardado[]>> {
+  try {
+    return { ok: true, data: await api.reemplazarBloqueo(r, s) };
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+}
+
+export async function borrarBloqueo(r: VistaRegistroBloqueo): Promise<Result<ArchivoGuardado>> {
+  try {
+    return { ok: true, data: await api.quitarBloqueo(r) };
   } catch (e) {
     return { ok: false, message: msg(e) };
   }

@@ -329,6 +329,17 @@ export interface ArchivoGuardado {
   reemplazado: boolean;
 }
 
+// Bloqueo guardado: mes y línea lo identifican para editarlo o borrarlo.
+export interface VistaRegistroBloqueo {
+  mes: string;
+  archivo: string;
+  linea: number;
+  registro: string;
+  inicio: string;
+  fin: string;
+  nodos: { x: number; y: number }[];
+}
+
 // Reporte de la última planificación estable (GET …/plan).
 export interface ParadaPlan {
   tipo: "ABASTECIMIENTO" | "ENTREGA" | "ALIMENTACION";
