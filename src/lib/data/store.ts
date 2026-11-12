@@ -150,6 +150,20 @@ function dispatch(a: Accion) {
   });
   publicarReproduccion();
   fetchFirstLateIfNeeded(next);
+  fetchFinalDetailIfNeeded(next);
+}
+
+let detalleFinalDe: string | null = null;
+
+/**
+ * El sondeo se detiene en cuanto ve un estado final, que puede llegar antes por el
+ * WebSocket: se pide el detalle una vez más para traer la bitácora completa del cierre.
+ */
+function fetchFinalDetailIfNeeded(estado: EstadoSim) {
+  const id = estado.idActual;
+  if (!id || detalleFinalDe === id || !(esFinal(estado.corrida?.estado) || estado.resultado)) return;
+  detalleFinalDe = id;
+  api.detalleCorrida(id).then((d) => dispatch({ t: "detalle", d })).catch(() => { detalleFinalDe = null; });
 }
 
 // ---- Reproducción con buffer (ver src/lib/data/playback.ts) ---------------

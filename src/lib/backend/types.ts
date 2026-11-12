@@ -181,11 +181,20 @@ export interface SolicitudSimulacion {
   inicio?: string;
 }
 
+/** Renglón de la bitácora de la corrida (EventoCorrida del backend). */
+export interface EventoCorrida {
+  fecha: string;
+  tono: "VERDE" | "AMBAR" | "ROJO";
+  mensaje: string;
+}
+
 export interface DetalleCorrida {
   corrida: ResumenCorrida;
   instantanea: InstantaneaSimulacion | null;
   resultado: ResultadoSimulacion | null;
   averias: string[];
+  /** En orden cronológico. Un backend anterior a la bitácora no lo envía. */
+  eventos?: EventoCorrida[];
 }
 
 export interface PaginaPedidos {

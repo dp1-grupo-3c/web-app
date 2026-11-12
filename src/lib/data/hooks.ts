@@ -487,7 +487,7 @@ export function useSimulationFeed(mode: SimulationMode): {
     const shown = s.reproduccion.instantanea ?? s.estado.instantanea;
     const clock = shown ? instantaneaToClock(shown, s.estado.corrida.minutoInicial) : null;
     const trafficLight = s.parametros ? parametrosToTrafficLight(s.parametros) : DEFAULT_TRAFFIC_LIGHT;
-    const summary = s.estado.resultado ? buildSummary(s.estado.corrida, s.estado.resultado, trafficLight, s.firstLateOrder ?? undefined) : null;
+    const summary = s.estado.resultado ? buildSummary(s.estado.corrida, s.estado.resultado, trafficLight, s.firstLateOrder ?? undefined, s.estado.eventos) : null;
     const outcome = summary?.outcome ?? (esFinal(s.estado.corrida.estado) ? outcomePorEstado(s.estado.corrida.estado) : null);
     return { clock, summary, outcome, error: s.estado.corrida.error };
   }, [s, mode]);

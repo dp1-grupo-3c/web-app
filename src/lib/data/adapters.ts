@@ -24,8 +24,10 @@ import type {
   SimStamp,
   SimulationClock,
   SimulationMode,
+  SimulationEvent,
   SimulationOutcome,
   SimulationSummary,
+  StatusTone,
   TrafficLight,
   Vehicle,
   VehicleKind,
@@ -37,6 +39,7 @@ import type {
   Cliente,
   EnvioPedido,
   EstadoCorrida,
+  EventoCorrida,
   FilaPedido,
   IncidenteOperacion,
   InstantaneaSimulacion,
@@ -437,11 +440,19 @@ export function filaPedidoToFirstLate(f: FilaPedido, primerDia: string): FirstLa
   };
 }
 
+const TONO_EVENTO: Record<EventoCorrida["tono"], StatusTone> = { VERDE: "ok", AMBAR: "warn", ROJO: "crit" };
+
+/** Bitácora del backend en el formato del resumen, con el día contado desde el inicio de la corrida. */
+export function eventosToEvents(eventos: EventoCorrida[], primerDia: string): SimulationEvent[] {
+  return eventos.map((e) => ({ tone: TONO_EVENTO[e.tono] ?? "warn", message: e.mensaje, at: fechaToSimStamp(e.fecha, primerDia) }));
+}
+
 export function buildSummary(
   corrida: ResumenCorrida,
   resultado: ResultadoSimulacion,
   trafficLight: TrafficLight,
   firstLateOrder?: FirstLateOrder,
+  eventos: EventoCorrida[] = [],
 ): SimulationSummary {
   const mode = modoPorTipo(corrida.tipo) ?? "5d";
   const m = resultado.metricas;
@@ -458,9 +469,7 @@ export function buildSummary(
     totalCost: m.costoAcumulado,
     avgDeliveryByPriority: avgDeliveryByPriority(m.minutosEntregaPorPlazo, m.entregasPorPlazo),
     trafficLight,
-    // El backend no expone una bitácora de eventos genérica (solo averías sueltas y
-    // activaciones de semáforo); se deja vacío en vez de fabricar una línea de tiempo.
-    events: [],
+    events: eventosToEvents(eventos, corrida.primerDia),
     firstLateOrder,
   };
 }
