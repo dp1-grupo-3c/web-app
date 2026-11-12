@@ -59,6 +59,8 @@ export interface VistaUnidad {
   // Ultimo almacén donde cargó (-1 sin dato) y minuto en que salió de él.
   idAlmacenOrigen?: number;
   minutoSalidaAlmacen?: number;
+  /** Km recorridos desde el inicio de la corrida hasta el minuto de la foto; no se reinicia al replanificar. */
+  kilometrosRecorridos?: number;
 }
 
 /** Entrega registrada por el motor (las de las últimas 24 h simuladas). */
@@ -71,10 +73,20 @@ export interface EntregaRegistrada {
   cantidad: number;
 }
 
-/** Respuesta de …/almacenes/{almacen}/envios; aquí solo se usan las entregas. */
+/** Parte de un pedido que sale o salió del almacén en una unidad. */
+export interface EnvioDelAlmacen {
+  idPedido: number;
+  envio: EnvioPedido;
+}
+
+/** Respuesta de …/almacenes/{almacen}/envios. */
 export interface EnviosAlmacen {
   horas: number;
   minuto: number;
+  /** Ya salieron y van a bordo. */
+  enTransito: EnvioDelAlmacen[];
+  /** Salidas planificadas en las próximas `horas` (plan vigente). */
+  porSalir: EnvioDelAlmacen[];
   entregados: EntregaRegistrada[];
   paquetesEntregados: number;
 }
@@ -181,11 +193,20 @@ export interface SolicitudSimulacion {
   inicio?: string;
 }
 
+/** Renglón de la bitácora de la corrida (EventoCorrida del backend). */
+export interface EventoCorrida {
+  fecha: string;
+  tono: "VERDE" | "AMBAR" | "ROJO";
+  mensaje: string;
+}
+
 export interface DetalleCorrida {
   corrida: ResumenCorrida;
   instantanea: InstantaneaSimulacion | null;
   resultado: ResultadoSimulacion | null;
   averias: string[];
+  /** En orden cronológico. Un backend anterior a la bitácora no lo envía. */
+  eventos?: EventoCorrida[];
 }
 
 export interface PaginaPedidos {
@@ -203,6 +224,7 @@ export interface EnvioPedido {
   codigoUnidad: string;
   cantidad: number;
   fechaHoraLlegada: string | null;
+  fechaHoraSalida?: string | null;
 }
 
 export interface FilaPedido {

@@ -5,7 +5,7 @@
  * nueva). Ver GUIA_FLUJO_DATOS.md § "Reglas y trampas".
  */
 
-import type { DetalleCorrida, EstadoCorrida, InstantaneaSimulacion, MensajeVisualizador, ResultadoSimulacion, ResumenCorrida } from "./types";
+import type { DetalleCorrida, EstadoCorrida, EventoCorrida, InstantaneaSimulacion, MensajeVisualizador, ResultadoSimulacion, ResumenCorrida } from "./types";
 
 export interface EstadoSim {
   idActual: string | null;
@@ -13,9 +13,10 @@ export interface EstadoSim {
   instantanea: InstantaneaSimulacion | null;
   resultado: ResultadoSimulacion | null;
   averias: string[];
+  eventos: EventoCorrida[];
 }
 
-export const inicial: EstadoSim = { idActual: null, corrida: null, instantanea: null, resultado: null, averias: [] };
+export const inicial: EstadoSim = { idActual: null, corrida: null, instantanea: null, resultado: null, averias: [], eventos: [] };
 
 export type Accion =
   | { t: "ws"; m: MensajeVisualizador }
@@ -44,6 +45,7 @@ export function reducir(s: EstadoSim, a: Accion): EstadoSim {
         ...s,
         corrida: a.d.corrida,
         averias: a.d.averias,
+        eventos: a.d.eventos ?? s.eventos,
         instantanea: masNueva(s.instantanea, a.d.instantanea),
         resultado: a.d.resultado ?? s.resultado,
       };

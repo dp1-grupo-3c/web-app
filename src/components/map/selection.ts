@@ -1,4 +1,4 @@
-import type { Coord, Order, Vehicle } from "@/lib/types";
+import type { Coord, Order, Vehicle, Warehouse } from "@/lib/types";
 
 /**
  * Destinos de los pedidos que le quedan al vehículo, agrupados por intersección
@@ -23,4 +23,12 @@ export function assignedDestinations(vehicle: Vehicle, orders: Order[], known?: 
     destinations.set(key, destination);
   }
   return [...destinations.values()];
+}
+
+/**
+ * Un filtro de color de almacenes solo alcanza a los intermedios: el central no
+ * tiene semáforo y se dibuja siempre.
+ */
+export function warehouseOnMap(warehouse: Pick<Warehouse, "id" | "kind">, shown: ReadonlySet<string> | null): boolean {
+  return warehouse.kind !== "secundario" || !shown || shown.has(warehouse.id);
 }

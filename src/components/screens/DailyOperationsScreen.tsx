@@ -43,7 +43,7 @@ import {
 } from "@/lib/data/hooks";
 import { kindForDocument } from "@/lib/documento";
 import { defaultSimSettings } from "@/lib/sim-settings";
-import type { Client, DataScope, EntityRef, FleetSettings, VehicleKind } from "@/lib/types";
+import type { Client, DataScope, EntityRef, FleetSettings, MapFilter, VehicleKind } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 import { DailyRunControl } from "./DailyRunControl";
 
@@ -84,6 +84,10 @@ export function DailyOperationsScreen() {
   const [starting, setStarting] = useState(false);
   const [selected, setSelected] = useState<EntityRef | null>(null);
   const [layers, setLayers] = useState(ALL_LAYERS);
+  // Lo que dibuja el mapa mientras los chips de color de Vehículos o Almacenes están activos.
+  const [mapFilter, setMapFilter] = useState<MapFilter>({});
+  const filterMapVehicles = (ids: ReadonlySet<string> | null) => setMapFilter((f) => ({ ...f, vehicles: ids }));
+  const filterMapWarehouses = (ids: ReadonlySet<string> | null) => setMapFilter((f) => ({ ...f, warehouses: ids }));
   const [orderId, setOrderId] = useState<string | null>(null);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [orderTab, setOrderTab] = useState<OrdersTab>("lista");
@@ -196,10 +200,10 @@ export function DailyOperationsScreen() {
       />
     )
     : shown === "vehiculos" ? (
-      <VehiclesPanel scope={SCOPE} settings={settings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} pinnedId={pinnedVehicle} onPinChange={setPinnedVehicle} onClose={close} width={width} />
+      <VehiclesPanel scope={SCOPE} settings={settings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} pinnedId={pinnedVehicle} onPinChange={setPinnedVehicle} onClose={close} width={width} onMapFilter={filterMapVehicles} />
     )
     : shown === "almacenes" ? (
-      <WarehousesPanel scope={SCOPE} settings={settings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={running || !cargado} />
+      <WarehousesPanel scope={SCOPE} settings={settings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={running || !cargado} onMapFilter={filterMapWarehouses} />
     )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation={false} onClose={close} width={width} occupancy={<OccupancyMetrics scope={SCOPE} settings={settings} />} />
     : shown === "datos" ? <DataPanel onClose={close} width={width} locked={running || !cargado || simulationRunning} />
@@ -245,6 +249,7 @@ export function DailyOperationsScreen() {
       map={
         <GridMap
           snapshot={snapshot}
+          filter={mapFilter}
           orders={orders}
           trafficLight={trafficLight}
           vehicleBands={applied.vehicleOccupancy}

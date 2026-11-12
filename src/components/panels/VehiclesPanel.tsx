@@ -16,7 +16,8 @@ import { TONE_COLOR, TONE_LABEL } from "@/lib/constants";
 import { useSimulationRows } from "@/lib/data/hooks";
 import { formatSimClock as simClock, type VehicleRow } from "@/lib/data/selectors";
 import { formatDuration } from "@/lib/format";
-import { filterBy, inSet, sortBy, toggleIn, type SortDir } from "@/lib/list-tools";
+import { filterBy, idsMatching, inSet, sortBy, toggleIn, type SortDir } from "@/lib/list-tools";
+import { useReportMapFilter } from "@/lib/map-filter";
 import { DISTANCE_BAND_LABEL, DISTANCE_BANDS, distanceBand } from "@/lib/occupancy";
 import { matchesDistance, parseMaxDistance, type DistanceRef, type DistanceUnit, type PhaseFilter } from "@/lib/vehicle-search";
 import type { DataScope, DistanceBand, SimSettings, StatusTone } from "@/lib/types";
@@ -29,9 +30,9 @@ const SORTS: { value: SortKey; label: string; key: (r: VehicleRow) => number | n
   { value: "traveled", label: "Recorrido", key: (r) => r.traveledKm },
 ];
 const TONES: StatusTone[] = ["ok", "warn", "crit"];
-/** Semáforo de ocupación o "vacío" (sin carga a bordo); un vacío también cuenta como verde. */
+/** Semáforo de ocupación o "vacío" (sin carga a bordo); un vacío no cuenta en ningún color. */
 type Filter = StatusTone | "empty";
-const isEmpty = (r: VehicleRow) => r.load <= 0;
+const isEmpty = (r: VehicleRow) => r.empty;
 const PAGE_SIZES = [4, 6, 8];
 const PHASES: [PhaseFilter, string][] = [["todas", "Todas"], ["llegando", "Llegando"], ["saliendo", "Saliendo"]];
 const PHASE_TEXT = { llegando: "llegando", saliendo: "saliendo" } as const;
@@ -51,14 +52,18 @@ const km = (n: number | null) => (n == null ? "—" : `${Math.round(n)} km`);
  * rango de la distancia restante al destino; ordena por un criterio a la vez.
  * Lee la foto que muestra el mapa y solo se calcula mientras está abierto.
  */
-export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId, onPinChange, onClose, width }: {
+export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId, onPinChange, onClose, width, onMapFilter }: {
   scope: DataScope; settings: SimSettings; selectedId: string | null; onSelect: (id: string | null) => void;
   /** Vehículo fijado: va antes de la lista, siempre visible, sin importar filtros, orden ni página. */
   pinnedId: string | null; onPinChange: (id: string | null) => void;
   onClose: () => void; width: number;
+  /** Vehículos que el mapa debe dibujar según los chips de color (null = todos). */
+  onMapFilter?: (ids: ReadonlySet<string> | null) => void;
 }) {
   const data = useSimulationRows(scope, settings);
   const [tones, setTones] = useState<ReadonlySet<Filter>>(() => new Set());
+  const matchesTone = (r: VehicleRow) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r));
+  useReportMapFilter(idsMatching(data.vehicles, tones.size > 0, matchesTone, pinnedId), onMapFilter);
   const [bands, setBands] = useState<ReadonlySet<DistanceBand>>(() => new Set());
   // Búsqueda por distancia: referencia, unidad, máximo y llegada o salida.
   const [ref, setRef] = useState<DistanceRef>("destino");
@@ -75,7 +80,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId,
   const [reveal, setReveal] = useState<string | null>(null);
 
   const rows = sortBy(
-    filterBy(data.vehicles, [(r) => r.id !== pinnedId, tones.size ? (r) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r)) : null, inSet(bands, (r) => distanceBand(r.remainingKm)), searching ? (r) => matchesDistance(r, { ref, unit, max: max ?? null, phase }) : null]),
+    filterBy(data.vehicles, [(r) => r.id !== pinnedId, tones.size ? matchesTone : null, inSet(bands, (r) => distanceBand(r.remainingKm)), searching ? (r) => matchesDistance(r, { ref, unit, max: max ?? null, phase }) : null]),
     SORTS.find((s) => s.value === sort)!.key,
     dir,
   );
@@ -189,7 +194,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId,
             </span>
             <Pagination page={current} pageCount={pageCount} onChange={setPage} />
           </div>
-          <p className="text-xs leading-snug text-n600">El almacén de origen y la salida los informa el servidor; si falta, se estiman con lo observado desde que abriste esta pantalla. La distancia recorrida corresponde al itinerario vigente.</p>
+          <p className="text-xs leading-snug text-n600">El almacén de origen y la salida los informa el servidor; si falta, se estiman con lo observado desde que abriste esta pantalla. La distancia recorrida es la acumulada desde el inicio de la corrida.</p>
         </>
       )}
     </SidePanel>
@@ -227,7 +232,7 @@ const VehicleItem = memo(function VehicleItem({ row: r, selected, reveal, onReve
       <div className="flex h-6 items-center gap-2 leading-6">
         <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
         <b className="min-w-0 truncate text-white">{r.plate}</b>
-        <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="text-white tabular-nums">{pct}</b><ToneBadge tone={r.tone} /></span>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="text-white tabular-nums">{pct}</b><ToneBadge tone={r.tone} empty={r.empty} /></span>
         {/* Solo hay un fijado: fijar otro reemplaza al anterior. */}
         <button
           type="button"

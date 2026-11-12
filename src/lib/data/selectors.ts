@@ -21,9 +21,11 @@ export type VehicleRow = {
   /** Paquetes a bordo ("stock actual" del vehículo) y capacidad. */
   load: number;
   capacity: number;
-  /** % de ocupación (NaN sin capacidad) y su semáforo según el tipo. */
+  /** % de ocupación (NaN sin capacidad) y su semáforo según el tipo; un vehículo vacío no tiene color (null). */
   occupancy: number;
   tone: StatusTone | null;
+  /** Sin carga a bordo: se muestra "Vacío" y no cuenta en ningún color. */
+  empty: boolean;
   /** Pedidos asignados: a bordo y de viajes posteriores a una recarga. */
   orderIds: string[];
   /** Solo los que lleva a bordo ahora. */
@@ -31,7 +33,7 @@ export type VehicleRow = {
   /** Al destino inmediato. */
   etaMinutes: number | null;
   remainingKm: number;
-  /** Del itinerario vigente (el backend lo reinicia al replanificar). */
+  /** Acumulado desde el inicio de la corrida (no se reinicia al replanificar). */
   traveledKm: number;
   /** Manhattan desde el almacén de origen estimado (null = sin dato). */
   fromOriginKm: number | null;
@@ -61,12 +63,14 @@ export function selectVehicleRows(vehicles: Vehicle[], trips: TripLog, minute: n
       load: v.load,
       capacity: v.capacity,
       occupancy,
-      tone: percentTone(occupancy, bands[v.kind], "lowIsGreen"),
+      tone: v.load <= 0 ? null : percentTone(occupancy, bands[v.kind], "lowIsGreen"),
+      empty: v.load <= 0,
       orderIds: [...new Set(v.orders.map((o) => o.orderId))],
       loadedOrderIds: loadedOrders(v).map((o) => o.orderId),
       etaMinutes: v.etaMinutes ?? null,
       remainingKm: pathKm(v.route?.pending),
-      traveledKm: pathKm(v.route?.traveled),
+      // Acumulado de la corrida (backend); el camino del itinerario vigente se reinicia en cada replanificación.
+      traveledKm: v.traveledKm ?? pathKm(v.route?.traveled),
       fromOriginKm: origin ? manhattan(origin, v.position) : null,
       fromOriginMinutes: departed != null && minute != null && minute >= departed ? minute - departed : null,
       originId: v.originWarehouseId ?? trip?.originId ?? null,
@@ -86,27 +90,26 @@ export type WarehouseRow = {
   capacity: number | null;
   /** NaN para el central (ilimitado). */
   occupancy: number;
+  /** Semáforo de llenado; null para el central y para un intermedio vacío. */
   tone: StatusTone | null;
+  /** Intermedio sin stock: se muestra "Vacío" y no cuenta en ningún color. */
+  empty: boolean;
   /** Pedidos ya salidos de este almacén y aún a bordo (estimado). */
   inTransit: number;
-  /** Pedidos cargados en vehículos que siguen en este almacén. */
-  toDepart: number;
   /** Pedidos con entregas en la ventana (últimas 4 h simuladas), estimado. */
   deliveredRecent: number;
 };
 
 export function selectWarehouseRows(warehouses: Warehouse[], vehicles: Vehicle[], trips: TripLog, bands: PercentBands): WarehouseRow[] {
   const inTransit = new Map<string, Set<string>>();
-  const toDepart = new Map<string, Set<string>>();
   const add = (m: Map<string, Set<string>>, w: string, o: string) => (m.get(w) ?? m.set(w, new Set()).get(w)!).add(o);
   for (const v of vehicles) {
     const trip = trips.vehicles[v.id];
+    // Lo cargado en un vehículo que sigue en el almacén aún no salió: cuenta en "Por salir" (plan vigente).
+    if (trip?.atWarehouseId) continue;
     for (const o of loadedOrders(v)) {
-      if (trip?.atWarehouseId) add(toDepart, trip.atWarehouseId, o.orderId);
-      else {
-        const origin = trips.orders[o.orderId]?.originId ?? trip?.originId;
-        if (origin) add(inTransit, origin, o.orderId);
-      }
+      const origin = trips.orders[o.orderId]?.originId ?? trip?.originId;
+      if (origin) add(inTransit, origin, o.orderId);
     }
   }
   const delivered = new Map<string, Set<string>>();
@@ -122,9 +125,9 @@ export function selectWarehouseRows(warehouses: Warehouse[], vehicles: Vehicle[]
       stock: w.stock ?? null,
       capacity: w.capacity ?? null,
       occupancy,
-      tone: w.kind === "principal" ? null : percentTone(occupancy, bands, "highIsGreen"),
+      tone: w.kind === "principal" || w.stock === 0 ? null : percentTone(occupancy, bands, "highIsGreen"),
+      empty: w.kind !== "principal" && w.stock === 0,
       inTransit: inTransit.get(w.id)?.size ?? 0,
-      toDepart: toDepart.get(w.id)?.size ?? 0,
       deliveredRecent: delivered.get(w.id)?.size ?? 0,
     };
   });

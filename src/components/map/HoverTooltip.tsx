@@ -1,9 +1,9 @@
 import { Package } from "lucide-react";
 import { VEHICLE_META } from "@/components/domain/vehicle";
-import { Badge, Meter } from "@/components/ui/feedback";
+import { Meter } from "@/components/ui/feedback";
 import { ToneBadge } from "@/components/ui/ToneBadge";
 import { TONE_COLOR, TONE_LABEL } from "@/lib/constants";
-import { percentTone, vehicleOccupancy, warehouseOccupancy } from "@/lib/occupancy";
+import { vehicleOccupancy, vehicleTone, warehouseOccupancy } from "@/lib/occupancy";
 import type { PercentBands, StatusTone, Vehicle, Warehouse } from "@/lib/types";
 import { PINK } from "./layers";
 
@@ -16,8 +16,9 @@ const pct = (n: number) => (Number.isFinite(n) ? `${Math.round(n)} %` : "—");
 /** Texto para lectores de pantalla: va en la etiqueta del marcador. */
 export function vehicleOccupancyText(v: Vehicle, bands: PercentBands) {
   const occ = vehicleOccupancy(v);
-  const tone = percentTone(occ, bands);
-  return `${v.load} de ${v.capacity} paquetes, ocupación ${pct(occ)}${tone ? ` (${TONE_LABEL[tone].toLowerCase()})` : ""}`;
+  const tone = vehicleTone(v, bands);
+  const label = tone === "empty" ? "vacío" : tone ? TONE_LABEL[tone].toLowerCase() : null;
+  return `${v.load} de ${v.capacity} paquetes, ocupación ${pct(occ)}${label ? ` (${label})` : ""}`;
 }
 
 export function warehouseStockText(w: Warehouse) {
@@ -44,7 +45,9 @@ export function HoverTooltip(p: Props) {
   if (p.kind === "vehicle") {
     const v = p.vehicle;
     const occ = vehicleOccupancy(v);
-    const tone = percentTone(occ, p.bands);
+    const shade = vehicleTone(v, p.bands);
+    const empty = shade === "empty";
+    const tone = empty ? null : shade;
     const { label, Icon, color } = VEHICLE_META[v.kind];
     body = (
       <>
@@ -60,7 +63,7 @@ export function HoverTooltip(p: Props) {
         <Meter value={Number.isFinite(occ) ? occ / 100 : 0} color={tone ? TONE_COLOR[tone] : PINK} label="Ocupación" />
         <div className="flex items-center justify-between text-xs text-n400">
           <span>Ocupación <b className="text-white tabular-nums">{pct(occ)}</b></span>
-          <ToneBadge tone={tone} />
+          <ToneBadge tone={tone} empty={empty} />
         </div>
       </>
     );
@@ -93,7 +96,7 @@ export function HoverTooltip(p: Props) {
         <Meter value={Number.isFinite(occ) ? occ / 100 : 0} color={p.tone ? TONE_COLOR[p.tone] : PINK} label="Ocupación del almacén" />
         <div className="flex items-center justify-between text-xs text-n400">
           <span>Ocupación <b className="text-white tabular-nums">{pct(occ)}</b></span>
-          {p.empty ? <Badge tone="neutral">Vacío</Badge> : p.tone && <ToneBadge tone={p.tone} />}
+          {(p.empty || p.tone) && <ToneBadge tone={p.tone} empty={p.empty} />}
         </div>
       </>
     );

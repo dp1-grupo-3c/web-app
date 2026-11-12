@@ -64,7 +64,7 @@ test("selectores: fila de vehículo, de almacén y de pedido", () => {
     { id: "2", name: "Norte", kind: "secundario", position: { x: 20, y: 0 }, stock: 30, capacity: 120 },
   ];
   const [central, norte] = sel.selectWarehouseRows(warehouses, [vehicle], log, { low: 25, high: 50 });
-  assert.deepEqual([central.inTransit, central.toDepart, central.tone], [1, 0, null]);
+  assert.deepEqual([central.inTransit, central.tone], [1, null]);
   assert.deepEqual([norte.occupancy, norte.tone], [25, "crit"]);
 
   const order = { id: "10", packages: 30, destination: { x: 4, y: 6 }, priority: "P1", minutesLeft: 90, status: "en_ruta" };

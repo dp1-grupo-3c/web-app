@@ -2,9 +2,11 @@ import { CircleX, House, Package, PackageCheck, Utensils, X } from "lucide-react
 import type { ReactNode } from "react";
 import { Badge, Meter, Tile, Alert } from "@/components/ui/feedback";
 import { BreakdownChip } from "@/components/ui/BreakdownChip";
+import { ToneBadge } from "@/components/ui/ToneBadge";
+import { vehicleOccupancy, vehicleTone } from "@/lib/occupancy";
 import { IconButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import { TONE_COLOR, TONE_LABEL, breakdownInfo } from "@/lib/constants";
+import { TONE_COLOR, breakdownInfo } from "@/lib/constants";
 import type { blockageSchedule } from "@/lib/blockage";
 import { formatCoord } from "@/lib/format";
 import type { Blockage, PercentBands, TrafficLight, Vehicle, VehicleOrderLoad, Warehouse } from "@/lib/types";
@@ -107,8 +109,21 @@ export function VehiclePopover({ vehicle: v, bands, anchor, onClose, mapHeight, 
         ]}
       />
       <MeterRow label="Carga a bordo" value={v.load} max={v.capacity} color={PINK} unit="paquetes" />
+      <OccupancyRow vehicle={v} bands={bands} />
       {v.orders.length > 0 && <VehicleOrdersTable orders={v.orders} />}
     </Shell>
+  );
+}
+
+/** Ocupación y su semáforo; sin carga a bordo, "Vacío" (igual que el marcador gris del mapa). */
+function OccupancyRow({ vehicle: v, bands }: { vehicle: Vehicle; bands: PercentBands }) {
+  const occ = vehicleOccupancy(v);
+  const shade = vehicleTone(v, bands);
+  return (
+    <div className="flex items-center justify-between text-xs text-n400">
+      <span>Ocupación <b className="text-[13px] text-white tabular-nums">{Number.isFinite(occ) ? `${Math.round(occ)} %` : "—"}</b></span>
+      <ToneBadge tone={shade === "empty" ? null : shade} empty={shade === "empty"} />
+    </div>
   );
 }
 
@@ -173,7 +188,7 @@ export function WarehousePopover({ warehouse: w, trafficLight, fillBands, neutra
         <>
           <Tile color={color}>{principal ? <House className="size-5" aria-hidden /> : <Package className="size-5" aria-hidden />}</Tile>
           <Title title={w.name} subtitle={principal ? "Base de la flota" : "Almacén secundario"} />
-          {empty ? <Badge tone="neutral">Vacío</Badge> : tone && <Badge tone={tone}>{TONE_LABEL[tone]}</Badge>}
+          {(empty || tone) && <ToneBadge tone={tone} empty={empty} />}
         </>
       }
     >

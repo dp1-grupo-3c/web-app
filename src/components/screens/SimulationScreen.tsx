@@ -37,7 +37,7 @@ import { TIPO_POR_MODO } from "@/lib/data/adapters";
 import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useRunSettings, useSavedTrafficLight, useServerBreakdowns, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import { defaultSimSettings } from "@/lib/sim-settings";
-import type { DataScope, EntityRef, SimulationMode, SimulationOutcome } from "@/lib/types";
+import type { DataScope, EntityRef, MapFilter, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 
 const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
@@ -85,6 +85,10 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const [cancelling, setCancelling] = useState(false);
   const [selected, setSelected] = useState<EntityRef | null>(null);
   const [layers, setLayers] = useState(ALL_LAYERS);
+  // Lo que dibuja el mapa mientras los chips de color de Vehículos o Almacenes están activos.
+  const [mapFilter, setMapFilter] = useState<MapFilter>({});
+  const filterMapVehicles = (ids: ReadonlySet<string> | null) => setMapFilter((f) => ({ ...f, vehicles: ids }));
+  const filterMapWarehouses = (ids: ReadonlySet<string> | null) => setMapFilter((f) => ({ ...f, warehouses: ids }));
   const [orderId, setOrderId] = useState<string | null>(null);
   const [configTab, setConfigTab] = useState<ConfigTab>("general");
   const [settings, setSettings] = useState(defaultSimSettings);
@@ -239,10 +243,10 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
       />
     )
     : shown === "vehiculos" ? (
-      <VehiclesPanel scope={scope} settings={shownSettings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} pinnedId={pinnedVehicle} onPinChange={(id) => setVehiclePin(id ? { run: own?.id ?? null, id } : null)} onClose={close} width={width} />
+      <VehiclesPanel scope={scope} settings={shownSettings} selectedId={selected?.type === "vehicle" ? selected.id : null} onSelect={(id) => setSelected(id ? { type: "vehicle", id } : null)} pinnedId={pinnedVehicle} onPinChange={(id) => setVehiclePin(id ? { run: own?.id ?? null, id } : null)} onClose={close} width={width} onMapFilter={filterMapVehicles} />
     )
     : shown === "almacenes" ? (
-      <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={effectivePhase === "running" || !!other || syncing} />
+      <WarehousesPanel scope={scope} settings={shownSettings} selectedId={selectedWarehouse} onSelect={(id) => setSelected(id ? { type: "warehouse", id } : null)} onClose={close} width={width} locked={effectivePhase === "running" || !!other || syncing} onMapFilter={filterMapWarehouses} />
     )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} occupancy={<OccupancyMetrics scope={scope} settings={shownSettings} />} />
     : shown === "pedidos" ? (
@@ -260,6 +264,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         <>
           <GridMap
             snapshot={snapshot}
+            filter={mapFilter}
           orders={orders}
           knownDestinations={knownDestinations}
             trafficLight={runTrafficLight}

@@ -36,6 +36,8 @@ export type Vehicle = {
   // Último almacén donde cargó y minuto simulado en que salió de él.
   originWarehouseId?: string;
   originDepartureMinute?: number;
+  /** Km recorridos desde el inicio de la corrida (lo envía el backend). */
+  traveledKm?: number;
 };
 
 export type VehiclePhase = "llegando" | "saliendo";
@@ -202,6 +204,9 @@ export type SimulationSummary = {
 export type DataScope = { kind: "live" } | { kind: "client" } | { kind: "sim"; mode: SimulationMode } | { kind: "ops" };
 
 export type EntityRef = { type: "vehicle" | "warehouse" | "blockage"; id: string };
+
+/** Ids que el mapa dibuja mientras un filtro de color de los paneles está activo; ausente o null = todos. */
+export type MapFilter = { vehicles?: ReadonlySet<string> | null; warehouses?: ReadonlySet<string> | null };
 
 // ---- Configuración ampliada de la simulación ---------------------------------
 
