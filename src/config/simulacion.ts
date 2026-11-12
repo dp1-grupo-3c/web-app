@@ -184,6 +184,9 @@ export const DISTANCE_BANDS_KM = [0, 10, 20, 40] as const;
 /** Ventana, en minutos SIMULADOS, de "pedidos entregados en las últimas 4 horas". */
 export const RECENT_DELIVERIES_WINDOW_MIN = 240;
 
+/** Ventana inicial, en minutos SIMULADOS, de "pedidos por salir en las próximas 4 horas" (editable en el panel). */
+export const UPCOMING_DEPARTURES_WINDOW_MIN = 240;
+
 /**
  * Qué parte de la configuración ampliada se envía al servidor. startTime viaja
  * como `inicio` en POST /simulaciones y breakdownDurations con

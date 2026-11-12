@@ -72,9 +72,19 @@ export interface EntregaRegistrada {
 }
 
 /** Respuesta de …/almacenes/{almacen}/envios; aquí solo se usan las entregas. */
+/** Parte de un pedido que sale o salió del almacén en una unidad. */
+export interface EnvioDelAlmacen {
+  idPedido: number;
+  envio: EnvioPedido;
+}
+
 export interface EnviosAlmacen {
   horas: number;
   minuto: number;
+  /** Ya salieron y van a bordo. */
+  enTransito: EnvioDelAlmacen[];
+  /** Salidas planificadas en las próximas `horas` (plan vigente). */
+  porSalir: EnvioDelAlmacen[];
   entregados: EntregaRegistrada[];
   paquetesEntregados: number;
 }
@@ -212,6 +222,7 @@ export interface EnvioPedido {
   codigoUnidad: string;
   cantidad: number;
   fechaHoraLlegada: string | null;
+  fechaHoraSalida?: string | null;
 }
 
 export interface FilaPedido {

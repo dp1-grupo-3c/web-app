@@ -89,24 +89,20 @@ export type WarehouseRow = {
   tone: StatusTone | null;
   /** Pedidos ya salidos de este almacén y aún a bordo (estimado). */
   inTransit: number;
-  /** Pedidos cargados en vehículos que siguen en este almacén. */
-  toDepart: number;
   /** Pedidos con entregas en la ventana (últimas 4 h simuladas), estimado. */
   deliveredRecent: number;
 };
 
 export function selectWarehouseRows(warehouses: Warehouse[], vehicles: Vehicle[], trips: TripLog, bands: PercentBands): WarehouseRow[] {
   const inTransit = new Map<string, Set<string>>();
-  const toDepart = new Map<string, Set<string>>();
   const add = (m: Map<string, Set<string>>, w: string, o: string) => (m.get(w) ?? m.set(w, new Set()).get(w)!).add(o);
   for (const v of vehicles) {
     const trip = trips.vehicles[v.id];
+    // Lo cargado en un vehículo que sigue en el almacén aún no salió: cuenta en "Por salir" (plan vigente).
+    if (trip?.atWarehouseId) continue;
     for (const o of loadedOrders(v)) {
-      if (trip?.atWarehouseId) add(toDepart, trip.atWarehouseId, o.orderId);
-      else {
-        const origin = trips.orders[o.orderId]?.originId ?? trip?.originId;
-        if (origin) add(inTransit, origin, o.orderId);
-      }
+      const origin = trips.orders[o.orderId]?.originId ?? trip?.originId;
+      if (origin) add(inTransit, origin, o.orderId);
     }
   }
   const delivered = new Map<string, Set<string>>();
@@ -124,7 +120,6 @@ export function selectWarehouseRows(warehouses: Warehouse[], vehicles: Vehicle[]
       occupancy,
       tone: w.kind === "principal" ? null : percentTone(occupancy, bands, "highIsGreen"),
       inTransit: inTransit.get(w.id)?.size ?? 0,
-      toDepart: toDepart.get(w.id)?.size ?? 0,
       deliveredRecent: delivered.get(w.id)?.size ?? 0,
     };
   });

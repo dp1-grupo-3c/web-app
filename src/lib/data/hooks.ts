@@ -17,7 +17,8 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import * as mundo from "@/lib/data/mundo";
 import { breakdownDurationsFrom } from "@/lib/sim-settings";
 import * as api from "@/lib/backend/api";
-import type { EntregaRegistrada, FilaPedido, VistaUnidad } from "@/lib/backend/types";
+import type { EntregaRegistrada, EnviosAlmacen, FilaPedido, VistaUnidad } from "@/lib/backend/types";
+import { departuresFrom, type WarehouseDeparture } from "@/lib/warehouse-departures";
 import {
   buildSummary,
   filaPedidoToOrder,
@@ -140,7 +141,8 @@ const MAX_DELIVERY_WINDOW_HOURS = 24;
  * desde la hora que muestra el mapa: en la simulación el servidor va por
  * delante, así que se le pide una ventana ampliada con ese desfase.
  */
-export function useWarehouseDeliveries(scope: DataScope, warehouseId: string | null, hours: number): WarehouseDelivery[] | null {
+/** Corrida, hora que muestra el mapa y minutos que el servidor va por delante de ella. */
+function useShownRun(scope: DataScope) {
   const s = useStoreState();
   const op = useSyncExternalStore(operacion.subscribe, operacion.getSnapshot, operacion.getServerSnapshot);
   let runId: string | null = null;
@@ -154,8 +156,51 @@ export function useWarehouseDeliveries(scope: DataScope, warehouseId: string | n
     ahora = shown?.fechaHoraSimulada ?? null;
     if (shown && s.estado.instantanea) lag = Math.max(0, s.estado.instantanea.minutoSimulado - shown.minutoSimulado);
   }
+  return { runId, ahora, lag, ops: scope.kind === "ops" };
+}
+
+/**
+ * Salidas planificadas de cada almacén en las próximas `hours` horas desde la
+ * hora que muestra el mapa, por id de almacén; null mientras carga. La misma
+ * ventana alimenta la cifra "Por salir" de las tarjetas y la tabla del detalle.
+ */
+export function useWarehouseDepartures(scope: DataScope, warehouseIds: string[], hours: number): Record<string, WarehouseDeparture[]> | null {
+  const { runId, ahora, ops } = useShownRun(scope);
+  // El servidor mide hacia adelante desde su hora, que va por delante de la mostrada: cubre la ventana.
+  const ventana = Math.min(MAX_DELIVERY_WINDOW_HOURS, hours);
+  const ids = warehouseIds.join(",");
+  const key = `${runId}:${ids}:${ventana}`;
+  const [result, setResult] = useState<{ key: string; envios: Record<string, EnviosAlmacen> } | null>(null);
+
+  useEffect(() => {
+    if (!runId || !ids) return;
+    let vivo = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const ciclo = async () => {
+      try {
+        const lista = ids.split(",");
+        const r = await Promise.all(lista.map((id) => (ops ? api.enviosAlmacenOperacion : api.enviosAlmacen)(runId, Number(id), ventana)));
+        if (vivo) setResult({ key: `${runId}:${ids}:${ventana}`, envios: Object.fromEntries(lista.map((id, i) => [id, r[i]])) });
+      } catch {
+        // se mantiene la última lista conocida
+      } finally {
+        if (vivo) timer = setTimeout(ciclo, 3000);
+      }
+    };
+    ciclo();
+    return () => { vivo = false; clearTimeout(timer); };
+  }, [runId, ids, ventana, ops]);
+
+  const envios = result?.key === key ? result.envios : null;
+  return useMemo(() => {
+    if (!envios || !ahora) return null;
+    return Object.fromEntries(Object.entries(envios).map(([id, e]) => [id, departuresFrom(e, ahora, hours)]));
+  }, [envios, ahora, hours]);
+}
+
+export function useWarehouseDeliveries(scope: DataScope, warehouseId: string | null, hours: number): WarehouseDelivery[] | null {
+  const { runId, ahora, lag, ops } = useShownRun(scope);
   const ventana = Math.min(MAX_DELIVERY_WINDOW_HOURS, hours + Math.ceil(lag / 60));
-  const ops = scope.kind === "ops";
   const key = `${runId}:${warehouseId}:${ventana}`;
   const [result, setResult] = useState<{ key: string; entregas: EntregaRegistrada[] } | null>(null);
 

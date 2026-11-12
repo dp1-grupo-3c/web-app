@@ -8,10 +8,11 @@ import { NumberInput } from "@/components/ui/form";
 import { Pagination } from "@/components/ui/Pagination";
 import { TONE_ICON, ToneBadge } from "@/components/ui/ToneBadge";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
-import { RECENT_DELIVERIES_WINDOW_MIN } from "@/config/simulacion";
+import { RECENT_DELIVERIES_WINDOW_MIN, UPCOMING_DEPARTURES_WINDOW_MIN } from "@/config/simulacion";
 import { cn } from "@/lib/cn";
 import { TONE_COLOR, TONE_LABEL } from "@/lib/constants";
-import { useSimulationRows, useWarehouseDeliveries, type WarehouseDelivery } from "@/lib/data/hooks";
+import { useSimulationRows, useWarehouseDeliveries, useWarehouseDepartures, type WarehouseDelivery } from "@/lib/data/hooks";
+import { departureTotals, type WarehouseDeparture } from "@/lib/warehouse-departures";
 import type { WarehouseRow } from "@/lib/data/selectors";
 import { formatCoord } from "@/lib/format";
 import { filterBy, sortBy, toggleIn } from "@/lib/list-tools";
@@ -23,6 +24,7 @@ type Filter = StatusTone | "empty";
 const isEmpty = (w: WarehouseRow) => w.stock === 0;
 
 const HOURS = RECENT_DELIVERIES_WINDOW_MIN / 60;
+const DEPART_HOURS = UPCOMING_DEPARTURES_WINDOW_MIN / 60;
 
 /**
  * Listado de almacenes: semáforo de llenado (umbrales en % de la
@@ -35,6 +37,10 @@ export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose
   locked: boolean;
 }) {
   const data = useSimulationRows(scope, settings);
+  // Una sola ventana de salidas para la cifra de cada tarjeta y la tabla del detalle.
+  const [departHoursText, setDepartHoursText] = useState(String(DEPART_HOURS));
+  const [departHours, setDepartHours] = useState(DEPART_HOURS);
+  const departures = useWarehouseDepartures(scope, data.warehouses.map((w) => w.id), departHours);
   // Filtro por semáforo de llenado: sin colores elegidos se ven todos (el central no tiene semáforo).
   const [tones, setTones] = useState<ReadonlySet<Filter>>(() => new Set());
   const filtered = filterBy(data.warehouses, [tones.size ? (w) => (w.tone != null && tones.has(w.tone)) || (tones.has("empty") && isEmpty(w)) : null]);
@@ -67,19 +73,45 @@ export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose
       ) : (
         <>
           <ul role="listbox" aria-label="Almacenes (elige uno para resaltarlo en el mapa)" className="grid grid-cols-1 gap-2">
-            {rows.map((w) => <WarehouseItem key={w.id} row={w} selected={w.id === selectedId} onSelect={onSelect} />)}
+            {rows.map((w) => (
+              <WarehouseItem
+                key={w.id}
+                row={w}
+                toDepart={departures?.[w.id] ? departureTotals(departures[w.id]).orders : null}
+                departHours={departHours}
+                selected={w.id === selectedId}
+                onSelect={onSelect}
+              />
+            ))}
           </ul>
           <p className="text-xs leading-snug text-n600">
-            Pedidos en camino, por salir y entregados en las últimas {HOURS} h (tiempo simulado) se estiman con los movimientos observados desde que abriste esta pantalla.
+            Pedidos en camino y entregados en las últimas {HOURS} h (tiempo simulado) se estiman con los movimientos observados desde que abriste esta pantalla. Los pedidos por salir vienen del plan vigente.
           </p>
         </>
+      )}
+      {selected && (
+        <WarehouseDepartures
+          key={`salidas-${selected.id}`}
+          warehouse={selected}
+          rows={departures?.[selected.id] ?? null}
+          hours={departHours}
+          hoursText={departHoursText}
+          onHoursChange={(v) => { setDepartHoursText(v); const n = parseHours(v); if (n != null) setDepartHours(n); }}
+        />
       )}
       {selected && <WarehouseDeliveries key={selected.id} scope={scope} warehouse={selected} />}
     </SidePanel>
   );
 }
 
-const WarehouseItem = memo(function WarehouseItem({ row: w, selected, onSelect }: { row: WarehouseRow; selected: boolean; onSelect: (id: string | null) => void }) {
+const WarehouseItem = memo(function WarehouseItem({ row: w, toDepart, departHours, selected, onSelect }: {
+  row: WarehouseRow;
+  /** Pedidos con salida planificada en las próximas `departHours` h; null mientras carga. */
+  toDepart: number | null;
+  departHours: number;
+  selected: boolean;
+  onSelect: (id: string | null) => void;
+}) {
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => { if (selected) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [selected]);
   const central = w.kind === "principal";
@@ -110,7 +142,7 @@ const WarehouseItem = memo(function WarehouseItem({ row: w, selected, onSelect }
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs [&_dd]:text-right [&_dd]:text-white [&_dd]:tabular-nums [&_div]:flex [&_div]:justify-between [&_div]:gap-2 [&_dt]:flex [&_dt]:items-center [&_dt]:gap-1 [&_dt]:text-n500">
         <div className="col-span-2"><dt><Package className="size-3" aria-hidden />Stock actual</dt><dd>{central ? "Ilimitado" : `${w.stock ?? "—"} / ${w.capacity ?? "—"} paquetes`}</dd></div>
         <div><dt><Truck className="size-3" aria-hidden />En camino</dt><dd>{w.inTransit}</dd></div>
-        <div><dt>Por salir</dt><dd>{w.toDepart}</dd></div>
+        <div><dt title={`Pedidos con salida planificada en las próximas ${departHours} h`}>Por salir ({departHours} h)</dt><dd>{toDepart ?? "—"}</dd></div>
         <div className="col-span-2"><dt><PackageCheck className="size-3" aria-hidden />Entregados (últimas {HOURS} h)</dt><dd>{w.deliveredRecent}</dd></div>
       </dl>
     </li>
@@ -144,6 +176,71 @@ function byOrder(rows: WarehouseDelivery[]): DeliveredOrder[] {
     }
   }
   return [...orders.values()];
+}
+
+/** Tabla de las salidas planificadas del almacén elegido en las próximas X horas, una por pedido y vehículo. */
+function WarehouseDepartures({ warehouse, rows, hours, hoursText, onHoursChange }: {
+  warehouse: WarehouseRow;
+  rows: WarehouseDeparture[] | null;
+  hours: number;
+  hoursText: string;
+  onHoursChange: (text: string) => void;
+}) {
+  const [page, setPage] = useState(1);
+  const totals = rows ? departureTotals(rows) : { orders: 0, packages: 0 };
+  const pageCount = Math.max(1, Math.ceil((rows?.length ?? 0) / DELIVERIES_PAGE_SIZE));
+  const current = Math.min(page, pageCount);
+  const slice = rows?.slice((current - 1) * DELIVERIES_PAGE_SIZE, current * DELIVERIES_PAGE_SIZE) ?? [];
+  return (
+    <PanelSection title={`Por salir de ${warehouse.name}`} icon={<Truck className="size-[18px]" aria-hidden />}>
+      <div className="flex items-center gap-1.5 text-[13px] text-n200">
+        En las próximas
+        <NumberInput
+          aria-label="Horas hacia adelante de las salidas del almacén"
+          className="w-20"
+          min={1}
+          max={MAX_DELIVERY_HOURS}
+          value={hoursText}
+          error={parseHours(hoursText) == null}
+          onValueChange={(v) => { onHoursChange(v); setPage(1); }}
+        />
+        h
+      </div>
+      {rows == null ? (
+        <p className="text-xs text-n500">Cargando salidas…</p>
+      ) : rows.length === 0 ? (
+        <EmptyState icon={<Truck className="size-7" aria-hidden />} title={`Sin salidas en las próximas ${hours} h`}>El plan vigente no tiene cargas en este almacén en esa ventana. Amplía el número de horas para ver más.</EmptyState>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-line bg-night">
+          <table className="w-full table-fixed text-[13px]">
+            <colgroup><col style={{ width: "24%" }} /><col style={{ width: "22%" }} /><col style={{ width: "26%" }} /><col style={{ width: "28%" }} /></colgroup>
+            <thead className="h-10 bg-raised text-[11px] text-n500">
+              <tr>
+                <th className="px-3 text-left font-medium">Pedido</th>
+                <th className="px-3 text-right font-medium">Paquetes</th>
+                <th className="px-3 text-left font-medium">Vehículo</th>
+                <th className="px-3 text-right font-medium">Salida prevista</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slice.map((d) => (
+                <tr key={`${d.orderId}:${d.plate}:${d.minutesAhead}`} className="h-10 border-t border-line text-white tabular-nums [&>td]:truncate [&>td]:px-3">
+                  <td><b>{d.orderId}</b></td>
+                  <td className="text-right">{d.packages}</td>
+                  <td>{d.plate}</td>
+                  <td className="text-right" title="Hora prevista de salida según el plan vigente">{d.departsAt}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="flex h-11 items-center justify-between gap-2 border-t border-line bg-raised px-3 text-[11px] text-n400">
+            <span>{totals.orders} {totals.orders === 1 ? "pedido" : "pedidos"} · {totals.packages} {totals.packages === 1 ? "paquete" : "paquetes"}</span>
+            {pageCount > 1 && <Pagination page={current} pageCount={pageCount} onChange={setPage} />}
+          </div>
+        </div>
+      )}
+    </PanelSection>
+  );
 }
 
 /** Tabla de los pedidos entregados en las últimas X horas que salieron del almacén elegido, uno por fila. */
