@@ -21,9 +21,11 @@ export type VehicleRow = {
   /** Paquetes a bordo ("stock actual" del vehículo) y capacidad. */
   load: number;
   capacity: number;
-  /** % de ocupación (NaN sin capacidad) y su semáforo según el tipo. */
+  /** % de ocupación (NaN sin capacidad) y su semáforo según el tipo; un vehículo vacío no tiene color (null). */
   occupancy: number;
   tone: StatusTone | null;
+  /** Sin carga a bordo: se muestra "Vacío" y no cuenta en ningún color. */
+  empty: boolean;
   /** Pedidos asignados: a bordo y de viajes posteriores a una recarga. */
   orderIds: string[];
   /** Solo los que lleva a bordo ahora. */
@@ -61,7 +63,8 @@ export function selectVehicleRows(vehicles: Vehicle[], trips: TripLog, minute: n
       load: v.load,
       capacity: v.capacity,
       occupancy,
-      tone: percentTone(occupancy, bands[v.kind], "lowIsGreen"),
+      tone: v.load <= 0 ? null : percentTone(occupancy, bands[v.kind], "lowIsGreen"),
+      empty: v.load <= 0,
       orderIds: [...new Set(v.orders.map((o) => o.orderId))],
       loadedOrderIds: loadedOrders(v).map((o) => o.orderId),
       etaMinutes: v.etaMinutes ?? null,
@@ -87,7 +90,10 @@ export type WarehouseRow = {
   capacity: number | null;
   /** NaN para el central (ilimitado). */
   occupancy: number;
+  /** Semáforo de llenado; null para el central y para un intermedio vacío. */
   tone: StatusTone | null;
+  /** Intermedio sin stock: se muestra "Vacío" y no cuenta en ningún color. */
+  empty: boolean;
   /** Pedidos ya salidos de este almacén y aún a bordo (estimado). */
   inTransit: number;
   /** Pedidos con entregas en la ventana (últimas 4 h simuladas), estimado. */
@@ -119,7 +125,8 @@ export function selectWarehouseRows(warehouses: Warehouse[], vehicles: Vehicle[]
       stock: w.stock ?? null,
       capacity: w.capacity ?? null,
       occupancy,
-      tone: w.kind === "principal" ? null : percentTone(occupancy, bands, "highIsGreen"),
+      tone: w.kind === "principal" || w.stock === 0 ? null : percentTone(occupancy, bands, "highIsGreen"),
+      empty: w.kind !== "principal" && w.stock === 0,
       inTransit: inTransit.get(w.id)?.size ?? 0,
       deliveredRecent: delivered.get(w.id)?.size ?? 0,
     };

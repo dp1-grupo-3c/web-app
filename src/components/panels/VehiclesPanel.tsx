@@ -30,9 +30,9 @@ const SORTS: { value: SortKey; label: string; key: (r: VehicleRow) => number | n
   { value: "traveled", label: "Recorrido", key: (r) => r.traveledKm },
 ];
 const TONES: StatusTone[] = ["ok", "warn", "crit"];
-/** Semáforo de ocupación o "vacío" (sin carga a bordo); un vacío también cuenta como verde. */
+/** Semáforo de ocupación o "vacío" (sin carga a bordo); un vacío no cuenta en ningún color. */
 type Filter = StatusTone | "empty";
-const isEmpty = (r: VehicleRow) => r.load <= 0;
+const isEmpty = (r: VehicleRow) => r.empty;
 const PAGE_SIZES = [4, 6, 8];
 const PHASES: [PhaseFilter, string][] = [["todas", "Todas"], ["llegando", "Llegando"], ["saliendo", "Saliendo"]];
 const PHASE_TEXT = { llegando: "llegando", saliendo: "saliendo" } as const;
@@ -232,7 +232,7 @@ const VehicleItem = memo(function VehicleItem({ row: r, selected, reveal, onReve
       <div className="flex h-6 items-center gap-2 leading-6">
         <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
         <b className="min-w-0 truncate text-white">{r.plate}</b>
-        <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="text-white tabular-nums">{pct}</b><ToneBadge tone={r.tone} /></span>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="text-white tabular-nums">{pct}</b><ToneBadge tone={r.tone} empty={r.empty} /></span>
         {/* Solo hay un fijado: fijar otro reemplaza al anterior. */}
         <button
           type="button"

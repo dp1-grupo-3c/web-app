@@ -20,9 +20,9 @@ import { useReportMapFilter } from "@/lib/map-filter";
 import type { DataScope, SimSettings, StatusTone } from "@/lib/types";
 
 const TONES: StatusTone[] = ["ok", "warn", "crit"];
-/** Semáforo de llenado o "vacío" (stock 0); un almacén vacío también puede contar en su color. */
+/** Semáforo de llenado o "vacío" (stock 0); un almacén vacío no cuenta en ningún color. */
 type Filter = StatusTone | "empty";
-const isEmpty = (w: WarehouseRow) => w.stock === 0;
+const isEmpty = (w: WarehouseRow) => w.empty;
 
 const HOURS = RECENT_DELIVERIES_WINDOW_MIN / 60;
 const DEPART_HOURS = UPCOMING_DEPARTURES_WINDOW_MIN / 60;
@@ -55,7 +55,7 @@ export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose
   const selected = selectedId ? data.warehouses.find((w) => w.id === selectedId) ?? null : null;
   return (
     <SidePanel title="Almacenes" subtitle="Stock, ocupación, ubicación y capacidad de cada almacén." onClose={onClose} width={width}>
-      {data.warehouses.some((w) => w.tone) && (
+      {data.warehouses.some((w) => w.tone || w.empty) && (
         <div role="group" aria-label="Filtrar por semáforo de llenado" className="flex flex-wrap items-center gap-1.5">
           {TONES.map((t) => {
             const Icon = TONE_ICON[t];
@@ -141,7 +141,7 @@ const WarehouseItem = memo(function WarehouseItem({ row: w, toDepart, departHour
         {central ? <House className="size-4 shrink-0 text-pink" aria-hidden /> : <Package className="size-4 shrink-0 text-n300" aria-hidden />}
         <b className="truncate text-white">{w.name}</b>
         <span className="truncate text-xs text-n500">{central ? "Central" : "Intermedio"} · {formatCoord(w.position)}</span>
-        {!central && <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="whitespace-nowrap text-white tabular-nums">{known ? `${Math.round(w.occupancy)} %` : "—"}</b><ToneBadge tone={w.tone} /></span>}
+        {!central && <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="whitespace-nowrap text-white tabular-nums">{known ? `${Math.round(w.occupancy)} %` : "—"}</b><ToneBadge tone={w.tone} empty={w.empty} /></span>}
       </div>
       {!central && <Meter value={known ? w.occupancy / 100 : 0} color={w.tone ? TONE_COLOR[w.tone] : "var(--color-line-strong)"} label={`Ocupación de ${w.name}`} />}
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs [&_dd]:text-right [&_dd]:text-white [&_dd]:tabular-nums [&_div]:flex [&_div]:justify-between [&_div]:gap-2 [&_dt]:flex [&_dt]:items-center [&_dt]:gap-1 [&_dt]:text-n500">
