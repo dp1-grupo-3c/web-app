@@ -194,7 +194,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId,
             </span>
             <Pagination page={current} pageCount={pageCount} onChange={setPage} />
           </div>
-          <p className="text-xs leading-snug text-n600">El almacén de origen y la salida los informa el servidor; si falta, se estiman con lo observado desde que abriste esta pantalla. La distancia recorrida corresponde al itinerario vigente.</p>
+          <p className="text-xs leading-snug text-n600">El almacén de origen y la salida los informa el servidor; si falta, se estiman con lo observado desde que abriste esta pantalla. La distancia recorrida es la acumulada desde el inicio de la corrida.</p>
         </>
       )}
     </SidePanel>
