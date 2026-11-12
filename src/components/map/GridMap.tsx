@@ -10,7 +10,7 @@ import { VEHICLE_META } from "@/components/domain/vehicle";
 import { GRID } from "@/lib/constants";
 import { useMundo } from "@/lib/data/hooks";
 import { formatCoord } from "@/lib/format";
-import type { Coord, EntityRef, MapSnapshot, Order, PercentBands, TrafficLight, Vehicle, VehicleKind } from "@/lib/types";
+import type { Coord, EntityRef, MapFilter, MapSnapshot, Order, PercentBands, TrafficLight, Vehicle, VehicleKind } from "@/lib/types";
 import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from "./EntityPopover";
 import { computeGeometry, nearestCoord, polylineMidpoint, project, toPath, zoomView, type View } from "./geometry";
 import { BlockageIcon, PINK, VEHICLE_STATUS_LABEL, vehicleAppearance, warehouseAppearance, type MapLayers } from "./layers";
@@ -69,16 +69,22 @@ type GridMapProps = {
   warehouseFillBands?: PercentBands;
   /** Marcadores resaltados con un anillo (elegidos en un listado lateral). */
   emphasis?: { warehouses?: ReadonlySet<string>; vehicles?: ReadonlySet<string> };
+  /** Filtro de color de los paneles Vehículos y Almacenes: solo se dibujan esos ids. */
+  filter?: MapFilter;
 };
 
 const NO_EMPHASIS: NonNullable<GridMapProps["emphasis"]> = {};
 
-export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands }: GridMapProps) {
-  // Filtro por tipo de vehículo (Leyenda): los ocultos no se dibujan, ni sus rutas ni sus grupos.
+export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands, filter }: GridMapProps) {
+  // Filtro por tipo de vehículo (Leyenda) y por color (panel Vehículos): los ocultos no se dibujan, ni sus rutas ni sus grupos.
+  const shownVehicles = filter?.vehicles ?? null;
   const snapshot = useMemo(
-    () => (layers.auto && layers.moto && layers.bicicleta ? fullSnapshot : { ...fullSnapshot, vehicles: fullSnapshot.vehicles.filter((v) => layers[v.kind]) }),
-    [fullSnapshot, layers],
+    () => (layers.auto && layers.moto && layers.bicicleta && !shownVehicles ? fullSnapshot
+      : { ...fullSnapshot, vehicles: fullSnapshot.vehicles.filter((v) => layers[v.kind] && (!shownVehicles || shownVehicles.has(v.id))) }),
+    [fullSnapshot, layers, shownVehicles],
   );
+  // Los almacenes filtrados solo dejan de dibujarse: siguen agrupando a los vehículos que están en ellos.
+  const shownWarehouses = filter?.warehouses ?? null;
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
@@ -305,6 +311,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
           })}
 
           {layers.almacenes && snapshot.warehouses.map((w) => {
+            if (shownWarehouses && !shownWarehouses.has(w.id)) return null;
             const a = warehouseAppearance(w, trafficLight, idle, warehouseFillBands);
             const [x, y] = project(g, w.position);
             const intermediate = w.kind === "secundario";

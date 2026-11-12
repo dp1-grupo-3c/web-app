@@ -15,7 +15,8 @@ import { useSimulationRows, useWarehouseDeliveries, useWarehouseDepartures, type
 import { departureTotals, type WarehouseDeparture } from "@/lib/warehouse-departures";
 import type { WarehouseRow } from "@/lib/data/selectors";
 import { formatCoord } from "@/lib/format";
-import { filterBy, sortBy, toggleIn } from "@/lib/list-tools";
+import { filterBy, idsMatching, sortBy, toggleIn } from "@/lib/list-tools";
+import { useReportMapFilter } from "@/lib/map-filter";
 import type { DataScope, SimSettings, StatusTone } from "@/lib/types";
 
 const TONES: StatusTone[] = ["ok", "warn", "crit"];
@@ -31,10 +32,12 @@ const DEPART_HOURS = UPCOMING_DEPARTURES_WINDOW_MIN / 60;
  * configuración), stock, ocupación y movimiento de pedidos. Elegir uno lo
  * resalta en el mapa; elegirlo en el mapa lo resalta aquí (con scroll).
  */
-export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose, width, locked }: {
+export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose, width, locked, onMapFilter }: {
   scope: DataScope; settings: SimSettings; selectedId: string | null; onSelect: (id: string | null) => void; onClose: () => void; width: number;
   /** Hay una corrida activa: el mapa y los almacenes no se pueden editar. */
   locked: boolean;
+  /** Almacenes que el mapa debe dibujar según los chips de color (null = todos). */
+  onMapFilter?: (ids: ReadonlySet<string> | null) => void;
 }) {
   const data = useSimulationRows(scope, settings);
   // Una sola ventana de salidas para la cifra de cada tarjeta y la tabla del detalle.
@@ -43,7 +46,9 @@ export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose
   const departures = useWarehouseDepartures(scope, data.warehouses.map((w) => w.id), departHours);
   // Filtro por semáforo de llenado: sin colores elegidos se ven todos (el central no tiene semáforo).
   const [tones, setTones] = useState<ReadonlySet<Filter>>(() => new Set());
-  const filtered = filterBy(data.warehouses, [tones.size ? (w) => (w.tone != null && tones.has(w.tone)) || (tones.has("empty") && isEmpty(w)) : null]);
+  const matchesTone = (w: WarehouseRow) => (w.tone != null && tones.has(w.tone)) || (tones.has("empty") && isEmpty(w));
+  useReportMapFilter(idsMatching(data.warehouses, tones.size > 0, matchesTone), onMapFilter);
+  const filtered = filterBy(data.warehouses, [tones.size ? matchesTone : null]);
   // El central primero; luego los intermedios por nombre.
   const rows = sortBy(filtered, (w) => `${w.kind === "principal" ? 0 : 1}${w.name}`);
   const count = (t: StatusTone) => data.warehouses.filter((w) => w.tone === t).length;

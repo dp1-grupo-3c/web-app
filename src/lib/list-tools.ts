@@ -45,3 +45,13 @@ export function toggleIn<V>(set: ReadonlySet<V>, value: V): Set<V> {
   if (!next.delete(value)) next.add(value);
   return next;
 }
+
+/**
+ * Ids de las filas que cumplen el filtro de color, en orden estable; null si el
+ * filtro no está activo (el mapa dibuja todo). `always` se muestra siempre (el
+ * vehículo fijado, que la lista también conserva fuera del filtro).
+ */
+export function idsMatching<T extends { id: string }>(rows: readonly T[], active: boolean, matches: (row: T) => boolean, always?: string | null): string[] | null {
+  if (!active) return null;
+  return rows.filter((r) => r.id === always || matches(r)).map((r) => r.id).sort();
+}

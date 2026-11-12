@@ -16,7 +16,8 @@ import { TONE_COLOR, TONE_LABEL } from "@/lib/constants";
 import { useSimulationRows } from "@/lib/data/hooks";
 import { formatSimClock as simClock, type VehicleRow } from "@/lib/data/selectors";
 import { formatDuration } from "@/lib/format";
-import { filterBy, inSet, sortBy, toggleIn, type SortDir } from "@/lib/list-tools";
+import { filterBy, idsMatching, inSet, sortBy, toggleIn, type SortDir } from "@/lib/list-tools";
+import { useReportMapFilter } from "@/lib/map-filter";
 import { DISTANCE_BAND_LABEL, DISTANCE_BANDS, distanceBand } from "@/lib/occupancy";
 import { matchesDistance, parseMaxDistance, type DistanceRef, type DistanceUnit, type PhaseFilter } from "@/lib/vehicle-search";
 import type { DataScope, DistanceBand, SimSettings, StatusTone } from "@/lib/types";
@@ -51,14 +52,18 @@ const km = (n: number | null) => (n == null ? "—" : `${Math.round(n)} km`);
  * rango de la distancia restante al destino; ordena por un criterio a la vez.
  * Lee la foto que muestra el mapa y solo se calcula mientras está abierto.
  */
-export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId, onPinChange, onClose, width }: {
+export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId, onPinChange, onClose, width, onMapFilter }: {
   scope: DataScope; settings: SimSettings; selectedId: string | null; onSelect: (id: string | null) => void;
   /** Vehículo fijado: va antes de la lista, siempre visible, sin importar filtros, orden ni página. */
   pinnedId: string | null; onPinChange: (id: string | null) => void;
   onClose: () => void; width: number;
+  /** Vehículos que el mapa debe dibujar según los chips de color (null = todos). */
+  onMapFilter?: (ids: ReadonlySet<string> | null) => void;
 }) {
   const data = useSimulationRows(scope, settings);
   const [tones, setTones] = useState<ReadonlySet<Filter>>(() => new Set());
+  const matchesTone = (r: VehicleRow) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r));
+  useReportMapFilter(idsMatching(data.vehicles, tones.size > 0, matchesTone, pinnedId), onMapFilter);
   const [bands, setBands] = useState<ReadonlySet<DistanceBand>>(() => new Set());
   // Búsqueda por distancia: referencia, unidad, máximo y llegada o salida.
   const [ref, setRef] = useState<DistanceRef>("destino");
@@ -75,7 +80,7 @@ export function VehiclesPanel({ scope, settings, selectedId, onSelect, pinnedId,
   const [reveal, setReveal] = useState<string | null>(null);
 
   const rows = sortBy(
-    filterBy(data.vehicles, [(r) => r.id !== pinnedId, tones.size ? (r) => (r.tone != null && tones.has(r.tone)) || (tones.has("empty") && isEmpty(r)) : null, inSet(bands, (r) => distanceBand(r.remainingKm)), searching ? (r) => matchesDistance(r, { ref, unit, max: max ?? null, phase }) : null]),
+    filterBy(data.vehicles, [(r) => r.id !== pinnedId, tones.size ? matchesTone : null, inSet(bands, (r) => distanceBand(r.remainingKm)), searching ? (r) => matchesDistance(r, { ref, unit, max: max ?? null, phase }) : null]),
     SORTS.find((s) => s.value === sort)!.key,
     dir,
   );
