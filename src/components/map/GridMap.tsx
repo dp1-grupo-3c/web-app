@@ -18,7 +18,7 @@ import { HoverTooltip, vehicleOccupancyText, warehouseStockText } from "./HoverT
 import { MapPin, type Heading } from "./MapPin";
 import { useVehicleMotion } from "./motion";
 import { pendingFromShown, samePoint } from "./trajectory";
-import { assignedDestinations } from "./selection";
+import { assignedDestinations, warehouseOnMap } from "./selection";
 
 /**
  * Punto de vehículos en espera, con el color de su tipo de vehículo. Si en la
@@ -83,7 +83,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       : { ...fullSnapshot, vehicles: fullSnapshot.vehicles.filter((v) => layers[v.kind] && (!shownVehicles || shownVehicles.has(v.id))) }),
     [fullSnapshot, layers, shownVehicles],
   );
-  // Los almacenes filtrados solo dejan de dibujarse: siguen agrupando a los vehículos que están en ellos.
+  // Los almacenes filtrados solo dejan de dibujarse (el central nunca): siguen agrupando a los vehículos que están en ellos.
   const shownWarehouses = filter?.warehouses ?? null;
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -311,7 +311,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
           })}
 
           {layers.almacenes && snapshot.warehouses.map((w) => {
-            if (shownWarehouses && !shownWarehouses.has(w.id)) return null;
+            if (!warehouseOnMap(w, shownWarehouses)) return null;
             const a = warehouseAppearance(w, trafficLight, idle, warehouseFillBands);
             const [x, y] = project(g, w.position);
             const intermediate = w.kind === "secundario";
