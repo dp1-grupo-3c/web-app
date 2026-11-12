@@ -124,6 +124,7 @@ export function vistaUnidadToVehicle(u: VistaUnidad): Vehicle {
     phase: u.fase === "LLEGANDO" ? "llegando" : u.fase === "SALIENDO" ? "saliendo" : undefined,
     originWarehouseId: u.idAlmacenOrigen != null && u.idAlmacenOrigen >= 0 ? String(u.idAlmacenOrigen) : undefined,
     originDepartureMinute: u.minutoSalidaAlmacen != null && u.minutoSalidaAlmacen >= 0 ? u.minutoSalidaAlmacen : undefined,
+    traveledKm: u.kilometrosRecorridos,
   };
 }
 

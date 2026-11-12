@@ -31,7 +31,7 @@ export type VehicleRow = {
   /** Al destino inmediato. */
   etaMinutes: number | null;
   remainingKm: number;
-  /** Del itinerario vigente (el backend lo reinicia al replanificar). */
+  /** Acumulado desde el inicio de la corrida (no se reinicia al replanificar). */
   traveledKm: number;
   /** Manhattan desde el almacén de origen estimado (null = sin dato). */
   fromOriginKm: number | null;
@@ -66,7 +66,8 @@ export function selectVehicleRows(vehicles: Vehicle[], trips: TripLog, minute: n
       loadedOrderIds: loadedOrders(v).map((o) => o.orderId),
       etaMinutes: v.etaMinutes ?? null,
       remainingKm: pathKm(v.route?.pending),
-      traveledKm: pathKm(v.route?.traveled),
+      // Acumulado de la corrida (backend); el camino del itinerario vigente se reinicia en cada replanificación.
+      traveledKm: v.traveledKm ?? pathKm(v.route?.traveled),
       fromOriginKm: origin ? manhattan(origin, v.position) : null,
       fromOriginMinutes: departed != null && minute != null && minute >= departed ? minute - departed : null,
       originId: v.originWarehouseId ?? trip?.originId ?? null,

@@ -59,6 +59,8 @@ export interface VistaUnidad {
   // Ultimo almacén donde cargó (-1 sin dato) y minuto en que salió de él.
   idAlmacenOrigen?: number;
   minutoSalidaAlmacen?: number;
+  /** Km recorridos desde el inicio de la corrida hasta el minuto de la foto; no se reinicia al replanificar. */
+  kilometrosRecorridos?: number;
 }
 
 /** Entrega registrada por el motor (las de las últimas 24 h simuladas). */
@@ -71,13 +73,13 @@ export interface EntregaRegistrada {
   cantidad: number;
 }
 
-/** Respuesta de …/almacenes/{almacen}/envios; aquí solo se usan las entregas. */
 /** Parte de un pedido que sale o salió del almacén en una unidad. */
 export interface EnvioDelAlmacen {
   idPedido: number;
   envio: EnvioPedido;
 }
 
+/** Respuesta de …/almacenes/{almacen}/envios. */
 export interface EnviosAlmacen {
   horas: number;
   minuto: number;

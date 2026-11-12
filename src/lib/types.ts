@@ -36,6 +36,8 @@ export type Vehicle = {
   // Último almacén donde cargó y minuto simulado en que salió de él.
   originWarehouseId?: string;
   originDepartureMinute?: number;
+  /** Km recorridos desde el inicio de la corrida (lo envía el backend). */
+  traveledKm?: number;
 };
 
 export type VehiclePhase = "llegando" | "saliendo";
