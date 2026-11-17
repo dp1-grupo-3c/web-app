@@ -9,13 +9,13 @@ import type { ConnectionState, OpsClock, OpsKpis } from "@/lib/types";
 /** Barra flotante sobre el mapa, dividida en secciones. */
 export function HudBar({ children, dimmed }: { children: ReactNode; dimmed?: boolean }) {
   return (
-    <div className={cn("flex items-stretch rounded-[14px] border border-line bg-panel/95 shadow-[0_8px_24px_rgb(0_0_0/0.35)] backdrop-blur", dimmed && "opacity-60")}>
+    <div className={cn("flex max-w-full items-stretch overflow-x-auto rounded-[14px] border border-line bg-panel/95 shadow-[0_8px_24px_rgb(0_0_0/0.35)] backdrop-blur", dimmed && "opacity-60")}>
       {children}
     </div>
   );
 }
 export function HudSection({ children }: { children: ReactNode }) {
-  return <div className="flex items-center gap-4 border-l border-line px-4 py-2.5 first:border-l-0">{children}</div>;
+  return <div className="flex shrink-0 items-center gap-4 border-l border-line px-3 py-2.5 first:border-l-0 md:px-4">{children}</div>;
 }
 
 export function Kpi({ label, value, onClick, labelIcon }: { label: string; value: ReactNode; onClick?: () => void; labelIcon?: ReactNode }) {
@@ -58,13 +58,13 @@ export function ConnectionStatus({ state }: { state: ConnectionState }) {
 export function ConnectionBanner({ state }: { state: ConnectionState }) {
   if (state === "offline")
     return (
-      <Alert tone="crit" icon={<WifiOff className="size-5" aria-hidden />} className="w-[460px] bg-panel">
+      <Alert tone="crit" icon={<WifiOff className="size-5" aria-hidden />} className="w-[460px] max-w-full bg-panel">
         <b>Perdimos la conexión.</b> El mapa muestra el último dato recibido. Seguimos intentando reconectar.
       </Alert>
     );
   if (state === "reconnecting")
     return (
-      <Alert tone="warn" icon={<RefreshCw className="size-5 animate-spin" aria-hidden />} className="w-[460px] bg-panel">
+      <Alert tone="warn" icon={<RefreshCw className="size-5 animate-spin" aria-hidden />} className="w-[460px] max-w-full bg-panel">
         <b>Estamos reconectando…</b> En unos segundos verás la información actualizada.
       </Alert>
     );

@@ -26,6 +26,7 @@ import { SimOnboarding } from "@/components/simulation/SimOnboarding";
 import { SimulationSummaryModal } from "@/components/simulation/SimulationSummaryModal";
 import { useToast } from "@/components/ui/Toast";
 import { PanelPinContext, usePinnedPreference } from "@/components/workspace/PanelPin";
+import { DESKTOP_QUERY, useMediaQuery } from "@/components/workspace/useMediaQuery";
 import { SideRail, type RailItem } from "@/components/workspace/SideRail";
 import { usePanelParam } from "@/components/workspace/usePanelParam";
 import { Workspace } from "@/components/workspace/Workspace";
@@ -62,7 +63,10 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const scope = SCOPES[mode];
   const toast = useToast();
   const [panel, setPanel] = usePanelParam(PANELS);
-  const [pinned, setPinned] = usePinnedPreference();
+  const [pinnedPreference, setPinned] = usePinnedPreference();
+  // Fijar el panel solo tiene sentido en escritorio: en teléfono y tablet flota sobre el mapa.
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  const pinned = pinnedPreference && desktop;
   const snapshot = useMapSnapshot(scope);
   const { orders, destinations: knownDestinations } = useOrdersWithDestinations(scope);
   const metrics = useMetrics(scope);
@@ -295,13 +299,13 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             start={own?.fechaHoraInicio ?? runStartDate}
             clock={feed.clock}
             ended={ended}
-            compact={!!shown}
+            compact={!!shown || !desktop}
             lagSeconds={play.lagSeconds}
             onCancel={() => own && setConfirming(own.id)}
           />
         )
       }
-      panel={panelNode && <PanelPinContext.Provider value={pin}>{panelNode}</PanelPinContext.Provider>}
+      panel={panelNode && <PanelPinContext.Provider value={desktop ? pin : null}>{panelNode}</PanelPinContext.Provider>}
       panelFloating={!pinned}
       rail={<SideRail items={items} bottomItems={bottom} active={shown} onToggle={(p) => setPanel(shown === p ? (pinned ? "menu" : null) : p)} homeHref="/operaciones" />}
       overlay={

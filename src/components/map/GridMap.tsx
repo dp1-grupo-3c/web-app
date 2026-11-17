@@ -88,6 +88,9 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
   const boxRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
+  // Dedos apoyados sobre el mapa y distancia de referencia del pellizco (zoom táctil).
+  const pointers = useRef(new Map<number, readonly [number, number]>());
+  const pinch = useRef<number | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<View>({ zoom: 1, pan: { x: 0, y: 0 } });
   const [hover, setHover] = useState<Coord | null>(null);
@@ -179,11 +182,37 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
   const onPointerDown = (e: PointerEvent<SVGSVGElement>) => {
     if (e.button !== 0 || (e.target as Element).closest("[data-pin]")) return;
     const [x, y] = local(e);
-    drag.current = { sx: x, sy: y, px: view.pan.x, py: view.pan.y, moved: false };
+    pointers.current.set(e.pointerId, [x, y]);
     e.currentTarget.setPointerCapture(e.pointerId);
+    if (pointers.current.size === 2) {
+      // Segundo dedo: deja de arrastrar y empieza el pellizco.
+      drag.current = null;
+      setDragging(true);
+      pinch.current = fingerDistance();
+      return;
+    }
+    drag.current = { sx: x, sy: y, px: view.pan.x, py: view.pan.y, moved: false };
+  };
+  const fingerDistance = () => {
+    const [a, b] = [...pointers.current.values()];
+    return Math.hypot(a[0] - b[0], a[1] - b[1]);
+  };
+  const releasePointer = (e: PointerEvent<SVGSVGElement>) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
   };
   const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
     const [x, y] = local(e);
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, [x, y]);
+    if (pinch.current != null && pointers.current.size === 2) {
+      // Cada vez que la distancia entre los dedos cambia un 25 %, un paso de zoom.
+      const dist = fingerDistance(), ratio = dist / pinch.current;
+      if (ratio > 1.25 || ratio < 0.8) {
+        setView((v) => zoomView(v, ratio > 1 ? 1 : -1));
+        pinch.current = dist;
+      }
+      return;
+    }
     const d = drag.current;
     if (d) {
       const dx = x - d.sx, dy = y - d.sy;
@@ -194,6 +223,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
     setHover(nearestCoord(g, x, y));
   };
   const onPointerUp = (e: PointerEvent<SVGSVGElement>) => {
+    releasePointer(e);
     const d = drag.current;
     drag.current = null;
     setDragging(false);
@@ -269,11 +299,12 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
           width={size.w}
           height={size.h}
           role="application"
-          aria-label={`Mapa: retícula de ${GRID.width} por ${GRID.height}. Arrastra para moverte y usa la rueda para acercar.`}
+          aria-label={`Mapa: retícula de ${GRID.width} por ${GRID.height}. Arrastra para moverte y usa la rueda o pellizca para acercar.`}
           className={cn("absolute inset-0 touch-none select-none", pickMode ? "cursor-crosshair" : dragging ? "cursor-grabbing" : "cursor-grab")}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onPointerCancel={(e) => { releasePointer(e); drag.current = null; setDragging(false); }}
           onPointerLeave={() => setHover(null)}
         >
           <rect width={size.w} height={size.h} fill="#1e2833" />
@@ -411,13 +442,13 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       {popover}
 
       {pickMode && (
-        <div className="absolute top-4 left-1/2 z-[6] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-craft py-2 pr-2 pl-4 font-semibold whitespace-nowrap text-night shadow-[0_8px_24px_rgb(0_0_0/0.35)]">
+        <div className="absolute top-4 left-1/2 z-[6] flex w-max max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-3 rounded-xl bg-craft py-2 pr-2 pl-4 font-semibold text-night md:whitespace-nowrap shadow-[0_8px_24px_rgb(0_0_0/0.35)]">
           <Crosshair className="size-5" aria-hidden /> Haz clic en una intersección para fijar el destino
           <Button size="xs" className="bg-night/15 text-night hover:bg-night/25" onClick={onCancelPick}>Cancelar</Button>
         </div>
       )}
 
-      <div className="absolute bottom-3 left-4 z-[3] flex items-center gap-2.5">
+      <div className="absolute bottom-3 left-4 z-[3] flex max-w-[calc(100%-32px)] flex-wrap items-center gap-2.5">
         <div className="flex h-10 items-center rounded-xl border border-line bg-panel/95 px-0.5 shadow-[0_8px_24px_rgb(0_0_0/0.3)] [&>button]:size-9">
           <ControlButton label="Acercar" onClick={() => setView((v) => zoomView(v, 1))}><Plus className="size-5" /></ControlButton>
           <span className="mx-0.5 h-5 border-l border-line-strong" aria-hidden />

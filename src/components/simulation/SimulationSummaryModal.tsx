@@ -66,7 +66,7 @@ export function SimulationSummaryModal({ mode, outcome, startDate, summary: s, b
 
   return (
     <Overlay onClose={onClose} labelledBy="summary-title">
-      <div className="flex max-h-[calc(100dvh-48px)] w-[920px] flex-col overflow-hidden rounded-[20px] border border-line-strong bg-panel shadow-[0_24px_64px_rgb(0_0_0/0.55)]">
+      <div className="flex max-h-[calc(100dvh-48px)] w-[920px] max-w-full flex-col overflow-hidden rounded-[20px] border border-line-strong bg-panel shadow-[0_24px_64px_rgb(0_0_0/0.55)]">
         <header className="flex items-center gap-3.5 border-b border-line py-4 pr-5 pl-6">
           <Logo size={44} />
           <div className="flex-1">

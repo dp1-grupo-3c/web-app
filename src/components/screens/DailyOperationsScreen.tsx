@@ -21,6 +21,7 @@ import { WarehousesPanel } from "@/components/panels/WarehousesPanel";
 import { useToast } from "@/components/ui/Toast";
 import { SideRail, type RailItem } from "@/components/workspace/SideRail";
 import { usePanelParam } from "@/components/workspace/usePanelParam";
+import { DESKTOP_QUERY, TABLET_QUERY, useMediaQuery } from "@/components/workspace/useMediaQuery";
 import { Workspace } from "@/components/workspace/Workspace";
 import { FLEET_DEFAULTS } from "@/config/simulacion";
 import { PANEL_WIDTH } from "@/lib/constants";
@@ -58,6 +59,8 @@ const KINDS: VehicleKind[] = ["auto", "moto", "bicicleta"];
 export function DailyOperationsScreen() {
   const toast = useToast();
   const [panel, setPanel] = usePanelParam(PANELS);
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  const phone = !useMediaQuery(TABLET_QUERY);
   const { cargado, running } = useOperacion();
   const connection = useOperacionConnection();
   const snapshot = useOperacionMapSnapshot();
@@ -273,12 +276,13 @@ export function DailyOperationsScreen() {
       }
       hud={
         <>
-          {running && <OpsHud connection={connection} clock={clock} kpis={kpis} compact={!!shown} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} />}
+          {running && <OpsHud connection={connection} clock={clock} kpis={kpis} compact={!!shown || !desktop} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} />}
           {running && <ConnectionBanner state={connection} />}
           <DailyRunControl onConfigure={() => open("config")} />
         </>
       }
-      panel={panelNode}
+      // En teléfono el panel tapa el mapa: se oculta mientras se elige el punto.
+      panel={picking && phone ? null : panelNode}
       rail={<SideRail items={items} bottomItems={bottom} active={shown} onToggle={toggle} homeHref="/operaciones" />}
     />
   );

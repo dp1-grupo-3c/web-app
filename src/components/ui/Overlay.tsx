@@ -12,7 +12,7 @@ export function Overlay({ children, onClose, labelledBy, role = "dialog" }: { ch
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 grid animate-fade-in place-items-center bg-[#080c10]/66 p-6">
+    <div className="fixed inset-0 z-50 grid animate-fade-in place-items-center bg-[#080c10]/66 p-4 md:p-6">
       <div role={role} aria-modal="true" aria-labelledby={labelledBy} className="contents">
         {children}
       </div>

@@ -23,7 +23,7 @@ const RUN_HREF: Record<TipoEscenario, string> = {
  */
 export function OtherRunNotice({ tipo, primerDia, onStop }: { tipo: TipoEscenario; primerDia: string; onStop: () => void }) {
   return (
-    <div className="absolute top-1/2 left-1/2 z-[4] flex w-[420px] -translate-x-1/2 -translate-y-1/2 flex-col gap-3.5 rounded-[18px] border border-line-strong bg-panel/97 p-7 shadow-[0_20px_48px_rgb(0_0_0/0.45)]">
+    <div className="absolute top-1/2 left-1/2 z-[4] flex w-[420px] max-w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3.5 rounded-[18px] border border-line-strong bg-panel/97 p-7 shadow-[0_20px_48px_rgb(0_0_0/0.45)]">
       <span className="grid size-12 place-items-center rounded-xl bg-warning/12 text-warning"><Radio className="size-[26px]" aria-hidden /></span>
       <h2 className="text-2xl leading-tight font-bold text-white">Hay otra corrida en curso</h2>
       <p className="text-sm text-n300">

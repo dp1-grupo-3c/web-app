@@ -12,7 +12,7 @@ import { Overlay } from "@/components/ui/Overlay";
 export function BufferingDialog({ queued, target }: { queued: number; target: number }) {
   return (
     <Overlay labelledBy="buffering-title">
-      <div role="status" className="flex w-[360px] flex-col gap-3 rounded-[20px] border border-line-strong bg-panel p-6 shadow-[0_24px_64px_rgb(0_0_0/0.55)]">
+      <div role="status" className="flex w-[360px] max-w-full flex-col gap-3 rounded-[20px] border border-line-strong bg-panel p-6 shadow-[0_24px_64px_rgb(0_0_0/0.55)]">
         <div className="flex items-center gap-3">
           <LoaderCircle className="size-6 shrink-0 animate-spin text-pink" aria-hidden />
           <h2 id="buffering-title" className="text-lg font-bold text-white">Cargando…</h2>

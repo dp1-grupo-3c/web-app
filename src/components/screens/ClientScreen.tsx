@@ -98,7 +98,7 @@ function ClientOrders({ clientId, onChangeId }: { clientId: string; onChangeId: 
           <b>Simulación.</b> Los pedidos que ves son de ejemplo, tomados de la simulación en curso.
         </Alert>
       )}
-      <div className="mt-5 max-w-[960px] overflow-hidden rounded-xl border border-line bg-panel">
+      <div className="mt-5 max-w-[960px] overflow-x-auto rounded-xl border border-line bg-panel">
         {orders.length === 0 ? (
           <EmptyState icon={<Package className="size-8" aria-hidden />} title={loading ? "Buscando tus pedidos…" : running ? "Todavía no hay pedidos" : "No hay una simulación en curso"} className="py-12">
             {loading ? "Un momento, por favor." : running ? "Aparecerán aquí en cuanto la simulación registre los primeros." : "Inicia una simulación desde Operaciones para ver pedidos de ejemplo."}

@@ -69,7 +69,7 @@ function PlanDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const plan = usePlanReport({ kind: "operacion", id });
   return createPortal(
     <Overlay onClose={onClose} labelledBy="plan-op-title">
-      <div className="flex max-h-[calc(100dvh-48px)] w-[820px] flex-col overflow-hidden rounded-[20px] border border-line-strong bg-panel shadow-[0_24px_64px_rgb(0_0_0/0.55)]">
+      <div className="flex max-h-[calc(100dvh-48px)] w-[820px] max-w-full flex-col overflow-hidden rounded-[20px] border border-line-strong bg-panel shadow-[0_24px_64px_rgb(0_0_0/0.55)]">
         <header className="flex items-center gap-3 border-b border-line py-4 pr-5 pl-6">
           <div className="flex-1">
             <p className="text-xs font-semibold tracking-[0.08em] text-n600 uppercase">Cierre de operaciones</p>

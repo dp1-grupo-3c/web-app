@@ -32,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toast && (
           <div
             key={toast.id}
-            className="fixed bottom-6 left-1/2 z-[100] flex max-w-[600px] min-w-[380px] -translate-x-1/2 animate-toast-in items-center gap-3 rounded-xl border border-line-strong bg-[#0f151b] px-[18px] py-3.5 text-sm text-white shadow-[0_12px_28px_rgb(0_0_0/0.5)]"
+            className="fixed bottom-6 left-1/2 z-[100] flex w-[calc(100vw-32px)] md:w-auto md:max-w-[600px] md:min-w-[380px] -translate-x-1/2 animate-toast-in items-center gap-3 rounded-xl border border-line-strong bg-[#0f151b] px-[18px] py-3.5 text-sm text-white shadow-[0_12px_28px_rgb(0_0_0/0.5)]"
           >
             {toast.tone === "success" ? <CircleCheck className="size-[22px] shrink-0 text-success" /> : <CircleAlert className="size-[22px] shrink-0 text-critic" />}
             <span>{toast.message}</span>
