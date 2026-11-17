@@ -11,7 +11,6 @@ type SimHudProps = {
   start: string;
   clock: SimulationClock | null;
   ended: boolean;
-  compact: boolean;
   /** Desfase del mapa respecto del servidor por el buffer de reproducción, en segundos. */
   lagSeconds?: number;
   onCancel: () => void;
@@ -22,7 +21,7 @@ type SimHudProps = {
  * No hay control de pausa ni de velocidad: el backend no los soporta
  * (ver GUIA_FLUJO_DATOS.md, "Lo que el backend no ofrece hoy").
  */
-export function SimHud({ mode, start, clock, ended, compact, lagSeconds = 0, onCancel }: SimHudProps) {
+export function SimHud({ mode, start, clock, ended, lagSeconds = 0, onCancel }: SimHudProps) {
   const elapsed = clock?.elapsedMinutes ?? 0;
   const now = clock ? new Date(clock.simTime) : start.includes("T") ? new Date(start) : parseISODate(start);
   const day = Math.floor(elapsed / 1440) + 1;
@@ -55,7 +54,7 @@ export function SimHud({ mode, start, clock, ended, compact, lagSeconds = 0, onC
       </HudSection>
       <HudSection>
         <Kpi label="Transcurrido" value={clock ? formatElapsed(elapsed) : "—"} />
-        {!compact && <Kpi label="Tiempo real" value={clock ? formatClock(clock.realSeconds) : "—"} />}
+        <Kpi label="Tiempo real" value={clock ? formatClock(clock.realSeconds) : "—"} />
         <Kpi label="Entregados" value={clock ? formatNumber(clock.delivered) : "—"} />
       </HudSection>
       <HudSection>

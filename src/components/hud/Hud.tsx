@@ -86,17 +86,16 @@ function ClockKpi({ label, date, elapsedLabel, elapsed }: { label: string; date:
 
 /**
  * Resumen de operaciones diarias: conexión, relojes, flota, pedidos, entregados
- * y alertas. Con `compact` (panel abierto) se ocultan la flota y los entregados para dar espacio a los relojes.
+ * y alertas. Siempre muestra lo mismo: si no cabe, la barra se desplaza (HudBar).
  */
-export function OpsHud({ connection, clock, kpis, compact, onOpenOrders, onOpenBreakdowns }: { connection: ConnectionState; clock: OpsClock | null; kpis: OpsKpis | null; compact: boolean; onOpenOrders: () => void; onOpenBreakdowns: () => void }) {
+export function OpsHud({ connection, clock, kpis, onOpenOrders, onOpenBreakdowns, stop }: { connection: ConnectionState; clock: OpsClock | null; kpis: OpsKpis | null; onOpenOrders: () => void; onOpenBreakdowns: () => void; stop: ReactNode }) {
   return (
     <HudBar>
       <HudSection><ConnectionStatus state={connection} /></HudSection>
       <HudSection>
-        <ClockKpi label="Fecha y hora simulada" date={clock?.simTime ?? null} elapsedLabel="Transcurrido simulado" elapsed={clock?.simElapsedMinutes ?? null} />
         <ClockKpi label="Fecha y hora actual" date={clock?.now ?? null} elapsedLabel="Transcurrido real" elapsed={clock?.realElapsedMinutes ?? null} />
       </HudSection>
-      {!compact && <HudSection>
+      <HudSection>
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-n500">Flota activa</span>
           <div className="flex items-center gap-3 text-base font-semibold text-white tabular-nums">
@@ -112,12 +111,13 @@ export function OpsHud({ connection, clock, kpis, compact, onOpenOrders, onOpenB
             })}
           </div>
         </div>
-      </HudSection>}
+      </HudSection>
       <HudSection>
         <Kpi label="Pedidos activos" value={kpis ? formatNumber(kpis.activeOrders) : dash} onClick={onOpenOrders} />
-        {!compact && <Kpi label="Entregados hoy" value={kpis ? formatNumber(kpis.deliveredToday) : dash} />}
+        <Kpi label="Entregados hoy" value={kpis ? formatNumber(kpis.deliveredToday) : dash} />
         <Kpi label="Alertas" labelIcon={<TriangleAlert className="size-3 text-critic" aria-hidden />} value={kpis ? kpis.alerts : dash} onClick={onOpenBreakdowns} />
       </HudSection>
+      <HudSection>{stop}</HudSection>
     </HudBar>
   );
 }

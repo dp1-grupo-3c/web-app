@@ -1,26 +1,25 @@
 "use client";
 
-import { CircleAlert, Clock, Play } from "lucide-react";
+import { CircleAlert, Play } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/choice";
 import { Alert } from "@/components/ui/feedback";
-import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
+import { SidePanel } from "@/components/workspace/SidePanel";
 import { OccupancyBandsEditor, type OccupancyBands } from "./config/OccupancyBandsEditor";
 import { WorldEditor } from "./config/WorldEditor";
 import { FleetEditor, hasFleetErrors, type FleetDraft, type FleetErrors } from "./FleetPanel";
 import { invalidBands } from "./TrafficLight";
 
-export type OpsConfigTab = "general" | "flota" | "semaforo" | "mapa";
+export type OpsConfigTab = "flota" | "semaforo" | "mapa";
 const TABS: { value: OpsConfigTab; label: string }[] = [
-  { value: "general", label: "General" },
   { value: "flota", label: "Flota" },
   { value: "semaforo", label: "Semáforo" },
   { value: "mapa", label: "Mapa" },
 ];
 
 type Props = {
-  /** La operación está en curso: general y flota se muestran en solo lectura. */
+  /** La operación está en curso: la flota se muestra en solo lectura, salvo la velocidad. */
   running: boolean;
   /** Aún no se sabe si hay una operación en curso. */
   loading: boolean;
@@ -29,6 +28,8 @@ type Props = {
   fleet: FleetDraft;
   onFleet: (d: FleetDraft) => void;
   fleetErrors: FleetErrors;
+  /** Operación en curso: envía las velocidades, que rigen desde la siguiente planificación. */
+  onApplySpeeds?: () => void;
   bands: OccupancyBands;
   onBands: (b: OccupancyBands) => void;
   starting: boolean;
@@ -48,7 +49,6 @@ export function OpsConfigPanel(p: Props) {
   const readOnly = running || loading;
   const [tried, setTried] = useState(false);
   const invalid = (attempted: boolean): Record<OpsConfigTab, boolean> => ({
-    general: false,
     flota: !readOnly && attempted && hasFleetErrors(p.fleetErrors),
     semaforo: invalidBands(p.bands),
     mapa: false,
@@ -74,7 +74,7 @@ export function OpsConfigPanel(p: Props) {
         </Button>
       )}
     >
-      {running && tab !== "semaforo" && <Alert tone="info">La operación está en curso, así que esta sección es de solo lectura: muestra los valores con los que corre.</Alert>}
+      {running && tab !== "semaforo" && <Alert tone="info">La operación está en curso, así que esta sección es de solo lectura: muestra los valores con los que corre.{tab === "flota" && p.onApplySpeeds && " La velocidad sí se puede cambiar."}</Alert>}
       <SegmentedControl
         label="Secciones de la configuración"
         value={tab}
@@ -85,17 +85,9 @@ export function OpsConfigPanel(p: Props) {
         }))}
       />
 
-      {tab === "general" && (
-        <PanelSection title="Inicio" icon={<Clock className="size-[18px]" aria-hidden />}>
-          <p className="text-sm leading-snug text-n300">
-            La operación comienza en la hora actual del servidor, sin pedidos y con toda la flota en el almacén central. Mientras está en curso, registra pedidos y averías desde sus paneles.
-          </p>
-        </PanelSection>
-      )}
-
       {tab === "mapa" && <WorldEditor locked={readOnly} part="mapa" />}
 
-      {tab === "flota" && <FleetEditor draft={p.fleet} onChange={p.onFleet} errors={p.fleetErrors} readOnly={readOnly} />}
+      {tab === "flota" && <FleetEditor draft={p.fleet} onChange={p.onFleet} errors={p.fleetErrors} readOnly={readOnly} onApplySpeeds={p.onApplySpeeds} />}
 
       {tab === "semaforo" && (
         <>

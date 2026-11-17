@@ -310,7 +310,6 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             start={own?.fechaHoraInicio ?? runStartDate}
             clock={feed.clock}
             ended={ended}
-            compact={!!shown || !desktop}
             lagSeconds={play.lagSeconds}
             onCancel={() => own && setConfirming(own.id)}
           />

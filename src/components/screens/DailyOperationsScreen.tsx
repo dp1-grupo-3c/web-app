@@ -8,17 +8,19 @@ import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
 import { ClientsPanel, EMPTY_CLIENT_DRAFT, type ClientsTab } from "@/components/panels/ClientsPanel";
 import { DataPanel } from "@/components/panels/DataPanel";
-import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft } from "@/components/panels/FleetPanel";
+import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft, type FleetDraft } from "@/components/panels/FleetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
 import { OccupancyMetrics } from "@/components/panels/OccupancyMetrics";
+import { SectionsPanel } from "@/components/panels/SectionsPanel";
 import { OpsConfigPanel, type OpsConfigTab } from "@/components/panels/OpsConfigPanel";
 import { draftForClient, EMPTY_DRAFT, OrdersPanel, type OrdersTab } from "@/components/panels/OrdersPanel";
 import { useOperacionBands } from "@/components/panels/TrafficLight";
 import { VehiclesPanel } from "@/components/panels/VehiclesPanel";
 import { WarehousesPanel } from "@/components/panels/WarehousesPanel";
 import { useToast } from "@/components/ui/Toast";
+import { PanelPinContext, usePinnedPreference } from "@/components/workspace/PanelPin";
 import { SideRail, type RailItem } from "@/components/workspace/SideRail";
 import { usePanelParam } from "@/components/workspace/usePanelParam";
 import { DESKTOP_QUERY, TABLET_QUERY, useMediaQuery } from "@/components/workspace/useMediaQuery";
@@ -46,20 +48,35 @@ import { kindForDocument } from "@/lib/documento";
 import { defaultSimSettings } from "@/lib/sim-settings";
 import type { Client, DataScope, EntityRef, FleetSettings, MapFilter, VehicleKind } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
-import { DailyRunControl } from "./DailyRunControl";
+import { DailyRunControl, StopOperationButton } from "./DailyRunControl";
 
 // "semaforo" se mantiene para enlaces antiguos: abre la pestaña Semáforo de Configurar.
-const PANELS = ["config", "semaforo", "vehiculos", "almacenes", "metricas", "clientes", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
+const PANELS = ["menu", "config", "semaforo", "vehiculos", "almacenes", "metricas", "clientes", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
 /** Paneles disponibles antes de iniciar la operación. */
-const IDLE_PANELS: Panel[] = ["config", "almacenes", "datos", "ayuda", "leyenda"];
+const IDLE_PANELS: Panel[] = ["menu", "config", "almacenes", "datos", "ayuda", "leyenda"];
+const DESCRIPTIONS: Partial<Record<Panel, string>> = {
+  config: "Flota, semáforos y mapa de la operación.",
+  vehiculos: "Ocupación, carga y avance de cada vehículo.",
+  almacenes: "Stock, ocupación, ubicación y capacidad de cada almacén.",
+  metricas: "Indicadores acumulados de la operación.",
+  clientes: "Registra y edita clientes.",
+  pedidos: "Registra pedidos y revisa los activos.",
+  averias: "Registra averías y revisa las recientes.",
+  datos: "Archivos de flota, ventas, bloqueos y mantenimiento.",
+  ayuda: "Guía rápida de la pantalla.",
+  leyenda: "Íconos del mapa y capas visibles.",
+};
 const SCOPE: DataScope = { kind: "ops" };
 const KINDS: VehicleKind[] = ["auto", "moto", "bicicleta"];
 
 export function DailyOperationsScreen() {
   const toast = useToast();
   const [panel, setPanel] = usePanelParam(PANELS);
+  const [pinnedPreference, setPinned] = usePinnedPreference();
+  // Fijar el panel solo tiene sentido en escritorio: en teléfono y tablet flota sobre el mapa.
   const desktop = useMediaQuery(DESKTOP_QUERY);
+  const pinned = pinnedPreference && desktop;
   const phone = !useMediaQuery(TABLET_QUERY);
   const { cargado, running } = useOperacion();
   const connection = useOperacionConnection();
@@ -81,9 +98,11 @@ export function DailyOperationsScreen() {
   // Los listados reciben la configuración completa; solo usan los semáforos en %.
   const settings = useMemo(() => ({ ...defaultSimSettings(), ...applied }), [applied]);
 
-  const [configTab, setConfigTab] = useState<OpsConfigTab>("general");
+  const [configTab, setConfigTab] = useState<OpsConfigTab>("flota");
   // Cada operación nueva parte de la flota por defecto (config/simulacion.ts).
   const [fleetDraft, setFleetDraft] = useState(() => toFleetDraft(FLEET_DEFAULTS));
+  // Velocidades editadas con la operación en curso, hasta que se aplican.
+  const [liveFleet, setLiveFleet] = useState<FleetDraft | null>(null);
   const [starting, setStarting] = useState(false);
   const [selected, setSelected] = useState<EntityRef | null>(null);
   const [layers, setLayers] = useState(ALL_LAYERS);
@@ -99,6 +118,8 @@ export function DailyOperationsScreen() {
   // El registro de cliente se abrió desde un pedido: al guardar se vuelve a él.
   const [clientFromOrder, setClientFromOrder] = useState(false);
   const [picking, setPicking] = useState(false);
+  // Reporte del último plan, abierto al detener la operación.
+  const [planOf, setPlanOf] = useState<string | null>(null);
 
   // Enlaces antiguos a ?panel=semaforo.
   if (panel === "semaforo" && configTab !== "semaforo") setConfigTab("semaforo");
@@ -129,6 +150,7 @@ export function DailyOperationsScreen() {
     setStarting(false);
     if (!speeds.ok) toast.error(`La operación inició, pero no se aplicaron las velocidades: ${speeds.message}`);
     setFleetDraft(toFleetDraft(FLEET_DEFAULTS));
+    setLiveFleet(null);
     setPanel(null);
   };
 
@@ -145,8 +167,15 @@ export function DailyOperationsScreen() {
   };
 
   // Antes de iniciar solo se ofrecen los paneles de configuración.
-  const shown = panel === "semaforo" ? "config" : panel && !running && !IDLE_PANELS.includes(panel) ? null : panel;
-  const toggle = (p: Panel) => open(shown === p ? null : p);
+  const requested = panel === "semaforo" ? "config" : panel && !running && !IDLE_PANELS.includes(panel) ? null : panel;
+  // Fijado, el panel no se cierra: sin una sección elegida muestra el menú de secciones.
+  const shown = requested ?? (pinned ? "menu" : null);
+  const pin = {
+    pinned,
+    onTogglePin: () => setPinned(!pinned),
+    onBack: shown === "menu" ? undefined : () => open("menu"),
+  };
+  const toggle = (p: Panel) => open(shown === p ? (pinned ? "menu" : null) : p);
   const width = shown === "config" ? PANEL_WIDTH.wide : PANEL_WIDTH.default;
   const close = () => open(null);
   const activeBreakdowns = breakdowns.filter((b) => b.status === "activa").length;
@@ -182,17 +211,25 @@ export function DailyOperationsScreen() {
     { id: "leyenda", label: "Leyenda", Icon: Layers },
   ];
 
-  const shownFleet = running && opsFleet ? toFleetDraft(opsFleet) : fleetDraft;
+  const shownFleet = running && opsFleet ? liveFleet ?? toFleetDraft(opsFleet) : fleetDraft;
+  const applySpeeds = async () => {
+    const chosen = parseFleetDraft(shownFleet);
+    const res = await saveOperationSpeeds(Object.fromEntries(KINDS.map((k) => [k, chosen[k].speed])) as Record<VehicleKind, number>);
+    if (res.ok) toast.success("Velocidades guardadas: rigen desde la siguiente planificación.");
+    else toast.error(res.message);
+  };
 
   const panelNode =
-    shown === "config" ? (
+    shown === "menu" ? <SectionsPanel items={[...items, ...bottom]} descriptions={DESCRIPTIONS} onPick={open} onClose={close} width={width} />
+    : shown === "config" ? (
       <OpsConfigPanel
         running={running}
         loading={!cargado}
         tab={configTab}
         onTab={setConfigTab}
         fleet={shownFleet}
-        onFleet={setFleetDraft}
+        onFleet={running ? setLiveFleet : setFleetDraft}
+        onApplySpeeds={running && opsFleet ? applySpeeds : undefined}
         fleetErrors={fleetDraftErrors(shownFleet)}
         bands={bands}
         onBands={setBands}
@@ -276,13 +313,14 @@ export function DailyOperationsScreen() {
       }
       hud={
         <>
-          {running && <OpsHud connection={connection} clock={clock} kpis={kpis} compact={!!shown || !desktop} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} />}
+          {running && <OpsHud connection={connection} clock={clock} kpis={kpis} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} stop={<StopOperationButton onStopped={setPlanOf} />} />}
           {running && <ConnectionBanner state={connection} />}
-          <DailyRunControl onConfigure={() => open("config")} />
+          <DailyRunControl onConfigure={() => open("config")} planOf={planOf} onPlanOf={setPlanOf} />
         </>
       }
       // En teléfono el panel tapa el mapa: se oculta mientras se elige el punto.
-      panel={picking && phone ? null : panelNode}
+      panel={picking && phone ? null : panelNode && <PanelPinContext.Provider value={desktop ? pin : null}>{panelNode}</PanelPinContext.Provider>}
+      panelFloating={!pinned}
       rail={<SideRail items={items} bottomItems={bottom} active={shown} onToggle={toggle} homeHref="/operaciones" />}
     />
   );

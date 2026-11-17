@@ -11,13 +11,33 @@ import { stopOperation } from "@/lib/data/actions";
 import { formatoFechaOperativa } from "@/lib/data/adapters";
 import { useOperacion } from "@/lib/data/hooks";
 
-/** Estado de la operación: en curso muestra su hora y "Detener"; si no, lleva a la configuración. */
-export function DailyRunControl({ onConfigure }: { onConfigure: () => void }) {
+/**
+ * Sin operación en curso lleva a la configuración. En curso no muestra nada: "Detener"
+ * está en la barra superior (StopOperationButton). `planOf` es la operación cuyo reporte
+ * del último plan está abierto; lo guarda la pantalla para que sobreviva al detener.
+ */
+export function DailyRunControl({ onConfigure, planOf, onPlanOf }: { onConfigure: () => void; planOf: string | null; onPlanOf: (id: string | null) => void }) {
   const { vista, cargado, running } = useOperacion();
+  if (running && vista) return planOf && <PlanDialog id={planOf} onClose={() => onPlanOf(null)} />;
+
+  return (
+    <section aria-label="Control de operación diaria" className="max-w-xl rounded-xl border border-line bg-panel/95 p-3 text-sm text-white shadow-lg">
+      {vista && <p role="status">Operación {vista.estado.toLowerCase()}.{vista.error ? ` ${vista.error}` : ""}</p>}
+      <div className={vista ? "mt-2 flex flex-wrap gap-2" : "flex flex-wrap gap-2"}>
+        <Button size="sm" disabled={!cargado} onClick={onConfigure}>Configurar operación</Button>
+        {vista && <Button size="sm" variant="outline" onClick={() => onPlanOf(vista.contextoId)}>Ver última planificación</Button>}
+      </div>
+      <p className="mt-2 text-xs text-n500">Revisa la flota y el semáforo en Configurar y pulsa “Iniciar operación”. Los paneles de pedidos, vehículos y métricas aparecen cuando la operación está en curso.</p>
+      {planOf && <PlanDialog id={planOf} onClose={() => onPlanOf(null)} />}
+    </section>
+  );
+}
+
+/** "Detener" de la barra superior, con confirmación; al detener se abre el reporte del último plan. */
+export function StopOperationButton({ onStopped }: { onStopped: (id: string) => void }) {
+  const { vista } = useOperacion();
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
-  // Operación cuyo reporte del último plan está abierto.
-  const [planOf, setPlanOf] = useState<string | null>(null);
   const toast = useToast();
 
   const stop = async () => {
@@ -28,39 +48,28 @@ export function DailyRunControl({ onConfigure }: { onConfigure: () => void }) {
     setBusy(false);
     setConfirm(false);
     if (!result.ok) toast.error(result.message);
-    // Al cerrar las operaciones se muestra el reporte de la última planificación estable.
-    else setPlanOf(id);
+    else onStopped(id);
   };
 
   return (
-    <section aria-label="Control de operación diaria" className="max-w-xl rounded-xl border border-line bg-panel/95 p-3 text-sm text-white shadow-lg">
-      {running && vista ? (
-        <>
-          <p role="status">
-            Operación diaria · {formatoFechaOperativa(vista.fechaHoraOperativa)} ({vista.zonaHoraria}) · {vista.configuracion.algoritmo}
-            {vista.calculando && " · planificando…"}
-          </p>
-          {vista.error && <p className="mt-1 text-xs text-critic">{vista.error}</p>}
-          {confirm ? (
-            <div className="mt-2 flex items-center gap-2">
-              <span>¿Detener la operación para todas las sesiones?</span>
-              <Button size="xs" variant="outline" disabled={busy} onClick={() => setConfirm(false)}>Continuar</Button>
-              <Button size="xs" variant="danger" loading={busy} onClick={stop}>Detener</Button>
+    <>
+      <Button variant="danger" size="sm" disabled={!vista} onClick={() => setConfirm(true)}>Detener</Button>
+      {confirm && vista && createPortal(
+        <Overlay onClose={() => !busy && setConfirm(false)} labelledBy="detener-op-title" role="alertdialog">
+          <div className="w-[480px] max-w-full rounded-[20px] border border-line-strong bg-panel p-6 shadow-[0_24px_64px_rgb(0_0_0/0.55)]">
+            <h2 id="detener-op-title" className="mb-2 text-lg font-bold text-white">¿Detener la operación diaria?</h2>
+            <p className="mb-5 text-sm text-n300">
+              Se detiene para todas las sesiones. Operación del {formatoFechaOperativa(vista.fechaHoraOperativa)} ({vista.zonaHoraria}) con {vista.configuracion.algoritmo}.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" disabled={busy} onClick={() => setConfirm(false)} autoFocus>Continuar</Button>
+              <Button variant="danger" loading={busy} loadingText="Deteniendo…" onClick={stop}>Detener</Button>
             </div>
-          ) : <Button className="mt-2" size="xs" variant="outline" onClick={() => setConfirm(true)}>Detener operación</Button>}
-        </>
-      ) : (
-        <>
-          {vista && <p role="status">Operación {vista.estado.toLowerCase()}.{vista.error ? ` ${vista.error}` : ""}</p>}
-          <div className={vista ? "mt-2 flex flex-wrap gap-2" : "flex flex-wrap gap-2"}>
-            <Button size="sm" disabled={!cargado} onClick={onConfigure}>Configurar operación</Button>
-            {vista && <Button size="sm" variant="outline" onClick={() => setPlanOf(vista.contextoId)}>Ver última planificación</Button>}
           </div>
-          <p className="mt-2 text-xs text-n500">Revisa la flota y el semáforo en Configurar y pulsa “Iniciar operación”. Los paneles de pedidos, vehículos y métricas aparecen cuando la operación está en curso.</p>
-        </>
+        </Overlay>,
+        document.body,
       )}
-      {planOf && <PlanDialog id={planOf} onClose={() => setPlanOf(null)} />}
-    </section>
+    </>
   );
 }
 
