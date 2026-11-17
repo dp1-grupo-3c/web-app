@@ -23,14 +23,14 @@ function Shell({ anchor, head, children, onClose, mapHeight, docked = false }: {
     <div
       role="dialog"
       aria-label="Detalle"
-      className="absolute z-[5] rounded-[14px] border border-line-strong bg-panel text-[13px] shadow-[0_16px_36px_rgb(0_0_0/0.5)]"
-      style={{ width: POPOVER_WIDTH, ...(docked ? { right: 16, top: 16 } : { left: anchor.left, ...(anchor.above ? { bottom: mapHeight - anchor.y + 48 } : { top: anchor.y + 14 }) }) }}
+      className="absolute z-[5] flex flex-col rounded-[14px] border border-line-strong bg-panel text-[13px] shadow-[0_16px_36px_rgb(0_0_0/0.5)]"
+      style={{ width: POPOVER_WIDTH, maxWidth: "calc(100% - 32px)", maxHeight: docked ? mapHeight - 32 : anchor.above ? anchor.y - 64 : mapHeight - anchor.y - 30, ...(docked ? { right: 16, top: 16 } : { left: anchor.left, ...(anchor.above ? { bottom: mapHeight - anchor.y + 48 } : { top: anchor.y + 14 }) }) }}
     >
       <div className="flex items-center gap-3 py-3 pr-2.5 pl-3.5">
         {head}
         <IconButton label="Cerrar" size="sm" onClick={onClose}><X className="size-4" /></IconButton>
       </div>
-      <div className="grid gap-2.5 px-3.5 pb-3.5 text-n50">{children}</div>
+      <div className="grid min-h-0 gap-2.5 overflow-y-auto px-3.5 pb-3.5 text-n50">{children}</div>
       {!docked && <span
         aria-hidden
         className={cn("absolute -ml-2 size-3.5 rotate-45 border-line-strong bg-panel", anchor.above ? "-bottom-2 border-r border-b" : "-top-2 border-t border-l")}

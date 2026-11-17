@@ -277,7 +277,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       }
     } else if (hovered.type === "warehouse") {
       const w = snapshot.warehouses.find((x) => x.id === hovered.id);
-      if (w && layers.almacenes && w.kind === "secundario") {
+      if (w && layers.almacenes) {
         const [px, py] = project(g, w.position);
         const a = warehouseAppearance(w, trafficLight, idle, warehouseFillBands);
         tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={a.tone} empty={a.empty} x={px} y={py} mapWidth={size.w} />;
@@ -353,7 +353,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
             const [x, y] = project(g, w.position);
             const intermediate = w.kind === "secundario";
             const stock = intermediate ? warehouseStockText(w) : "";
-            return <MapPin key={`wh-${w.id}`} x={x} y={y} scale={0.9} ring={!!emphasis.warehouses?.has(w.id)} color={a.color} Icon={a.Icon} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={intermediate ? hoverOf({ type: "warehouse", id: w.id }) : undefined} />;
+            return <MapPin key={`wh-${w.id}`} x={x} y={y} scale={0.9} ring={!!emphasis.warehouses?.has(w.id)} color={a.color} Icon={a.Icon} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={hoverOf({ type: "warehouse", id: w.id })} />;
           })}
 
           {!idle && layers.bloqueos && blockages.map((b) => {

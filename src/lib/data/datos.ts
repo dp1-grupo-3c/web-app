@@ -11,7 +11,7 @@ import { recargarParametros } from "@/lib/data/store";
 
 type Result<T = undefined> = { ok: true; data: T } | { ok: false; message: string };
 
-export type DataKind = "flota" | "bloqueos" | "mantenimiento";
+export type DataKind = "flota" | "ventas" | "bloqueos" | "mantenimiento";
 
 const msg = (e: unknown) => (e instanceof ErrorServicio ? e.message : "No se pudo contactar con el servidor.");
 
@@ -23,7 +23,7 @@ export async function cargarInventario(): Promise<Result<InventarioDatos>> {
   }
 }
 
-/** `mes` (AAAA-MM) solo aplica a bloqueos cuyo nombre de archivo no lo indica. */
+/** `mes` (AAAA-MM) solo aplica a ventas y bloqueos cuyo nombre de archivo no lo indica. */
 export async function subirArchivo(kind: DataKind, archivo: File, mes?: string): Promise<Result<ArchivoGuardado>> {
   try {
     if (kind === "flota") {
@@ -32,7 +32,38 @@ export async function subirArchivo(kind: DataKind, archivo: File, mes?: string):
       await recargarParametros();
       return { ok: true, data };
     }
-    return { ok: true, data: kind === "bloqueos" ? await api.subirBloqueos(archivo, mes) : await api.subirMantenimiento(archivo) };
+    return { ok: true, data: kind === "ventas" ? await api.subirVentas(archivo, mes) : kind === "bloqueos" ? await api.subirBloqueos(archivo, mes) : await api.subirMantenimiento(archivo) };
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+}
+
+export async function verArchivo(ruta: string): Promise<Result<string>> {
+  try {
+    return { ok: true, data: await api.leerArchivo(ruta) };
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+}
+
+/** Cambiar o borrar la flota descarta las cantidades ajustadas: se vuelven a leer. */
+const esFlota = (ruta: string) => /^flota\.(txt|csv)$/i.test(ruta);
+
+export async function reemplazarArchivo(ruta: string, archivo: File): Promise<Result<ArchivoGuardado>> {
+  try {
+    const data = await api.reemplazarArchivo(ruta, archivo);
+    if (esFlota(ruta)) await recargarParametros();
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, message: msg(e) };
+  }
+}
+
+export async function eliminarArchivo(ruta: string): Promise<Result> {
+  try {
+    await api.borrarArchivo(ruta);
+    if (esFlota(ruta)) await recargarParametros();
+    return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, message: msg(e) };
   }

@@ -126,6 +126,24 @@ export const subirFlota = (archivo: File) => api<ArchivoGuardado>("/datos/flota"
 export const subirBloqueos = (archivo: File, mes?: string) =>
   api<ArchivoGuardado>(`/datos/bloqueos${mes ? `?mes=${encodeURIComponent(mes)}` : ""}`, { metodo: "POST", archivo });
 export const subirMantenimiento = (archivo: File) => api<ArchivoGuardado>("/datos/mantenimiento", { metodo: "POST", archivo });
+export const subirVentas = (archivo: File, mes?: string) =>
+  api<ArchivoGuardado>(`/datos/ventas${mes ? `?mes=${encodeURIComponent(mes)}` : ""}`, { metodo: "POST", archivo });
+/** Un archivo del inventario, por la ruta relativa que lista GET /datos. */
+const archivoDatos = (ruta: string) => `/datos/archivo?ruta=${encodeURIComponent(ruta)}`;
+export const reemplazarArchivo = (ruta: string, archivo: File) => api<ArchivoGuardado>(archivoDatos(ruta), { metodo: "PUT", archivo });
+export const borrarArchivo = (ruta: string) => api<null>(archivoDatos(ruta), { metodo: "DELETE" });
+/** El contenido llega como texto plano, no como JSON. */
+export async function leerArchivo(ruta: string): Promise<string> {
+  let r: Response;
+  try {
+    r = await fetch(`/api${archivoDatos(ruta)}`, { signal: AbortSignal.timeout(120_000) });
+  } catch {
+    throw new ErrorServicio(0, "No se pudo contactar con el servidor.");
+  }
+  if (r.ok) return r.text();
+  const datos = await r.json().catch(() => null);
+  throw new ErrorServicio(datos?.codigo ?? r.status, datos?.mensaje ?? "Error del servidor", datos?.codigoError);
+}
 /** Un bloqueo que cruza de mes se guarda en un archivo por cada mes. */
 export const registrarBloqueo = (s: SolicitudBloqueo) =>
   api<ArchivoGuardado[]>("/datos/bloqueos/manual", { metodo: "POST", cuerpo: s });
