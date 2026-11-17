@@ -287,35 +287,37 @@ export function DailyOperationsScreen() {
   return (
     <Workspace
       map={
-        <GridMap
-          snapshot={snapshot}
-          filter={mapFilter}
-          orders={orders}
-          trafficLight={trafficLight}
-          vehicleBands={applied.vehicleOccupancy}
-          warehouseFillBands={applied.warehouseFill}
-          neutralWarehouses={!running}
-          emphasis={emphasis}
-          layers={layers}
-          selected={selected}
-          onSelect={setSelected}
-          highlight={shown === "clientes" ? highlightFor(orders, null, clientDraft) : highlightFor(orders, orderId, shown === "pedidos" ? draft : undefined)}
-          pickMode={picking}
-          onPick={(c) => {
-            const coords = { x: String(c.x), y: String(c.y) };
-            if (shown === "clientes") setClientDraft((d) => ({ ...d, ...coords }));
-            else setDraft((d) => ({ ...d, ...coords }));
-            setPicking(false);
-          }}
-          onCancelPick={() => setPicking(false)}
-          emptyMessage={running ? WAITING_MESSAGE : undefined}
-        />
+        <>
+          <GridMap
+            snapshot={snapshot}
+            filter={mapFilter}
+            orders={orders}
+            trafficLight={trafficLight}
+            vehicleBands={applied.vehicleOccupancy}
+            warehouseFillBands={applied.warehouseFill}
+            neutralWarehouses={!running}
+            emphasis={emphasis}
+            layers={layers}
+            selected={selected}
+            onSelect={setSelected}
+            highlight={shown === "clientes" ? highlightFor(orders, null, clientDraft) : highlightFor(orders, orderId, shown === "pedidos" ? draft : undefined)}
+            pickMode={picking}
+            onPick={(c) => {
+              const coords = { x: String(c.x), y: String(c.y) };
+              if (shown === "clientes") setClientDraft((d) => ({ ...d, ...coords }));
+              else setDraft((d) => ({ ...d, ...coords }));
+              setPicking(false);
+            }}
+            onCancelPick={() => setPicking(false)}
+            emptyMessage={running ? WAITING_MESSAGE : undefined}
+          />
+          <DailyRunControl onConfigure={() => open("config")} planOf={planOf} onPlanOf={setPlanOf} bands={applied} hidden={!!shown && shown !== "menu"} />
+        </>
       }
       hud={
         <>
           {running && <OpsHud connection={connection} clock={clock} kpis={kpis} onOpenOrders={() => open("pedidos")} onOpenBreakdowns={() => open("averias")} stop={<StopOperationButton onStopped={setPlanOf} />} />}
           {running && <ConnectionBanner state={connection} />}
-          <DailyRunControl onConfigure={() => open("config")} planOf={planOf} onPlanOf={setPlanOf} />
         </>
       }
       // En teléfono el panel tapa el mapa: se oculta mientras se elige el punto.

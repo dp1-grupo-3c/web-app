@@ -214,7 +214,7 @@ export function filaPedidoToOrder(f: FilaPedido, vehicles: Vehicle[]): Order {
 
 // ---- Métricas --------------------------------------------------------------
 
-const distanceKmFromBackend = (k: Record<TipoUnidad, number>): Record<VehicleKind, number> => ({
+export const distanceKmFromBackend = (k: Record<TipoUnidad, number>): Record<VehicleKind, number> => ({
   auto: k.AUTO ?? 0,
   moto: k.MOTO ?? 0,
   bicicleta: k.BICICLETA ?? 0,
