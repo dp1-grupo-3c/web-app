@@ -8,6 +8,7 @@ import { NumberInput } from "@/components/ui/form";
 import { Pagination } from "@/components/ui/Pagination";
 import { TONE_ICON, ToneBadge } from "@/components/ui/ToneBadge";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
+import { WorldEditor } from "./config/WorldEditor";
 import { RECENT_DELIVERIES_WINDOW_MIN, UPCOMING_DEPARTURES_WINDOW_MIN } from "@/config/simulacion";
 import { cn } from "@/lib/cn";
 import { TONE_COLOR, TONE_LABEL } from "@/lib/constants";
@@ -94,6 +95,7 @@ export function WarehousesPanel({ scope, settings, selectedId, onSelect, onClose
           </p>
         </>
       )}
+      {!locked && <WorldEditor locked={false} part="almacenes" />}
       {selected && (
         <WarehouseDepartures
           key={`salidas-${selected.id}`}

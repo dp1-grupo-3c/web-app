@@ -1,26 +1,26 @@
 "use client";
 
-import { Calendar, CircleAlert, CircleHelp, Play, Wrench } from "lucide-react";
+import { Calendar, CircleAlert, CircleHelp, Play, RotateCcw, Wrench } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/choice";
 import { Alert } from "@/components/ui/feedback";
 import { DateInput, Field, TextInput, TimeInput } from "@/components/ui/form";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
-import { DATA_DATE_RANGE, DEFAULT_START_TIME } from "@/config/simulacion";
+import { DATA_DATE_RANGE, DEFAULT_START_TIME, FLEET_DEFAULTS } from "@/config/simulacion";
 import { SIMULATION_DAYS_5D, SIMULATION_TITLE } from "@/lib/constants";
 import { addDays, formatDate, formatWeekdayDate, parseISODate } from "@/lib/format";
-import { formatTimeOfDay, parseTimeOfDay, validateSimSettings } from "@/lib/sim-settings";
+import { defaultSimSettings, formatTimeOfDay, parseTimeOfDay, validateSimSettings } from "@/lib/sim-settings";
 import { INCOMPLETE_DATE, simulationStart } from "@/lib/validation";
 import type { SimSettings, SimulationMode } from "@/lib/types";
 import { BreakdownDurationsEditor } from "./config/BreakdownDurationsEditor";
 import { OccupancyBandsEditor } from "./config/OccupancyBandsEditor";
 import { WorldEditor } from "./config/WorldEditor";
-import { FleetEditor, hasFleetErrors, type FleetDraft, type FleetErrors } from "./FleetPanel";
+import { FleetEditor, hasFleetErrors, toFleetDraft, type FleetDraft, type FleetErrors } from "./FleetPanel";
 
 export type ConfigTab = "general" | "flota" | "semaforo" | "averias" | "mapa";
 const TABS: { value: ConfigTab; label: string }[] = [
-  { value: "general", label: "General" },
+  { value: "general", label: "Periodo" },
   { value: "flota", label: "Flota" },
   { value: "semaforo", label: "Semáforo" },
   { value: "averias", label: "Averías" },
@@ -40,6 +40,8 @@ type Props = {
   onSettings: (s: SimSettings) => void;
   fleet: FleetDraft;
   onFleet: (d: FleetDraft) => void;
+  /** Hay una corrida en curso: envía las velocidades, que rigen desde la siguiente planificación. */
+  onApplySpeeds?: () => void;
   fleetErrors: FleetErrors;
   starting: boolean;
   onStart: () => void;
@@ -102,7 +104,7 @@ export function SimConfigPanel(p: Props) {
         </Button>
       )}
     >
-      {readOnly && <Alert tone="info">La simulación está en curso, así que la configuración es de solo lectura: muestra los valores con los que comenzó.</Alert>}
+      {readOnly && <Alert tone="info">La simulación está en curso, así que la configuración es de solo lectura: muestra los valores con los que comenzó.{p.onApplySpeeds && " La velocidad de la flota sí se puede cambiar."}</Alert>}
       <SegmentedControl
         label="Secciones de la configuración"
         value={tab}
@@ -150,9 +152,9 @@ export function SimConfigPanel(p: Props) {
         </PanelSection>
       )}
 
-      {tab === "mapa" && <WorldEditor locked={p.worldLocked} />}
+      {tab === "mapa" && <WorldEditor locked={p.worldLocked} part="mapa" />}
 
-      {tab === "flota" && <FleetEditor draft={p.fleet} onChange={p.onFleet} errors={p.fleetErrors} readOnly={readOnly} />}
+      {tab === "flota" && <FleetEditor draft={p.fleet} onChange={p.onFleet} errors={p.fleetErrors} readOnly={readOnly} onApplySpeeds={p.onApplySpeeds} />}
 
       {tab === "semaforo" && (
         <OccupancyBandsEditor
@@ -167,6 +169,15 @@ export function SimConfigPanel(p: Props) {
           <p className="text-xs leading-snug text-n500">Tiempo que un vehículo queda fuera de servicio según el tipo de avería. Se muestran los valores vigentes del servidor; al comenzar se guardan allí y rigen para las averías siguientes.</p>
           <BreakdownDurationsEditor value={settings.breakdownDurations} onChange={(d) => set("breakdownDurations", d)} readOnly={readOnly} />
         </PanelSection>
+      )}
+      {!readOnly && tab !== "mapa" && tab !== "averias" && (
+        <Button variant="outline" size="xs" className="justify-self-start" icon={<RotateCcw className="size-4" aria-hidden />} onClick={() => {
+          const d = defaultSimSettings();
+          if (tab === "flota") p.onFleet(toFleetDraft(FLEET_DEFAULTS));
+          else onSettings({ ...settings, ...(tab === "general" ? { startTime: d.startTime } : { vehicleOccupancy: d.vehicleOccupancy, warehouseFill: d.warehouseFill }) });
+        }}>
+          Restaurar valores por defecto
+        </Button>
       )}
     </SidePanel>
   );

@@ -116,6 +116,7 @@ export const cambiarSemaforo = (ambar: number, verde: number) =>
 export const cambiarAverias = (s: SolicitudAtributosAveria) =>
   api<VistaParametros>("/parametros/averias", { metodo: "PUT", cuerpo: s });
 export const obtenerMundo = () => api<VistaMundo>("/parametros/mundo");
+export const obtenerMundoPorDefecto = () => api<VistaMundo>("/parametros/mundo/defecto");
 export const cambiarMundo = (s: SolicitudMundo) => api<VistaMundo>("/parametros/mundo", { metodo: "PUT", cuerpo: s });
 
 // ---- Datos -----------------------------------------------------------------------

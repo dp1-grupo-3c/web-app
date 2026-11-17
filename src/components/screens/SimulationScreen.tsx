@@ -8,7 +8,7 @@ import { PendingChangeChip } from "@/components/map/PendingChangeChip";
 import { ALL_LAYERS } from "@/components/map/layers";
 import { BreakdownsPanel } from "@/components/panels/BreakdownsPanel";
 import { DataPanel } from "@/components/panels/DataPanel";
-import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft } from "@/components/panels/FleetPanel";
+import { fleetDraftErrors, parseFleetDraft, sameFleet, toFleetDraft, type FleetDraft } from "@/components/panels/FleetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { LegendPanel } from "@/components/panels/LegendPanel";
 import { MetricsPanel } from "@/components/panels/MetricsPanel";
@@ -38,7 +38,7 @@ import { TIPO_POR_MODO } from "@/lib/data/adapters";
 import { useActiveRun, useBreakdowns, useBufferVariant, useFleetSettings, useMapSnapshot, useMetrics, useOrdersWithDestinations, usePlayback, useRunSettings, useSavedTrafficLight, useServerBreakdowns, useSimulationFeed, useVehiclePlates } from "@/lib/data/hooks";
 import { toISODate } from "@/lib/format";
 import { defaultSimSettings } from "@/lib/sim-settings";
-import type { DataScope, EntityRef, MapFilter, SimulationMode, SimulationOutcome } from "@/lib/types";
+import type { DataScope, EntityRef, FleetSettings, MapFilter, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
 
 const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
@@ -101,6 +101,8 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   // Borrador de la flota: cada simulación nueva parte de la flota por defecto
   // (config/simulacion.ts), no de lo que dejó la corrida anterior en el servidor.
   const [fleetDraft, setFleetDraft] = useState(() => ({ draft: toFleetDraft(FLEET_DEFAULTS) }));
+  // Velocidades editadas durante la corrida: se envían al servidor y rigen desde la siguiente planificación.
+  const [liveFleet, setLiveFleet] = useState<FleetDraft | null>(null);
   // Las averías arrancan con lo vigente en el servidor; un cambio allí reemplaza el borrador.
   const serverBreakdowns = useServerBreakdowns();
   const breakdownsKey = JSON.stringify(serverBreakdowns);
@@ -130,7 +132,14 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   // Durante la corrida se muestran los valores con los que el usuario la comenzó.
   const runSettings = useRunSettings(own?.id);
   const shownSettings = own ? runSettings?.settings ?? fallbackSettings : settings;
-  const shownFleet = own ? toFleetDraft(runSettings?.fleet ?? fleet.value) : fleetDraft.draft;
+  const shownFleet = own ? liveFleet ?? toFleetDraft(runSettings?.fleet ?? fleet.value) : fleetDraft.draft;
+  const applySpeeds = async () => {
+    const next = parseFleetDraft(shownFleet);
+    const kinds = Object.keys(fleet.value) as (keyof FleetSettings)[];
+    const res = await saveFleet(Object.fromEntries(kinds.map((k) => [k, { ...fleet.value[k], speed: next[k].speed }])) as FleetSettings, fleet.value);
+    if (res.ok) toast.success("Velocidades guardadas: rigen desde la siguiente planificación.");
+    else toast.error(res.message);
+  };
 
   const width = panel === "config" ? PANEL_WIDTH.wide : PANEL_WIDTH.default;
   const close = () => setPanel(null);
@@ -168,6 +177,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   const newSimulation = () => {
     forgetSimulation();
     setFleetDraft({ draft: toFleetDraft(FLEET_DEFAULTS) });
+    setLiveFleet(null);
     setCancelledId(null);
     setDismissedId(null);
     setPanel("config");
@@ -238,7 +248,8 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
         settings={shownSettings}
         onSettings={setSettings}
         fleet={shownFleet}
-        onFleet={(draft) => setFleetDraft((f) => ({ ...f, draft }))}
+        onFleet={(draft) => (own ? setLiveFleet(draft) : setFleetDraft((f) => ({ ...f, draft })))}
+        onApplySpeeds={effectivePhase === "running" ? applySpeeds : undefined}
         fleetErrors={fleetDraftErrors(shownFleet)}
         starting={starting}
         onStart={start}

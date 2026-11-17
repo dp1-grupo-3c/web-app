@@ -2,7 +2,7 @@
 
 import { Gauge, Minus, Plus } from "lucide-react";
 import { VEHICLE_META, VEHICLE_ORDER } from "@/components/domain/vehicle";
-import { IconButton } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Field, TextInput } from "@/components/ui/form";
 import { PanelSection } from "@/components/workspace/SidePanel";
 import { FLEET_LIMITS } from "@/config/simulacion";
@@ -57,26 +57,32 @@ function Stepper({ id, value, onChange, step, min, max, minExclusive, decimals, 
  * simulación y, durante la corrida, se muestra en solo lectura con los valores
  * que eligió el usuario.
  */
-export function FleetEditor({ draft, onChange, errors, readOnly }: { draft: FleetDraft; onChange: (d: FleetDraft) => void; errors: FleetErrors; readOnly?: boolean }) {
+export function FleetEditor({ draft, onChange, errors, readOnly, onApplySpeeds }: { draft: FleetDraft; onChange: (d: FleetDraft) => void; errors: FleetErrors; readOnly?: boolean; onApplySpeeds?: () => void }) {
+  const live = readOnly && !!onApplySpeeds;
   const change = (k: VehicleKind, key: Key, v: string) => onChange({ ...draft, [k]: { ...draft[k], [key]: v } });
   return (
     <>
       {VEHICLE_ORDER.map((k) => {
         const { plural, Icon, color } = VEHICLE_META[k];
-        const err = readOnly ? { quantity: null, speed: null } : errors[k];
+        const err = readOnly ? { quantity: null, speed: live ? errors[k].speed : null } : errors[k];
         return (
           <PanelSection key={k} title={plural} icon={<Icon className="size-[18px]" style={{ color }} aria-hidden />}>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Cantidad" htmlFor={`f-${k}-q`} required={!readOnly} error={err.quantity}>
                 <Stepper id={`f-${k}-q`} unit="cantidad" disabled={readOnly} value={draft[k].quantity} onChange={(v) => change(k, "quantity", v)} step={FLEET_LIMITS.quantity.step} min={FLEET_LIMITS.quantity.min} max={FLEET_LIMITS.quantity.max} decimals={0} error={!!err.quantity} />
               </Field>
-              <Field label="Velocidad (km/h)" htmlFor={`f-${k}-s`} required={!readOnly} error={err.speed}>
-                <Stepper id={`f-${k}-s`} unit="velocidad" disabled={readOnly} value={draft[k].speed} onChange={(v) => change(k, "speed", v)} step={FLEET_LIMITS.speed.step} min={FLEET_LIMITS.speed.min} minExclusive={FLEET_LIMITS.speed.minExclusive} max={FLEET_LIMITS.speed.max} decimals={FLEET_LIMITS.speed.decimals} error={!!err.speed} />
+              <Field label="Velocidad (km/h)" htmlFor={`f-${k}-s`} required={!readOnly || live} error={err.speed}>
+                <Stepper id={`f-${k}-s`} unit="velocidad" disabled={readOnly && !live} value={draft[k].speed} onChange={(v) => change(k, "speed", v)} step={FLEET_LIMITS.speed.step} min={FLEET_LIMITS.speed.min} minExclusive={FLEET_LIMITS.speed.minExclusive} max={FLEET_LIMITS.speed.max} decimals={FLEET_LIMITS.speed.decimals} error={!!err.speed} />
               </Field>
             </div>
           </PanelSection>
         );
       })}
+      {live && (
+        <Button variant="outline" size="sm" icon={<Gauge className="size-4" aria-hidden />} onClick={onApplySpeeds} disabled={VEHICLE_ORDER.some((k) => errors[k].speed)}>
+          Aplicar velocidades (rigen desde la siguiente planificación)
+        </Button>
+      )}
       {!readOnly && (
         <p className="flex items-start gap-1.5 text-xs leading-snug text-n600">
           <Gauge className="mt-px size-3.5 shrink-0" aria-hidden />

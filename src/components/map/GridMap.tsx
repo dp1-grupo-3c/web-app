@@ -10,6 +10,7 @@ import { VEHICLE_META } from "@/components/domain/vehicle";
 import { GRID } from "@/lib/constants";
 import { useMundo } from "@/lib/data/hooks";
 import { formatCoord } from "@/lib/format";
+import { clearMapPick, setMapPick, useMapPick } from "@/lib/map-pick";
 import type { Coord, EntityRef, MapFilter, MapSnapshot, Order, PercentBands, TrafficLight, Vehicle, VehicleKind } from "@/lib/types";
 import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from "./EntityPopover";
 import { computeGeometry, nearestCoord, polylineMidpoint, project, toPath, zoomView, type View } from "./geometry";
@@ -75,7 +76,12 @@ type GridMapProps = {
 
 const NO_EMPHASIS: NonNullable<GridMapProps["emphasis"]> = {};
 
-export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode, onPick, onCancelPick, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands, filter }: GridMapProps) {
+export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode: pickProp, onPick: onPickProp, onCancelPick: onCancelProp, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands, filter }: GridMapProps) {
+  // Un panel (p. ej. Almacenes) puede pedir una intersección sin pasar por la pantalla.
+  const request = useMapPick();
+  const pickMode = pickProp || !!request;
+  const onPick = request ? (c: Coord) => { request.onPick(c); setMapPick(null); } : onPickProp;
+  const onCancelPick = request ? clearMapPick : onCancelProp;
   // Filtro por tipo de vehículo (Leyenda) y por color (panel Vehículos): los ocultos no se dibujan, ni sus rutas ni sus grupos.
   const shownVehicles = filter?.vehicles ?? null;
   const snapshot = useMemo(
@@ -443,7 +449,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
 
       {pickMode && (
         <div className="absolute top-4 left-1/2 z-[6] flex w-max max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-3 rounded-xl bg-craft py-2 pr-2 pl-4 font-semibold text-night md:whitespace-nowrap shadow-[0_8px_24px_rgb(0_0_0/0.35)]">
-          <Crosshair className="size-5" aria-hidden /> Haz clic en una intersección para fijar el destino
+          <Crosshair className="size-5" aria-hidden /> {request?.label ?? "Haz clic en una intersección para fijar el destino"}
           <Button size="xs" className="bg-night/15 text-night hover:bg-night/25" onClick={onCancelPick}>Cancelar</Button>
         </div>
       )}

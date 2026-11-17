@@ -93,7 +93,7 @@ export function OpsConfigPanel(p: Props) {
         </PanelSection>
       )}
 
-      {tab === "mapa" && <WorldEditor locked={readOnly} />}
+      {tab === "mapa" && <WorldEditor locked={readOnly} part="mapa" />}
 
       {tab === "flota" && <FleetEditor draft={p.fleet} onChange={p.onFleet} errors={p.fleetErrors} readOnly={readOnly} />}
 

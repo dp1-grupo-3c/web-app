@@ -50,7 +50,7 @@ export function BreakdownDurationsEditor({ value, onChange, readOnly }: { value:
       })}
       {!readOnly && (
         <Button className="justify-self-start" variant="outline" size="xs" icon={<RotateCcw className="size-4" aria-hidden />} disabled={isDefault} onClick={() => onChange(defaultBreakdownDurations())}>
-          Restablecer valores por defecto
+          Restaurar valores por defecto
         </Button>
       )}
     </div>
