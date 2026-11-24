@@ -361,7 +361,11 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
     .filter((o) => !q || o.id.toLowerCase().includes(q) || `${o.destination.x},${o.destination.y}`.startsWith(q))
     // El fijado va en su propia tarjeta, arriba de la lista, en cualquier filtro.
     .filter((o) => o.id !== pinned?.order.id);
-  const rows = upcomingOn ? [...filtered].sort((a, b) => a.minutesToDelivery! - b.minutesToDelivery!) : filtered;
+  // Activos: primero los que vencen antes. Próximas entregas: por hora de entrega.
+  // Entregados: se conserva el orden del servidor (los más recientes primero).
+  const rows = upcomingOn ? [...filtered].sort((a, b) => a.minutesToDelivery! - b.minutesToDelivery!)
+    : deliveredOn ? filtered
+    : [...filtered].sort((a, b) => a.minutesLeft - b.minutesLeft || a.id.localeCompare(b.id, undefined, { numeric: true }));
   const pageCount = Math.max(1, Math.ceil(rows.length / perPage));
   // Al elegir otro vehículo en el mapa, la lista salta a la página de su primer pedido.
   const [followed, setFollowed] = useState<string | null>(null);
