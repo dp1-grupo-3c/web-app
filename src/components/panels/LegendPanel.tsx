@@ -1,8 +1,8 @@
-import { CircleX, Flag, Hourglass, House, Package, PackageCheck, Utensils, Wrench, type LucideIcon } from "lucide-react";
+import { CircleX, Flag, Hourglass, Package, PackageCheck, Utensils, Wrench, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { VEHICLE_META, VEHICLE_ORDER } from "@/components/domain/vehicle";
-import { PinGlyph } from "@/components/map/MapPin";
-import { PINK, VEHICLE_EMPTY_COLOR, type MapLayer, type MapLayers } from "@/components/map/layers";
+import { PinGlyph, WarehouseGlyph } from "@/components/map/MapPin";
+import { PINK, VEHICLE_EMPTY_COLOR, WAREHOUSE_LEGEND, type MapLayer, type MapLayers } from "@/components/map/layers";
 import { Switch } from "@/components/ui/choice";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
 import { cn } from "@/lib/cn";
@@ -37,13 +37,14 @@ export function LegendPanel({ layers, onToggle, onClose, width }: { layers: MapL
     <SidePanel title="Leyenda" subtitle="Qué significa cada elemento y qué capas ver." onClose={onClose} width={width}>
       <PanelSection title="Almacenes" action={toggle("almacenes", "almacenes")}>
         <ul>
-          <Item glyph={pin(PINK, House)}>Almacén principal</Item>
-          <Item glyph={pin(PINK, Package)}>Almacén secundario (sin datos aún)</Item>
-          <Item glyph={pin("var(--color-success)", Package)}>Verde · stock suficiente</Item>
-          <Item glyph={pin("var(--color-warning)", Package)}>Ámbar · conviene reabastecer</Item>
-          <Item glyph={pin("var(--color-critic)", Package)}>Rojo · nivel crítico</Item>
-          <Item glyph={pin(VEHICLE_EMPTY_COLOR, Package)}>Gris · vacío, sin stock</Item>
+          <Item glyph={<WarehouseGlyph {...WAREHOUSE_LEGEND.principal} />}>Almacén principal</Item>
+          <Item glyph={<WarehouseGlyph {...WAREHOUSE_LEGEND.sinDatos} />}>Almacén secundario (sin datos aún)</Item>
+          <Item glyph={<WarehouseGlyph {...WAREHOUSE_LEGEND.tone("var(--color-success)")} />}>Verde · stock suficiente</Item>
+          <Item glyph={<WarehouseGlyph {...WAREHOUSE_LEGEND.tone("var(--color-warning)")} />}>Ámbar · conviene reabastecer</Item>
+          <Item glyph={<WarehouseGlyph {...WAREHOUSE_LEGEND.tone("var(--color-critic)")} />}>Rojo · nivel crítico</Item>
+          <Item glyph={<WarehouseGlyph {...WAREHOUSE_LEGEND.vacio} />}>Gris discontinuo · vacío, sin stock</Item>
         </ul>
+        <p className="text-xs text-n600">Los almacenes son cuadrados; vehículos y pedidos usan la gota. En los secundarios, el color del borde indica el stock.</p>
       </PanelSection>
       <PanelSection
         title="Flota"
@@ -86,7 +87,7 @@ export function LegendPanel({ layers, onToggle, onClose, width }: { layers: MapL
         <p className="text-xs text-n600">La ruta toma el color del tipo de vehículo que la recorre: <span style={{ color: VEHICLE_META.auto.color }}>auto</span>, <span style={{ color: VEHICLE_META.moto.color }}>moto</span> o <span style={{ color: VEHICLE_META.bicicleta.color }}>bicicleta</span>.</p>
         <p className="text-xs text-n600">Selecciona un vehículo para ver su ruta parpadear y los destinos de sus pedidos.</p>
         <ul>
-          <Item glyph={pin(PINK, Package)}>Pedido asignado; la bandera señala su destino de entrega</Item>
+          <Item glyph={<PinGlyph color={PINK} Icon={Package} badgeText="1" />}>Parada de entrega, numerada en el orden de la ruta; pasa el cursor para ver sus pedidos y pulsa para abrirlos</Item>
           <Item glyph={pin("var(--color-warning)", Flag)}>Destino final del itinerario seleccionado</Item>
         </ul>
       </PanelSection>

@@ -140,7 +140,7 @@ const WarehouseItem = memo(function WarehouseItem({ row: w, toDepart, departHour
       )}
     >
       <div className="flex items-center gap-2">
-        {central ? <House className="size-4 shrink-0 text-pink" aria-hidden /> : <Package className="size-4 shrink-0 text-n300" aria-hidden />}
+        {central ? <House className="size-4 shrink-0 text-pink" aria-hidden /> : <WarehouseIcon className="size-4 shrink-0 text-n300" aria-hidden />}
         <b className="truncate text-white">{w.name}</b>
         <span className="truncate text-xs text-n500">{central ? "Central" : "Intermedio"} · {formatCoord(w.position)}</span>
         {!central && <span className="ml-auto flex shrink-0 items-center gap-1.5"><b className="whitespace-nowrap text-white tabular-nums">{known ? `${Math.round(w.occupancy)} %` : "—"}</b><ToneBadge tone={w.tone} empty={w.empty} /></span>}

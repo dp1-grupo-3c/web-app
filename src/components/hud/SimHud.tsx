@@ -26,7 +26,7 @@ export function SimHud({ mode, start, clock, ended, lagSeconds = 0, onCancel }: 
   const now = clock ? new Date(clock.simTime) : start.includes("T") ? new Date(start) : parseISODate(start);
   const day = Math.floor(elapsed / 1440) + 1;
   return (
-    <HudBar dimmed={ended}>
+    <HudBar dimmed={ended} collapsible>
       <HudSection>
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-n500">{SIMULATION_TITLE[mode]}</span>

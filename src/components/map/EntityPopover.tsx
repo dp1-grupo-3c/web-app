@@ -1,4 +1,4 @@
-import { CircleX, House, Package, PackageCheck, Utensils, X } from "lucide-react";
+import { CircleX, House, PackageCheck, Utensils, Warehouse as WarehouseIcon, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge, Meter, Tile, Alert } from "@/components/ui/feedback";
 import { BreakdownChip } from "@/components/ui/BreakdownChip";
@@ -186,7 +186,7 @@ export function WarehousePopover({ warehouse: w, trafficLight, fillBands, neutra
       mapHeight={mapHeight}
       head={
         <>
-          <Tile color={color}>{principal ? <House className="size-5" aria-hidden /> : <Package className="size-5" aria-hidden />}</Tile>
+          <Tile color={color}>{principal ? <House className="size-5" aria-hidden /> : <WarehouseIcon className="size-5" aria-hidden />}</Tile>
           <Title title={w.name} subtitle={principal ? "Base de la flota" : "Almacén secundario"} />
           {(empty || tone) && <ToneBadge tone={tone} empty={empty} />}
         </>

@@ -1,4 +1,5 @@
-import { CircleX, House, Package, PackageCheck, Utensils, Wrench } from "lucide-react";
+import { CircleX, House, PackageCheck, Utensils, Warehouse as WarehouseIcon, Wrench } from "lucide-react";
+import type { WarehouseLook } from "./MapPin";
 import { VEHICLE_META } from "@/components/domain/vehicle";
 import { BREAKDOWN_COLOR, TONE_COLOR } from "@/lib/constants";
 import { percentTone, vehicleTone, warehouseOccupancy } from "@/lib/occupancy";
@@ -30,12 +31,30 @@ export const VEHICLE_STATUS_LABEL: Record<VehicleStatus, string> = {
  */
 export function warehouseAppearance(w: Warehouse, t: TrafficLight, neutral: boolean, fillBands?: PercentBands) {
   if (w.kind === "principal") return { color: PINK, Icon: House, tone: null, empty: false };
-  if (neutral || w.stock == null) return { color: PINK, Icon: Package, tone: null, empty: false };
+  // Sin datos aún: borde neutro claro (el rosado queda para el central).
+  if (neutral || w.stock == null) return { color: WAREHOUSE_NO_DATA_COLOR, Icon: WarehouseIcon, tone: null, empty: false };
   // Sin stock va en gris, igual que un vehículo vacío.
-  if (w.stock <= 0) return { color: VEHICLE_EMPTY_COLOR, Icon: Package, tone: null, empty: true };
+  if (w.stock <= 0) return { color: VEHICLE_EMPTY_COLOR, Icon: WarehouseIcon, tone: null, empty: true };
   const tone = fillBands ? percentTone(warehouseOccupancy(w), fillBands, "highIsGreen") : warehouseTone(w.stock, t);
-  return { color: tone ? TONE_COLOR[tone] : PINK, Icon: Package, tone, empty: false };
+  return { color: tone ? TONE_COLOR[tone] : WAREHOUSE_NO_DATA_COLOR, Icon: WarehouseIcon, tone, empty: false };
 }
+
+export const WAREHOUSE_NO_DATA_COLOR = "var(--color-n100)";
+const WAREHOUSE_BG = "#232b35";
+
+/** Cómo se dibuja el cuadrado: el central relleno; los intermedios con el semáforo en el borde. */
+export function warehouseLook(w: Pick<Warehouse, "kind">, a: { color: string; Icon: WarehouseLook["Icon"]; empty: boolean }): WarehouseLook {
+  if (w.kind === "principal") return { fill: PINK, stroke: PINK, glyph: "#161d25", Icon: a.Icon };
+  return { fill: WAREHOUSE_BG, stroke: a.color, glyph: a.color, Icon: a.Icon, dashed: a.empty };
+}
+
+/** Las mismas variantes, para la leyenda. */
+export const WAREHOUSE_LEGEND = {
+  principal: warehouseLook({ kind: "principal" }, { color: PINK, Icon: House, empty: false }),
+  sinDatos: warehouseLook({ kind: "secundario" }, { color: WAREHOUSE_NO_DATA_COLOR, Icon: WarehouseIcon, empty: false }),
+  tone: (color: string) => warehouseLook({ kind: "secundario" }, { color, Icon: WarehouseIcon, empty: false }),
+  vacio: warehouseLook({ kind: "secundario" }, { color: VEHICLE_EMPTY_COLOR, Icon: WarehouseIcon, empty: true }),
+};
 
 /**
  * El color es el semáforo de ocupación y el ícono distingue el tipo. Como el

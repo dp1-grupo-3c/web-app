@@ -40,6 +40,7 @@ import { toISODate } from "@/lib/format";
 import { defaultSimSettings } from "@/lib/sim-settings";
 import type { DataScope, EntityRef, FleetSettings, MapFilter, SimulationMode, SimulationOutcome } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
+import { usePinnedOrder } from "./usePinnedOrder";
 
 const PANELS = ["menu", "config", "flota", "vehiculos", "almacenes", "metricas", "pedidos", "averias", "datos", "ayuda", "leyenda"] as const;
 type Panel = (typeof PANELS)[number];
@@ -218,6 +219,8 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
   // Vehículo fijado en el panel de vehículos; se descarta al cambiar de corrida.
   const [vehiclePin, setVehiclePin] = useState<{ run: string | null; id: string } | null>(null);
   const pinnedVehicle = vehiclePin && vehiclePin.run === (own?.id ?? null) ? vehiclePin.id : null;
+  // Pedido fijado en el panel de pedidos: se sigue en el mapa aunque el panel esté cerrado.
+  const orderPin = usePinnedOrder(own?.id ?? null, orders, snapshot.vehicles);
   const orderCarriers = useMemo(() => {
     if (shown !== "pedidos" || !orderId) return null;
     return new Set(snapshot.vehicles.filter((v) => v.orders.some((o) => o.orderId === orderId)).map((v) => v.id));
@@ -265,7 +268,7 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
     )
     : shown === "metricas" ? <MetricsPanel metrics={metrics} simulation onClose={close} width={width} occupancy={<OccupancyMetrics scope={scope} settings={shownSettings} />} />
     : shown === "pedidos" ? (
-      <SimOrdersPanel scope={scope} orders={orders} selectedId={orderId} onSelect={setOrderId} highlight={ordersHighlight} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
+      <SimOrdersPanel scope={scope} orders={orders} selectedId={orderId} onSelect={setOrderId} highlight={ordersHighlight} pinned={orderPin.pinned} onPinChange={orderPin.setPinned} draft={EMPTY_DRAFT} onDraftChange={noop} picking={false} onTogglePick={noop} onClose={close} width={width} />
     )
     : shown === "averias" ? <BreakdownsPanel plates={plates} recent={breakdowns} onClose={close} width={width} />
     : shown === "datos" ? <DataPanel onClose={close} width={width} locked={!idle || !!other || syncing} />
@@ -291,6 +294,8 @@ export function SimulationScreen({ mode }: { mode: SimulationMode }) {
             selected={selected}
             onSelect={setSelected}
             highlight={highlightFor(orders, orderId)}
+            onOpenOrder={(id) => { setOrderId(id); setPanel("pedidos"); }}
+            focusOrder={orderPin.pinned && { id: orderPin.pinned.order.id, destination: orderPin.pinned.order.destination, delivered: orderPin.pinned.delivered }}
             emptyMessage={idle && !syncing ? undefined : WAITING_MESSAGE}
             status={!idle && (
               <>

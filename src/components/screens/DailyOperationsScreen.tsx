@@ -48,6 +48,7 @@ import { kindForDocument } from "@/lib/documento";
 import { defaultSimSettings } from "@/lib/sim-settings";
 import type { Client, DataScope, EntityRef, FleetSettings, MapFilter, VehicleKind } from "@/lib/types";
 import { WAITING_MESSAGE, highlightFor } from "./shared";
+import { usePinnedOrder } from "./usePinnedOrder";
 import { DailyRunControl, StopOperationButton } from "./DailyRunControl";
 
 // "semaforo" se mantiene para enlaces antiguos: abre la pestaña Semáforo de Configurar.
@@ -78,7 +79,7 @@ export function DailyOperationsScreen() {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const pinned = pinnedPreference && desktop;
   const phone = !useMediaQuery(TABLET_QUERY);
-  const { cargado, running } = useOperacion();
+  const { vista, cargado, running } = useOperacion();
   const connection = useOperacionConnection();
   const snapshot = useOperacionMapSnapshot();
   const kpis = useOperacionKpis();
@@ -182,6 +183,8 @@ export function DailyOperationsScreen() {
   const selectedWarehouse = selected?.type === "warehouse" ? selected.id : null;
   // Vehículo fijado en el panel de vehículos: se resalta en el mapa aunque el panel esté cerrado.
   const [pinnedVehicle, setPinnedVehicle] = useState<string | null>(null);
+  // Pedido fijado en el panel de pedidos: se sigue en el mapa aunque el panel esté cerrado.
+  const orderPin = usePinnedOrder(running ? vista?.contextoId ?? null : null, orders, snapshot.vehicles);
   const emphasis = useMemo(
     () => {
       const vehicles = pinnedVehicle ? { vehicles: new Set([pinnedVehicle]) } : {};
@@ -268,6 +271,8 @@ export function DailyOperationsScreen() {
         delivered={{ hours: deliveredHours, onHoursChange: setDeliveredHours, orders: deliveredOrders }}
         selectedId={orderId}
         onSelect={setOrderId}
+        pinned={orderPin.pinned}
+        onPinChange={orderPin.setPinned}
         draft={draft}
         onDraftChange={setDraft}
         tab={orderTab}
@@ -298,6 +303,8 @@ export function DailyOperationsScreen() {
             neutralWarehouses={!running}
             emphasis={emphasis}
             layers={layers}
+            onOpenOrder={(id) => { setOrderId(id); setOrderTab("lista"); open("pedidos"); }}
+            focusOrder={orderPin.pinned && { id: orderPin.pinned.order.id, destination: orderPin.pinned.order.destination, delivered: orderPin.pinned.delivered }}
             selected={selected}
             onSelect={setSelected}
             highlight={shown === "clientes" ? highlightFor(orders, null, clientDraft) : highlightFor(orders, orderId, shown === "pedidos" ? draft : undefined)}

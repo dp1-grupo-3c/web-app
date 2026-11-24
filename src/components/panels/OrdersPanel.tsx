@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Clock, Crosshair, MapPin, Package, PackageCheck, Search, Truck, UserPlus, UserRound, Users } from "lucide-react";
+import { Building2, Clock, Crosshair, MapPin, Package, PackageCheck, Pin, Search, Truck, UserPlus, UserRound, Users } from "lucide-react";
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Chip, RadioCardGroup, SegmentedControl } from "@/components/ui/choice";
@@ -17,6 +17,7 @@ import { findClient, registerOrder } from "@/lib/data/actions";
 import { DOCUMENT_LABEL, documentError, kindForDocument } from "@/lib/documento";
 import { formatCoord, formatDuration } from "@/lib/format";
 import type { Client, Coord, Order, OrderStatus, PriorityCode } from "@/lib/types";
+import type { PinnedOrder } from "@/components/screens/usePinnedOrder";
 import { integerInRange, textMax } from "@/lib/validation";
 
 /**
@@ -99,9 +100,12 @@ type OrdersPanelProps = {
   tracking?: ReadonlyMap<string, OrderTracking>;
   highlight?: OrdersHighlight | null;
   delivered?: DeliveredFilter;
+  /** Pedido fijado: va arriba de la lista y su ruta es la única en el mapa. */
+  pinned?: PinnedOrder | null;
+  onPinChange?: (order: Order | null) => void;
 };
 
-export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onDraftChange, picking, onTogglePick, onClose, width, tab: controlledTab, onTabChange, onRegisterClient, tracking, highlight, delivered }: OrdersPanelProps) {
+export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onDraftChange, picking, onTogglePick, onClose, width, tab: controlledTab, onTabChange, onRegisterClient, tracking, highlight, delivered, pinned, onPinChange }: OrdersPanelProps) {
   const toast = useToast();
   const canRegister = audience === "operador";
   const [ownTab, setOwnTab] = useState<OrdersTab>("lista");
@@ -164,7 +168,7 @@ export function OrdersPanel({ audience, orders, selectedId, onSelect, draft, onD
       {formMode ? (
         <OrderForm draft={draft} errors={errors} change={change} onDraftChange={onDraftChange} picking={picking} onTogglePick={onTogglePick} onRegisterClient={onRegisterClient} />
       ) : (
-        <OrdersList audience={audience} orders={orders} selectedId={selectedId} onSelect={onSelect} tracking={tracking} highlight={highlight ?? null} delivered={delivered} />
+        <OrdersList audience={audience} orders={orders} selectedId={selectedId} onSelect={onSelect} tracking={tracking} highlight={highlight ?? null} delivered={delivered} pinned={pinned ?? null} onPinChange={onPinChange} />
       )}
     </SidePanel>
   );
@@ -329,9 +333,10 @@ function parseHours(text: string): number | null {
   return Number.isInteger(n) && n >= 1 && n <= MAX_DELIVERED_HOURS ? n : null;
 }
 
-function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, highlight, delivered }: {
+function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, highlight, delivered, pinned, onPinChange }: {
   audience: OrdersPanelProps["audience"]; orders: Order[]; selectedId: string | null; onSelect: (id: string | null) => void;
   tracking?: ReadonlyMap<string, OrderTracking>; highlight: OrdersHighlight | null; delivered?: DeliveredFilter;
+  pinned: PinnedOrder | null; onPinChange?: (order: Order | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const [urgentOnly, setUrgentOnly] = useState(false);
@@ -353,7 +358,9 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
     .filter((o) => deliveredOn || upcomingOn || !urgentOnly || o.minutesLeft < 60)
     .filter((o) => !upcomingOn || (o.minutesToDelivery != null && o.minutesToDelivery >= 0 && o.minutesToDelivery <= upcomingHours * 60))
     .filter((o) => !onlyVehicle || !highlight || highlight.ids.has(o.id))
-    .filter((o) => !q || o.id.toLowerCase().includes(q) || `${o.destination.x},${o.destination.y}`.startsWith(q));
+    .filter((o) => !q || o.id.toLowerCase().includes(q) || `${o.destination.x},${o.destination.y}`.startsWith(q))
+    // El fijado va en su propia tarjeta, arriba de la lista, en cualquier filtro.
+    .filter((o) => o.id !== pinned?.order.id);
   const rows = upcomingOn ? [...filtered].sort((a, b) => a.minutesToDelivery! - b.minutesToDelivery!) : filtered;
   const pageCount = Math.max(1, Math.ceil(rows.length / perPage));
   // Al elegir otro vehículo en el mapa, la lista salta a la página de su primer pedido.
@@ -365,12 +372,21 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
     const first = highlight ? rows.findIndex((o) => highlight.ids.has(o.id)) : -1;
     if (first >= 0) setPage(Math.floor(first / perPage) + 1);
   }
+  // Pedido abierto desde el mapa (o elegido): la lista salta a su página.
+  const [followedOrder, setFollowedOrder] = useState<string | null>(null);
+  if (selectedId !== followedOrder) {
+    setFollowedOrder(selectedId);
+    const at = selectedId ? rows.findIndex((o) => o.id === selectedId) : -1;
+    if (at >= 0) setPage(Math.floor(at / perPage) + 1);
+  }
   const highlightedCount = highlight ? orders.filter((o) => highlight.ids.has(o.id)).length : 0;
   const current = Math.min(page, pageCount);
   const slice = rows.slice((current - 1) * perPage, current * perPage);
-  const selected = orders.find((o) => o.id === selectedId) ?? null;
+  const selected = orders.find((o) => o.id === selectedId) ?? (pinned?.order.id === selectedId ? pinned.order : null);
+  // Hora de entrega del fijado, si figura en la lista de entregados.
+  const pinnedDeliveredAt = pinned?.delivered ? pinned.order.deliveredAt ?? delivered?.orders.find((o) => o.id === pinned.order.id)?.deliveredAt : undefined;
 
-  if (active.length === 0 && !delivered)
+  if (active.length === 0 && !delivered && !pinned)
     return (
       <EmptyState icon={<Package className="size-8" aria-hidden />} title={client ? "Todavía no vemos pedidos" : "Aún no hay pedidos activos"}>
         {client ? "Cuando tu pedido esté en camino, podrás buscarlo aquí por su número." : "Aparecerán aquí en cuanto el servidor los envíe."}
@@ -417,21 +433,25 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
           {highlightedCount > 0 && <Chip on={onlyVehicle} onClick={() => { setOnlyVehicle((v) => !v); setPage(1); }}>Ver solo estos</Chip>}
         </div>
       )}
+      {pinned && onPinChange && (
+        <PinnedOrderCard pinned={pinned} deliveredAt={pinnedDeliveredAt} selected={pinned.order.id === selectedId} onSelect={() => onSelect(pinned.order.id === selectedId ? null : pinned.order.id)} onUnpin={() => onPinChange(null)} />
+      )}
       <div className="shrink-0 overflow-hidden rounded-xl border border-line bg-night">
         <table className="w-full table-fixed text-[13px]">
-          <colgroup><col style={{ width: "22%" }} /><col style={{ width: "23%" }} /><col style={{ width: "25%" }} /><col style={{ width: "30%" }} /></colgroup>
+          <colgroup><col style={{ width: "19%" }} /><col style={{ width: "22%" }} /><col style={{ width: "22%" }} /><col />{onPinChange && <col style={{ width: 32 }} />}</colgroup>
           <thead className="h-10 bg-raised text-[11px] text-n500 [&_th]:px-2 [&_th]:py-0">
             <tr>
               <th className="px-3 py-2.5 text-left font-medium">Pedido</th>
               <th className="px-3 py-2.5 text-left font-medium">Destino</th>
               <th className="px-3 py-2.5 text-left font-medium">Prioridad</th>
               <th className="px-3 py-2.5 text-right font-medium">{deliveredOn ? "Entregado" : upcomingOn ? "Entrega" : "Vence en"}</th>
+              {onPinChange && <th className="!px-0"><span className="sr-only">Fijar</span></th>}
             </tr>
           </thead>
           <tbody>
             {slice.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ height: perPage * 64 }}>
+                <td colSpan={onPinChange ? 5 : 4} style={{ height: perPage * 64 }}>
                   {q ? <EmptyState icon={<Search className="size-7" aria-hidden />} title={`No encontramos pedidos con “${query}”.`}>Revisa el número e inténtalo nuevamente.</EmptyState>
                     : upcomingOn ? <EmptyState icon={<Truck className="size-7" aria-hidden />} title={`Ningún pedido se entrega en las próximas ${upcomingHours} h`}>Amplía el número de horas para ver más.</EmptyState>
                     : deliveredOn ? <EmptyState icon={<PackageCheck className="size-7" aria-hidden />} title={`Ningún pedido entregado en las últimas ${delivered.hours} h`}>Amplía el número de horas para ver más.</EmptyState>
@@ -472,11 +492,12 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
                         <span className="block truncate">{urgent ? `${o.minutesLeft} min` : formatDuration(o.minutesLeft)}</span>
                       </td>
                     )}
+                    {onPinChange && <td className="!px-0 !pr-1"><PinButton pinned={false} id={o.id} onClick={() => onPinChange(o)} /></td>}
                   </tr>
                 );
               })
             )}
-            {slice.length > 0 && Array.from({ length: perPage - slice.length }, (_, i) => <tr key={`empty-${i}`} aria-hidden className="h-16"><td colSpan={4} /></tr>)}
+            {slice.length > 0 && Array.from({ length: perPage - slice.length }, (_, i) => <tr key={`empty-${i}`} aria-hidden className="h-16"><td colSpan={onPinChange ? 5 : 4} /></tr>)}
           </tbody>
         </table>
         <div className="flex h-12 items-center justify-between gap-1 border-t border-line bg-raised px-2 text-[11px] text-n400">
@@ -500,6 +521,55 @@ function OrdersList({ audience, orders: active, selectedId, onSelect, tracking, 
   );
 }
 
+/** Fija o suelta un pedido; no selecciona la fila. Solo hay un fijado: fijar otro reemplaza al anterior. */
+function PinButton({ pinned, id, onClick }: { pinned: boolean; id: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pinned}
+      aria-label={pinned ? `Soltar el pedido ${id}` : `Fijar el pedido ${id} y seguir su ruta en el mapa`}
+      title={pinned ? "Soltar" : "Fijar y seguir en el mapa"}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onKeyDown={(e) => e.stopPropagation()}
+      className={cn("grid size-6 shrink-0 place-items-center rounded-md transition-colors hover:bg-field", pinned ? "text-pink" : "text-n600 hover:text-white")}
+    >
+      <Pin className="size-3.5" fill={pinned ? "currentColor" : "none"} aria-hidden />
+    </button>
+  );
+}
+
+/** Pedido fijado: estado, destino y vehículos según la foto del mapa. */
+function PinnedOrderCard({ pinned: { order: o, delivered, carriers }, deliveredAt, selected, onSelect, onUnpin }: {
+  pinned: PinnedOrder; deliveredAt?: string; selected: boolean; onSelect: () => void; onUnpin: () => void;
+}) {
+  const st = STATUS[o.status];
+  const vehicles = carriers.length
+    ? carriers.map((c) => `${c.vehicle.plate}${c.trip > 0 ? " (tras recarga)" : ""}`).join(", ")
+    : delivered ? (o.deliveredBy?.join(", ") ?? "—") : "Aún sin vehículo asignado";
+  const when = delivered ? `Entregado${deliveredAt ? ` ${deliveredAt}` : ""}` : `Vence en ${formatDuration(o.minutesLeft)}`;
+  return (
+    <section aria-label="Pedido fijado" className="grid gap-2">
+      <span className="flex items-center gap-1.5 text-xs text-n500"><Pin className="size-3.5 text-pink" fill="currentColor" aria-hidden />Pedido fijado · su ruta es la única que se ve en el mapa</span>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-pressed={selected}
+        onClick={onSelect}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect())}
+        className={cn("grid cursor-pointer gap-1.5 rounded-xl border bg-night p-3 text-[13px] hover:bg-field", selected ? "border-pink shadow-[inset_3px_0_0_var(--color-pink)]" : "border-line")}
+      >
+        <div className="flex items-center gap-2">
+          <b className="min-w-0 flex-1 truncate text-[15px] text-white">Pedido {o.id}</b>
+          <Badge tone={st.tone}>{delivered && <PackageCheck className="size-3" aria-hidden />}{st.label}</Badge>
+          <PinButton pinned id={o.id} onClick={onUnpin} />
+        </div>
+        <p className="truncate text-n400 tabular-nums">{formatCoord(o.destination)} · {o.priority} · {o.packages} paq. · <span className={cn(!delivered && o.minutesLeft < 60 ? "text-warning" : "text-white")}>{when}</span></p>
+        <p className="flex items-center gap-1.5 truncate text-n400" title={vehicles}><Truck className="size-3.5 shrink-0" aria-hidden /><span className="truncate text-white">{vehicles}</span></p>
+      </div>
+    </section>
+  );
+}
+
 function OrderDetail({ order: o, tracking: t }: { order: Order; tracking?: OrderTracking }) {
   const st = STATUS[o.status];
   const p = priorityInfo(o.priority);
@@ -520,7 +590,7 @@ function OrderDetail({ order: o, tracking: t }: { order: Order; tracking?: Order
       </div>
       <DefinitionList
         items={[
-          ...(t ? ([["Hora de salida", t.departure], ["Llegada estimada", t.arrival]] as [string, string][]) : []),
+          ...(t ? ([["Hora de salida", t.departure], ["Llegada estimada", t.arrival === "—" && o.expectedDeliveryAt ? o.expectedDeliveryAt : t.arrival]] as [string, string][]) : []),
           ...(!t && o.etaMinutes != null ? ([["Llegada estimada", `~${o.etaMinutes} min`]] as [string, string][]) : []),
           delivered ? ["Hora de entrega", o.deliveredAt!] : ["Vence en", formatDuration(o.minutesLeft)],
           ["Destino", formatCoord(o.destination)],

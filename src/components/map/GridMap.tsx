@@ -1,6 +1,6 @@
 "use client";
 
-import { Crosshair, Flag, Focus, Hourglass, MapPin as MapPinIcon, Minus, Package, Plus, Utensils } from "lucide-react";
+import { Crosshair, Flag, Focus, Hourglass, MapPin as MapPinIcon, Minus, Package, PackageCheck, Pin, Plus, Utensils } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Button, ControlButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
@@ -14,12 +14,13 @@ import { clearMapPick, setMapPick, useMapPick } from "@/lib/map-pick";
 import type { Coord, EntityRef, MapFilter, MapSnapshot, Order, PercentBands, TrafficLight, Vehicle, VehicleKind } from "@/lib/types";
 import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from "./EntityPopover";
 import { computeGeometry, nearestCoord, polylineMidpoint, project, toPath, zoomView, type View } from "./geometry";
-import { BlockageIcon, PINK, VEHICLE_STATUS_LABEL, vehicleAppearance, warehouseAppearance, type MapLayers } from "./layers";
-import { HoverTooltip, vehicleOccupancyText, warehouseStockText } from "./HoverTooltip";
-import { MapPin, type Heading } from "./MapPin";
+import { BlockageIcon, PINK, VEHICLE_STATUS_LABEL, vehicleAppearance, warehouseAppearance, warehouseLook, type MapLayers } from "./layers";
+import { HoverTooltip, vehicleOccupancyText, warehouseStockText, type StopOrder } from "./HoverTooltip";
+import { MapPin, WAREHOUSE_HALF, WarehouseMarker, type Heading } from "./MapPin";
 import { useVehicleMotion } from "./motion";
 import { pendingFromShown, samePoint } from "./trajectory";
 import { assignedDestinations, warehouseOnMap } from "./selection";
+import { orderCarriers, splitAtDelivery } from "./order-focus";
 
 /**
  * Punto de vehículos en espera, con el color de su tipo de vehículo. Si en la
@@ -72,11 +73,18 @@ type GridMapProps = {
   emphasis?: { warehouses?: ReadonlySet<string>; vehicles?: ReadonlySet<string> };
   /** Filtro de color de los paneles Vehículos y Almacenes: solo se dibujan esos ids. */
   filter?: MapFilter;
+  /**
+   * Pedido fijado: solo se dibujan las rutas de los vehículos que lo llevan
+   * (con el tramo hasta su entrega resaltado), aunque la capa de rutas esté apagada.
+   */
+  focusOrder?: { id: string; destination: Coord; delivered: boolean } | null;
+  /** Clic en una parada del vehículo elegido: abre ese pedido en el panel de pedidos. */
+  onOpenOrder?: (orderId: string) => void;
 };
 
 const NO_EMPHASIS: NonNullable<GridMapProps["emphasis"]> = {};
 
-export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode: pickProp, onPick: onPickProp, onCancelPick: onCancelProp, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands, filter }: GridMapProps) {
+export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations, trafficLight, layers, neutralWarehouses = false, highlight, selected, onSelect, pickMode: pickProp, onPick: onPickProp, onCancelPick: onCancelProp, emptyMessage, status, vehicleBands = DEFAULT_VEHICLE_BANDS, emphasis = NO_EMPHASIS, warehouseFillBands, filter, focusOrder, onOpenOrder }: GridMapProps) {
   // Un panel (p. ej. Almacenes) puede pedir una intersección sin pasar por la pantalla.
   const request = useMapPick();
   const pickMode = pickProp || !!request;
@@ -105,6 +113,9 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
   const hoverOf = (ref: EntityRef) => (on: boolean) =>
     setHovered((h) => (on ? ref : h?.type === ref.type && h.id === ref.id ? null : h));
   const [dragging, setDragging] = useState(false);
+  // Parada (destino de pedidos) del vehículo elegido bajo el cursor, por su clave de intersección.
+  const [hoveredStop, setHoveredStop] = useState<string | null>(null);
+  const hoverStop = (key: string) => (on: boolean) => setHoveredStop((h) => (on ? key : h === key ? null : h));
   const ready = size.w > 0 && size.h > 0;
   const motion = useVehicleMotion(snapshot.vehicles, snapshot.sample, snapshot.blockages);
   // Bloqueos vigentes en el minuto que muestra la animación, no en el de la foto
@@ -145,6 +156,11 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
   const selectedVehicle = selected?.type === "vehicle" ? snapshot.vehicles.find((v) => v.id === selected.id) : undefined;
   const destinations = selectedVehicle ? assignedDestinations(selectedVehicle, orders, knownDestinations) : [];
   const finalDestination = selectedVehicle?.route?.pending.at(-1);
+  // Vehículos que llevan el pedido fijado según la foto mostrada; valor = viaje en que lo entregan.
+  const carrierTrip = new Map(focusOrder ? orderCarriers(snapshot.vehicles, focusOrder.id).map((c) => [c.vehicle.id, c.trip]) : []);
+  const warehouseStops = snapshot.warehouses.map((w) => w.position);
+  /** Con un pedido fijado, solo sus vehículos (y el elegido, si la capa de rutas está encendida). */
+  const showsRoute = (v: Vehicle) => (focusOrder ? carrierTrip.has(v.id) || (layers.rutas && v.id === selectedVehicle?.id) : layers.rutas);
   const blockageAnchor = (b: MapSnapshot["blockages"][number]) => polylineMidpoint(b.path?.length ? b.path : [b.from, b.to]);
   const blink = { animationDuration: `${BLOCKAGE_BLINK_PERIOD_MS}ms` };
   const endingSoon = (b: MapSnapshot["blockages"][number]) => endingIn(b, shownMinute ?? snapshot.sample?.simulatedMinute);
@@ -257,7 +273,10 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       if (v && !idle) popover = <VehiclePopover vehicle={v} bands={vehicleBands[v.kind]} anchor={anchorFor(shownAt(v))} onClose={close} mapHeight={size.h} docked />;
     } else if (selected.type === "warehouse") {
       const w = snapshot.warehouses.find((x) => x.id === selected.id);
-      if (w) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} fillBands={warehouseFillBands} neutral={idle} anchor={anchorFor(w.position)} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
+      // Cuadrado centrado: abierta hacia abajo, la ficha parte de su borde inferior.
+      const a = w && anchorFor(w.position);
+      const anchor = a && (a.above ? a : { ...a, y: a.y + WAREHOUSE_HALF - 6 });
+      if (w && anchor) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} fillBands={warehouseFillBands} neutral={idle} anchor={anchor} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
     } else {
       const b = blockages.find((x) => x.id === selected.id);
       if (b && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} schedule={blockageSchedule(b, snapshot.sample)} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
@@ -280,7 +299,8 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       if (w && layers.almacenes) {
         const [px, py] = project(g, w.position);
         const a = warehouseAppearance(w, trafficLight, idle, warehouseFillBands);
-        tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={a.tone} empty={a.empty} x={px} y={py} mapWidth={size.w} />;
+        // El cuadrado va centrado: el ancla baja a su borde inferior para que el tooltip no lo tape.
+        tooltip = <HoverTooltip kind="warehouse" warehouse={w} tone={a.tone} empty={a.empty} x={px} y={py + WAREHOUSE_HALF + 2} mapWidth={size.w} />;
       }
     } else if (hovered.type === "blockage") {
       const b = blockages.find((x) => x.id === hovered.id);
@@ -290,6 +310,20 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
         tooltip = <HoverTooltip kind="blockage" schedule={blockageSchedule(b, snapshot.sample)} x={px} y={py + 30} mapWidth={size.w} />;
       }
     }
+  }
+
+  // Tooltip de una parada: los pedidos que se entregan en esa intersección.
+  const stopIndex = hoveredStop ? destinations.findIndex((d) => d.key === hoveredStop) : -1;
+  if (ready && !tooltip && !dragging && selectedVehicle && stopIndex >= 0) {
+    const stop = destinations[stopIndex];
+    const byId = new Map(orders.map((o) => [o.id, o]));
+    const stopOrders: StopOrder[] = stop.orderIds.map((id) => ({
+      id,
+      packages: selectedVehicle.orders.filter((o) => o.orderId === id).reduce((sum, o) => sum + o.packagesInVehicle, 0),
+      order: byId.get(id),
+    }));
+    const [px, py] = project(g, stop.position);
+    tooltip = <HoverTooltip kind="stop" stop={stopIndex + 1} position={stop.position} plate={selectedVehicle.plate} orders={stopOrders} x={px} y={py} mapWidth={size.w} />;
   }
 
   const [x0, y0] = project(g, { x: 0, y: GRID.height });
@@ -332,11 +366,24 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
             );
           })}
 
-          {!idle && layers.rutas && [...snapshot.vehicles].sort((a, b) => Number(a.id === selectedVehicle?.id) - Number(b.id === selectedVehicle?.id)).map((v) => {
-            if (!v.route) return null;
+          {!idle && (layers.rutas || focusOrder) && [...snapshot.vehicles].sort((a, b) => Number(a.id === selectedVehicle?.id) - Number(b.id === selectedVehicle?.id)).map((v) => {
+            if (!v.route || !showsRoute(v)) return null;
             // La ruta conserva el color del tipo: en rojo se confundiría con un bloqueo.
             const { color } = VEHICLE_META[v.kind];
             const pending = pendingFromShown(shownAt(v), v, motion.remaining[v.id]);
+            const trip = focusOrder ? carrierTrip.get(v.id) : undefined;
+            if (focusOrder && trip != null) {
+              // Solo el camino hasta la entrega, con trazo continuo y grueso; lo que sigue después no se dibuja.
+              const { toDelivery } = splitAtDelivery(pending, focusOrder.destination, trip, warehouseStops);
+              return (
+                <g key={`rt-${v.id}`} aria-hidden>
+                  {toDelivery.length > 1 && <>
+                    <path d={toPath(g, toDelivery)} stroke="#10161c" strokeWidth={11} fill="none" strokeLinejoin="round" strokeLinecap="round" opacity={0.7} />
+                    <path d={toPath(g, toDelivery)} stroke={color} strokeWidth={6} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+                  </>}
+                </g>
+              );
+            }
             const dest = pending.length > 1 ? pending.at(-1) : undefined;
             const [dx, dy] = dest ? project(g, dest) : [0, 0];
             return (
@@ -353,7 +400,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
             const [x, y] = project(g, w.position);
             const intermediate = w.kind === "secundario";
             const stock = intermediate ? warehouseStockText(w) : "";
-            return <MapPin key={`wh-${w.id}`} x={x} y={y} scale={0.9} ring={!!emphasis.warehouses?.has(w.id)} color={a.color} Icon={a.Icon} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={hoverOf({ type: "warehouse", id: w.id })} />;
+            return <WarehouseMarker key={`wh-${w.id}`} x={x} y={y} ring={!!emphasis.warehouses?.has(w.id)} {...warehouseLook(w, a)} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={hoverOf({ type: "warehouse", id: w.id })} />;
           })}
 
           {!idle && layers.bloqueos && blockages.map((b) => {
@@ -365,9 +412,11 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
           })}
 
           {!idle && layers.flota && selectedVehicle && <g aria-label={`Destinos de ${selectedVehicle.plate}`}>
-            {destinations.map((destination) => {
+            {destinations.map((destination, i) => {
               const [x, y] = project(g, destination.position);
-              return <MapPin key={`orders-${destination.key}`} x={x} y={y} scale={0.7} color={PINK} Icon={Package} BadgeIcon={Flag} label={`Pedidos asignados ${destination.orderIds.join(", ")} · destino ${formatCoord(destination.position)}`} onActivate={() => onSelect({ type: "vehicle", id: selectedVehicle.id })} />;
+              // Numeradas en el orden de la ruta; el clic abre el (primer) pedido de la parada.
+              const open = () => (onOpenOrder ? onOpenOrder(destination.orderIds[0]) : onSelect({ type: "vehicle", id: selectedVehicle.id }));
+              return <MapPin key={`orders-${destination.key}`} x={x} y={y} scale={0.75} color={PINK} Icon={Package} badgeText={String(i + 1)} label={`Parada ${i + 1}: pedidos ${destination.orderIds.join(", ")} · destino ${formatCoord(destination.position)}`} onActivate={open} onHoverChange={hoverStop(destination.key)} />;
             })}
             {finalDestination && !destinations.some((d) => samePoint(d.position, finalDestination)) && (() => {
               const [x, y] = project(g, finalDestination);
@@ -381,7 +430,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
             const { color, Icon, BadgeIcon, badgeColor, badgeGlyph, meta } = vehicleAppearance(v, vehicleBands[v.kind]);
             const [px, y] = project(g, shownAt(v));
             const x = px + fanOffset(v);
-            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id)} color={color} Icon={Icon} heading={headingOf(v)} BadgeIcon={BadgeIcon} badgeColor={badgeColor} badgeGlyph={badgeGlyph} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]}${v.status === "averiado" && v.breakdownType ? ` ${v.breakdownType}` : ""} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
+            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id) || carrierTrip.has(v.id)} color={color} Icon={Icon} heading={headingOf(v)} BadgeIcon={BadgeIcon} badgeColor={badgeColor} badgeGlyph={badgeGlyph} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]}${v.status === "averiado" && v.breakdownType ? ` ${v.breakdownType}` : ""} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
           })}
 
           {!idle && layers.flota && [...waitingGroups].map(([key, group]) => {
@@ -406,7 +455,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
             const [x, y] = project(g, w.position);
             const label = `${w.name}: ${fleet.length} vehículos, ${feeding} en pausa de alimentación. Ver vehículos.`;
             const open = () => onSelect({ type: "warehouse", id: w.id });
-            return <g key={`fleet-${w.id}`} data-pin transform={`translate(${x + 12} ${y - 60})`} role="button" tabIndex={0} aria-label={label} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }} className="cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125">
+            return <g key={`fleet-${w.id}`} data-pin transform={`translate(${x + WAREHOUSE_HALF - 10} ${y - WAREHOUSE_HALF - 20})`} role="button" tabIndex={0} aria-label={label} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }} className="cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125">
               <title>{label}</title>
               <rect width={feeding ? 80 : 38} height={26} rx={8} fill={feeding ? "var(--color-warning)" : "#dbe4ef"} stroke="#10161c" strokeWidth={2} />
               <text x={19} y={18} textAnchor="middle" fontSize={13} fontWeight={700} fill="#161d25">{fleet.length}</text>
@@ -414,7 +463,12 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
             </g>;
           })}
 
-          {highlight && (() => { const [x, y] = project(g, highlight); return <MapPin x={x} y={y} scale={0.9} ring color={PINK} Icon={MapPinIcon} label={`Destino ${formatCoord(highlight)}`} />; })()}
+          {focusOrder && (() => {
+            const [x, y] = project(g, focusOrder.destination);
+            return <MapPin x={x} y={y} scale={0.95} ring color={focusOrder.delivered ? "var(--color-success)" : PINK} Icon={focusOrder.delivered ? PackageCheck : Package} BadgeIcon={Pin} label={`Pedido fijado ${focusOrder.id} · destino ${formatCoord(focusOrder.destination)}${focusOrder.delivered ? " · entregado" : ""}`} />;
+          })()}
+
+          {highlight && !(focusOrder && samePoint(highlight, focusOrder.destination)) && (() => { const [x, y] = project(g, highlight); return <MapPin x={x} y={y} scale={0.9} ring color={PINK} Icon={MapPinIcon} label={`Destino ${formatCoord(highlight)}`} />; })()}
 
           {hover && !dragging && (() => {
             const [x, y] = project(g, hover);
