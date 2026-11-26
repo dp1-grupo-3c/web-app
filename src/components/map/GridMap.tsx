@@ -16,7 +16,7 @@ import { BlockagePopover, POPOVER_WIDTH, VehiclePopover, WarehousePopover } from
 import { computeGeometry, nearestCoord, polylineMidpoint, project, toPath, zoomView, type View } from "./geometry";
 import { BlockageIcon, PINK, VEHICLE_STATUS_LABEL, vehicleAppearance, warehouseAppearance, warehouseLook, type MapLayers } from "./layers";
 import { HoverTooltip, vehicleOccupancyText, warehouseStockText, type StopOrder } from "./HoverTooltip";
-import { MapPin, WAREHOUSE_HALF, WarehouseMarker, type Heading } from "./MapPin";
+import { MapPin, SELECT, SELECTED_SCALE, WAREHOUSE_HALF, WarehouseMarker, type Heading } from "./MapPin";
 import { useVehicleMotion } from "./motion";
 import { pendingFromShown, samePoint } from "./trajectory";
 import { assignedDestinations, warehouseOnMap } from "./selection";
@@ -39,6 +39,30 @@ function WaitingDot({ colors, r }: { colors: string[]; r: number }) {
     <>
       {sorted.map((color, k) => <path key={k} d={`M0 0 L${at(k)} A${r} ${r} 0 0 1 ${at(k + 1)} Z`} fill={color} />)}
       <circle r={r} fill="none" stroke="#10161c" strokeWidth={2} />
+    </>
+  );
+}
+
+/** Cursor y foco de teclado para los marcadores dibujados a mano (grupos, flota de un almacén). */
+const hoverProps = (on: (hovered: boolean) => void) => ({
+  onPointerEnter: () => on(true),
+  onPointerLeave: () => on(false),
+  onFocus: () => on(true),
+  onBlur: () => on(false),
+});
+
+/**
+ * Ruta seleccionada (vehículo elegido o tramo hasta el pedido fijado): contorno
+ * oscuro, trazo azul de selección continuo y grueso, el color del tipo de
+ * vehículo al centro y puntos blancos que avanzan en el sentido del recorrido.
+ */
+function SelectedRoute({ d, color }: { d: string; color: string }) {
+  return (
+    <>
+      <path d={d} stroke="#10161c" strokeWidth={15} fill="none" strokeLinejoin="round" strokeLinecap="round" opacity={0.75} />
+      <path d={d} stroke={SELECT} strokeWidth={10} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={d} stroke={color} strokeWidth={3} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={d} stroke="#fff" strokeWidth={4} fill="none" strokeLinejoin="round" strokeLinecap="round" strokeDasharray="0.1 17.9" className="selected-route-flow" />
     </>
   );
 }
@@ -113,9 +137,11 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
   const hoverOf = (ref: EntityRef) => (on: boolean) =>
     setHovered((h) => (on ? ref : h?.type === ref.type && h.id === ref.id ? null : h));
   const [dragging, setDragging] = useState(false);
-  // Parada (destino de pedidos) del vehículo elegido bajo el cursor, por su clave de intersección.
-  const [hoveredStop, setHoveredStop] = useState<string | null>(null);
-  const hoverStop = (key: string) => (on: boolean) => setHoveredStop((h) => (on ? key : h === key ? null : h));
+  // Marcador sin ficha propia bajo el cursor: parada ("stop:<clave>"), dirección destacada
+  // ("highlight"), pedido fijado ("focus"), destino final ("final"), grupo en espera
+  // ("wait:<clave>") o flota de un almacén ("fleet:<id>").
+  const [hoveredMark, setHoveredMark] = useState<string | null>(null);
+  const hoverMark = (key: string) => (on: boolean) => setHoveredMark((h) => (on ? key : h === key ? null : h));
   const ready = size.w > 0 && size.h > 0;
   const motion = useVehicleMotion(snapshot.vehicles, snapshot.sample, snapshot.blockages);
   // Bloqueos vigentes en el minuto que muestra la animación, no en el de la foto
@@ -273,13 +299,16 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
       if (v && !idle) popover = <VehiclePopover vehicle={v} bands={vehicleBands[v.kind]} anchor={anchorFor(shownAt(v))} onClose={close} mapHeight={size.h} docked />;
     } else if (selected.type === "warehouse") {
       const w = snapshot.warehouses.find((x) => x.id === selected.id);
-      // Cuadrado centrado: abierta hacia abajo, la ficha parte de su borde inferior.
+      // Cuadrado centrado (agrandado y con halo al estar seleccionado): abierta hacia abajo, la ficha parte de su borde inferior.
       const a = w && anchorFor(w.position);
-      const anchor = a && (a.above ? a : { ...a, y: a.y + WAREHOUSE_HALF - 6 });
+      const anchor = a && (a.above ? a : { ...a, y: a.y + Math.round((WAREHOUSE_HALF + 9) * SELECTED_SCALE) - 10 });
       if (w && anchor) popover = <WarehousePopover warehouse={w} trafficLight={trafficLight} fillBands={warehouseFillBands} neutral={idle} anchor={anchor} onClose={close} mapHeight={size.h} vehicles={snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id)} onSelectVehicle={(id) => onSelect({ type: "vehicle", id })} />;
     } else {
       const b = blockages.find((x) => x.id === selected.id);
-      if (b && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} schedule={blockageSchedule(b, snapshot.sample)} anchor={anchorFor(blockageAnchor(b))} onClose={close} mapHeight={size.h} />;
+      // El marcador del bloqueo va centrado: abierta hacia abajo, la ficha baja hasta el borde de su halo.
+      const a = b && anchorFor(blockageAnchor(b));
+      const anchor = a && (a.above ? a : { ...a, y: a.y + 14 });
+      if (b && anchor && !idle) popover = <BlockagePopover blockage={b} endsIn={endingSoon(b)} schedule={blockageSchedule(b, snapshot.sample)} anchor={anchor} onClose={close} mapHeight={size.h} />;
     }
   }
 
@@ -313,7 +342,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
   }
 
   // Tooltip de una parada: los pedidos que se entregan en esa intersección.
-  const stopIndex = hoveredStop ? destinations.findIndex((d) => d.key === hoveredStop) : -1;
+  const stopIndex = hoveredMark?.startsWith("stop:") ? destinations.findIndex((d) => `stop:${d.key}` === hoveredMark) : -1;
   if (ready && !tooltip && !dragging && selectedVehicle && stopIndex >= 0) {
     const stop = destinations[stopIndex];
     const byId = new Map(orders.map((o) => [o.id, o]));
@@ -324,6 +353,44 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
     }));
     const [px, py] = project(g, stop.position);
     tooltip = <HoverTooltip kind="stop" stop={stopIndex + 1} position={stop.position} plate={selectedVehicle.plate} orders={stopOrders} x={px} y={py} mapWidth={size.w} />;
+  }
+
+  // Tooltips de la dirección de entrega destacada, el pedido fijado y los marcadores sin ficha.
+  if (ready && !tooltip && !dragging && hoveredMark) {
+    const ordersAt = (c: Coord): StopOrder[] => orders.filter((o) => samePoint(o.destination, c)).map((o) => ({ id: o.id, packages: o.packages, order: o }));
+    // Alto aproximado de un marcador de escala `s` seleccionado (gota de 52 unidades).
+    const selectedHeight = (s: number) => Math.round(52 * s * SELECTED_SCALE) + 8;
+    if (hoveredMark === "highlight" && highlight) {
+      const [px, py] = project(g, highlight);
+      const here = ordersAt(highlight);
+      tooltip = <HoverTooltip kind="destination" title={here.length ? (here.length > 1 ? `${here.length} pedidos en esta dirección` : "Dirección de entrega") : "Destino elegido"} position={highlight} orders={here} x={px} y={py} pinHeight={selectedHeight(0.9)} mapWidth={size.w} />;
+    } else if (hoveredMark === "focus" && focusOrder) {
+      const [px, py] = project(g, focusOrder.destination);
+      const listed = orders.find((o) => o.id === focusOrder.id);
+      const rest = ordersAt(focusOrder.destination).filter((o) => o.id !== focusOrder.id);
+      const fixed: StopOrder = { id: focusOrder.id, packages: listed?.packages ?? 0, order: listed };
+      tooltip = <HoverTooltip kind="destination" title={`Pedido fijado ${focusOrder.id}`} position={focusOrder.destination} orders={[fixed, ...rest]} missingLabel={focusOrder.delivered ? "Entregado" : "Entregándose"} note={focusOrder.delivered ? "Entrega completada" : "Se muestra la ruta de los vehículos que lo llevan"} x={px} y={py} pinHeight={selectedHeight(0.95)} mapWidth={size.w} />;
+    } else if (hoveredMark === "final" && selectedVehicle && finalDestination) {
+      const [px, py] = project(g, finalDestination);
+      const wh = snapshot.warehouses.find((w) => samePoint(w.position, finalDestination));
+      tooltip = <HoverTooltip kind="info" title="Destino final del itinerario" subtitle={selectedVehicle.plate} rows={[["Dirección", formatCoord(finalDestination)], ...(wh ? [["Almacén", wh.name] as [string, string]] : []), ["Paradas pendientes", String(destinations.length)]]} x={px} y={py} pinHeight={40} mapWidth={size.w} />;
+    } else if (hoveredMark.startsWith("wait:")) {
+      const key = hoveredMark.slice(5);
+      const group = waitingGroups.get(key);
+      if (group && !isExpanded(key)) {
+        const [px, py] = project(g, shownAt(group[0]));
+        tooltip = <HoverTooltip kind="info" title={group.length === 1 ? "1 vehículo en espera" : `${group.length} vehículos en espera`} subtitle={`Dirección ${formatCoord(shownAt(group[0]))}`} rows={group.slice(0, 5).map((v) => [`${VEHICLE_META[v.kind].label} ${v.plate}`, `${v.load} / ${v.capacity} paq.`] as [string, string])} note={`${group.length > 5 ? `y ${group.length - 5} más · ` : ""}Pulsa para desplegar`} x={px} y={py} pinHeight={14} mapWidth={size.w} />;
+      }
+    } else if (hoveredMark.startsWith("fleet:")) {
+      const w = snapshot.warehouses.find((x) => x.id === hoveredMark.slice(6));
+      const fleet = w ? snapshot.vehicles.filter((v) => atWarehouse(v)?.id === w.id) : [];
+      if (w && fleet.length) {
+        const [px, py] = project(g, w.position);
+        const feeding = fleet.filter((v) => v.status === "en_alimentacion").length;
+        const byKind = (["auto", "moto", "bicicleta"] as const).map((k) => [VEHICLE_META[k].plural, fleet.filter((v) => v.kind === k).length] as const).filter(([, n]) => n > 0);
+        tooltip = <HoverTooltip kind="info" title={w.name} subtitle={`Vehículos en el almacén · ${formatCoord(w.position)}`} rows={[...byKind.map(([k, n]) => [k, String(n)] as [string, string]), ...(feeding ? [["Pausa de alimentación", String(feeding)] as [string, string]] : [])]} note="Pulsa para ver los vehículos" x={px + WAREHOUSE_HALF + 10} y={py - WAREHOUSE_HALF - 20} pinHeight={6} mapWidth={size.w} />;
+      }
+    }
   }
 
   const [x0, y0] = project(g, { x: 0, y: GRID.height });
@@ -359,10 +426,16 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
 
           {!idle && layers.bloqueos && blockages.map((b) => {
             const ending = endingSoon(b) != null;
-            const width = Math.max(5, g.cell * 0.3);
+            const chosen = isSelected({ type: "blockage", id: b.id });
+            const width = Math.max(chosen ? 8 : 5, g.cell * (chosen ? 0.45 : 0.3));
+            const d = toPath(g, b.path ?? [b.from, b.to]);
             return (
-              <path key={`bl-${b.id}`} d={toPath(g, b.path ?? [b.from, b.to])} fill="none" stroke="var(--color-critic)" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round"
-                strokeDasharray={ending ? `${width * 1.6} ${width * 1.4}` : undefined} className={ending ? "blockage-ending" : undefined} style={ending ? blink : undefined} />
+              <g key={`bl-${b.id}`}>
+                {/* Seleccionado: contorno azul ancho bajo el tramo rojo. */}
+                {chosen && <path d={d} fill="none" stroke={SELECT} strokeWidth={width + 10} strokeLinecap="round" strokeLinejoin="round" />}
+                <path d={d} fill="none" stroke="var(--color-critic)" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round"
+                  strokeDasharray={ending ? `${width * 1.6} ${width * 1.4}` : undefined} className={ending ? "blockage-ending" : undefined} style={ending ? blink : undefined} />
+              </g>
             );
           })}
 
@@ -377,37 +450,43 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
               const { toDelivery } = splitAtDelivery(pending, focusOrder.destination, trip, warehouseStops);
               return (
                 <g key={`rt-${v.id}`} aria-hidden>
-                  {toDelivery.length > 1 && <>
-                    <path d={toPath(g, toDelivery)} stroke="#10161c" strokeWidth={11} fill="none" strokeLinejoin="round" strokeLinecap="round" opacity={0.7} />
-                    <path d={toPath(g, toDelivery)} stroke={color} strokeWidth={6} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-                  </>}
+                  {toDelivery.length > 1 && <SelectedRoute d={toPath(g, toDelivery)} color={color} />}
                 </g>
               );
             }
             const dest = pending.length > 1 ? pending.at(-1) : undefined;
             const [dx, dy] = dest ? project(g, dest) : [0, 0];
+            if (v.id === selectedVehicle?.id) {
+              // Ruta del vehículo elegido: azul continuo y grueso, con el color del tipo al centro.
+              return (
+                <g key={`rt-${v.id}`} aria-hidden>
+                  {pending.length > 1 && <SelectedRoute d={toPath(g, pending)} color={color} />}
+                  {dest && <circle cx={dx} cy={dy} r={10} fill={SELECT} stroke="#fff" strokeWidth={3} />}
+                </g>
+              );
+            }
             return (
-              <g key={`rt-${v.id}`} aria-hidden className={v.id === selectedVehicle?.id ? "selected-vehicle-route" : undefined} opacity={selectedVehicle && v.id !== selectedVehicle.id ? 0.35 : 1}>
-                {pending.length > 1 && <path d={toPath(g, pending)} stroke={color} strokeWidth={v.id === selectedVehicle?.id ? 6 : 4} fill="none" strokeDasharray="8 7" strokeLinejoin="round" />}
+              <g key={`rt-${v.id}`} aria-hidden opacity={selectedVehicle || focusOrder ? 0.22 : 1}>
+                {pending.length > 1 && <path d={toPath(g, pending)} stroke={color} strokeWidth={4} fill="none" strokeDasharray="8 7" strokeLinejoin="round" />}
                 {dest && <circle cx={dx} cy={dy} r={7} fill={color} stroke="#161d25" strokeWidth={2.5} />}
               </g>
             );
           })}
 
-          {layers.almacenes && snapshot.warehouses.map((w) => {
+          {layers.almacenes && [...snapshot.warehouses].sort((a, b) => Number(isSelected({ type: "warehouse", id: a.id })) - Number(isSelected({ type: "warehouse", id: b.id }))).map((w) => {
             if (!warehouseOnMap(w, shownWarehouses)) return null;
             const a = warehouseAppearance(w, trafficLight, idle, warehouseFillBands);
             const [x, y] = project(g, w.position);
             const intermediate = w.kind === "secundario";
             const stock = intermediate ? warehouseStockText(w) : "";
-            return <WarehouseMarker key={`wh-${w.id}`} x={x} y={y} ring={!!emphasis.warehouses?.has(w.id)} {...warehouseLook(w, a)} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={hoverOf({ type: "warehouse", id: w.id })} />;
+            return <WarehouseMarker key={`wh-${w.id}`} x={x} y={y} ring={!!emphasis.warehouses?.has(w.id)} selected={isSelected({ type: "warehouse", id: w.id })} {...warehouseLook(w, a)} label={`${w.name} ${formatCoord(w.position)}${stock ? `, ${stock}` : ""}`} onActivate={() => onSelect({ type: "warehouse", id: w.id })} onHoverChange={hoverOf({ type: "warehouse", id: w.id })} />;
           })}
 
           {!idle && layers.bloqueos && blockages.map((b) => {
             const [x, y] = project(g, blockageAnchor(b));
             const left = endingSoon(b);
             const { start, end } = blockageSchedule(b, snapshot.sample);
-            const pin = <MapPin x={x} y={y} centered scale={0.72} color="var(--color-critic)" Icon={left != null ? Hourglass : BlockageIcon} label={`${left != null ? `Vía bloqueada, se libera en ~${left} min` : "Vía bloqueada"} · de ${start} a ${end}`} onActivate={() => onSelect({ type: "blockage", id: b.id })} onHoverChange={hoverOf({ type: "blockage", id: b.id })} />;
+            const pin = <MapPin x={x} y={y} centered scale={0.72} selected={isSelected({ type: "blockage", id: b.id })} color="var(--color-critic)" Icon={left != null ? Hourglass : BlockageIcon} label={`${left != null ? `Vía bloqueada, se libera en ~${left} min` : "Vía bloqueada"} · de ${start} a ${end}`} onActivate={() => onSelect({ type: "blockage", id: b.id })} onHoverChange={hoverOf({ type: "blockage", id: b.id })} />;
             return left != null ? <g key={`bp-${b.id}`} className="blockage-ending" style={blink}>{pin}</g> : <g key={`bp-${b.id}`}>{pin}</g>;
           })}
 
@@ -416,21 +495,21 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
               const [x, y] = project(g, destination.position);
               // Numeradas en el orden de la ruta; el clic abre el (primer) pedido de la parada.
               const open = () => (onOpenOrder ? onOpenOrder(destination.orderIds[0]) : onSelect({ type: "vehicle", id: selectedVehicle.id }));
-              return <MapPin key={`orders-${destination.key}`} x={x} y={y} scale={0.75} color={PINK} Icon={Package} badgeText={String(i + 1)} label={`Parada ${i + 1}: pedidos ${destination.orderIds.join(", ")} · destino ${formatCoord(destination.position)}`} onActivate={open} onHoverChange={hoverStop(destination.key)} />;
+              return <MapPin key={`orders-${destination.key}`} x={x} y={y} scale={hoveredMark === `stop:${destination.key}` ? 0.9 : 0.75} color={PINK} Icon={Package} badgeText={String(i + 1)} badgeColor={SELECT} badgeGlyph="#fff" label={`Parada ${i + 1}: pedidos ${destination.orderIds.join(", ")} · destino ${formatCoord(destination.position)}`} onActivate={open} onHoverChange={hoverMark(`stop:${destination.key}`)} />;
             })}
             {finalDestination && !destinations.some((d) => samePoint(d.position, finalDestination)) && (() => {
               const [x, y] = project(g, finalDestination);
-              return <MapPin x={x} y={y} scale={0.7} color="var(--color-warning)" Icon={Flag} label={`Destino final de ${selectedVehicle.plate} ${formatCoord(finalDestination)}`} onActivate={() => onSelect({ type: "vehicle", id: selectedVehicle.id })} />;
+              return <MapPin x={x} y={y} scale={0.7} color="var(--color-warning)" Icon={Flag} label={`Destino final de ${selectedVehicle.plate} ${formatCoord(finalDestination)}`} onActivate={() => onSelect({ type: "vehicle", id: selectedVehicle.id })} onHoverChange={hoverMark("final")} />;
             })()}
           </g>}
 
-          {!idle && layers.flota && snapshot.vehicles.map((v) => {
+          {!idle && layers.flota && [...snapshot.vehicles].sort((a, b) => Number(a.id === selectedVehicle?.id) - Number(b.id === selectedVehicle?.id)).map((v) => {
             if (atWarehouse(v)) return null;
             if (isWaiting(v) && !isExpanded(nodeKey(shownAt(v)))) return null;
             const { color, Icon, BadgeIcon, badgeColor, badgeGlyph, meta } = vehicleAppearance(v, vehicleBands[v.kind]);
             const [px, y] = project(g, shownAt(v));
             const x = px + fanOffset(v);
-            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id) || carrierTrip.has(v.id)} color={color} Icon={Icon} heading={headingOf(v)} BadgeIcon={BadgeIcon} badgeColor={badgeColor} badgeGlyph={badgeGlyph} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]}${v.status === "averiado" && v.breakdownType ? ` ${v.breakdownType}` : ""} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
+            return <MapPin key={`vh-${v.id}`} x={x} y={y} ring={!!emphasis.vehicles?.has(v.id) || carrierTrip.has(v.id)} selected={v.id === selectedVehicle?.id} color={color} Icon={Icon} heading={headingOf(v)} BadgeIcon={BadgeIcon} badgeColor={badgeColor} badgeGlyph={badgeGlyph} label={`${meta.label} ${v.plate} · ${VEHICLE_STATUS_LABEL[v.status]}${v.status === "averiado" && v.breakdownType ? ` ${v.breakdownType}` : ""} · ${vehicleOccupancyText(v, vehicleBands[v.kind])}`} onActivate={() => onSelect({ type: "vehicle", id: v.id })} onHoverChange={hoverOf({ type: "vehicle", id: v.id })} />;
           })}
 
           {!idle && layers.flota && [...waitingGroups].map(([key, group]) => {
@@ -439,7 +518,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
             const plates = group.map((v) => v.plate).join(", ");
             const label = `${group.length === 1 ? "1 vehículo en espera" : `${group.length} vehículos en espera`} en (${key.replace(",", ", ")}): ${plates}. Pulsa para desplegar.`;
             const open = () => setExpanded((s) => new Set(s).add(key));
-            return <g key={`wait-${key}`} data-pin transform={`translate(${x} ${y})`} role="button" tabIndex={0} aria-label={label} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }} className="cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125">
+            return <g key={`wait-${key}`} data-pin transform={`translate(${x} ${y})`} role="button" tabIndex={0} aria-label={label} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }} {...hoverProps(hoverMark(`wait:${key}`))} className="cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125">
               <title>{label}</title>
               {/* Siempre con el número: un punto liso se confundiría con el destino de una ruta. */}
               <circle r={16} fill="transparent" />
@@ -455,7 +534,7 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
             const [x, y] = project(g, w.position);
             const label = `${w.name}: ${fleet.length} vehículos, ${feeding} en pausa de alimentación. Ver vehículos.`;
             const open = () => onSelect({ type: "warehouse", id: w.id });
-            return <g key={`fleet-${w.id}`} data-pin transform={`translate(${x + WAREHOUSE_HALF - 10} ${y - WAREHOUSE_HALF - 20})`} role="button" tabIndex={0} aria-label={label} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }} className="cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125">
+            return <g key={`fleet-${w.id}`} data-pin transform={`translate(${x + WAREHOUSE_HALF - 10} ${y - WAREHOUSE_HALF - 20})`} role="button" tabIndex={0} aria-label={label} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }} {...hoverProps(hoverMark(`fleet:${w.id}`))} className="cursor-pointer outline-none hover:brightness-110 focus-visible:brightness-125">
               <title>{label}</title>
               <rect width={feeding ? 80 : 38} height={26} rx={8} fill={feeding ? "var(--color-warning)" : "#dbe4ef"} stroke="#10161c" strokeWidth={2} />
               <text x={19} y={18} textAnchor="middle" fontSize={13} fontWeight={700} fill="#161d25">{fleet.length}</text>
@@ -465,10 +544,10 @@ export function GridMap({ snapshot: fullSnapshot, orders = [], knownDestinations
 
           {focusOrder && (() => {
             const [x, y] = project(g, focusOrder.destination);
-            return <MapPin x={x} y={y} scale={0.95} ring color={focusOrder.delivered ? "var(--color-success)" : PINK} Icon={focusOrder.delivered ? PackageCheck : Package} BadgeIcon={Pin} label={`Pedido fijado ${focusOrder.id} · destino ${formatCoord(focusOrder.destination)}${focusOrder.delivered ? " · entregado" : ""}`} />;
+            return <MapPin x={x} y={y} scale={0.95} selected color={focusOrder.delivered ? "var(--color-success)" : SELECT} Icon={focusOrder.delivered ? PackageCheck : Package} BadgeIcon={Pin} label={`Pedido fijado ${focusOrder.id} · destino ${formatCoord(focusOrder.destination)}${focusOrder.delivered ? " · entregado" : ""}`} onHoverChange={hoverMark("focus")} />;
           })()}
 
-          {highlight && !(focusOrder && samePoint(highlight, focusOrder.destination)) && (() => { const [x, y] = project(g, highlight); return <MapPin x={x} y={y} scale={0.9} ring color={PINK} Icon={MapPinIcon} label={`Destino ${formatCoord(highlight)}`} />; })()}
+          {highlight && !(focusOrder && samePoint(highlight, focusOrder.destination)) && (() => { const [x, y] = project(g, highlight); return <MapPin x={x} y={y} scale={0.9} selected color={SELECT} Icon={MapPinIcon} label={`Destino ${formatCoord(highlight)}`} onHoverChange={hoverMark("highlight")} />; })()}
 
           {hover && !dragging && (() => {
             const [x, y] = project(g, hover);

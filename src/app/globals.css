@@ -47,6 +47,8 @@
   --color-truck: #62e06e;
   --color-bike: #2ec4d6;
   --color-moto: #b47af5;
+  /* Selección en el mapa: azul eléctrico, ajeno al semáforo, a los tipos de vehículo y al rosado. */
+  --color-select: #3d8bff;
 
   --animate-live: live 2s ease-in-out infinite;
   --animate-blink: blink 1s ease-in-out infinite;
@@ -72,16 +74,16 @@
   }
 }
 
-/* Resalta la ruta seleccionada sin ocultarla por completo durante las pausas. */
-.selected-vehicle-route {
-  animation: selected-route-pulse 1.2s ease-in-out infinite;
+/* Ruta del elemento seleccionado: trazo azul continuo con puntos blancos que
+   avanzan en el sentido del recorrido. */
+.selected-route-flow {
+  animation: selected-route-flow 0.9s linear infinite;
 }
-@keyframes selected-route-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+@keyframes selected-route-flow {
+  to { stroke-dashoffset: -18; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .selected-vehicle-route { animation: none; }
+  .selected-route-flow { animation: none; }
 }
 
 /* Bloqueo por terminar. La duración del ciclo llega por style desde

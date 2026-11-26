@@ -26,11 +26,15 @@ export function warehouseStockText(w: Warehouse) {
   return w.stock != null && w.capacity != null ? `stock ${w.stock} de ${w.capacity} paquetes (${pct(warehouseOccupancy(w))})` : "";
 }
 
-type Props = { x: number; y: number; mapWidth: number } & (
+type Props = { x: number; y: number; mapWidth: number; /** Alto del marcador sobre (x, y), si no es el estándar. */ pinHeight?: number } & (
   | { kind: "vehicle"; vehicle: Vehicle; bands: PercentBands }
   | { kind: "warehouse"; warehouse: Warehouse; tone: StatusTone | null; empty?: boolean }
   | { kind: "blockage"; schedule: { start: string; end: string; duration: string } }
   | { kind: "stop"; stop: number; position: Coord; plate: string; orders: StopOrder[] }
+  /** Dirección de entrega (pedido seleccionado o fijado): la intersección y sus pedidos. */
+  | { kind: "destination"; title: string; position: Coord; orders: StopOrder[]; note?: string; missingLabel?: string }
+  /** Marcador sin ficha propia (destino final, grupo en espera, flota en un almacén). */
+  | { kind: "info"; title: string; subtitle?: string; rows: [string, string][]; note?: string }
 );
 
 /** Pedido de una parada; `order` falta si el servidor ya no lo lista (se está entregando). */
@@ -38,15 +42,44 @@ export type StopOrder = { id: string; packages: number; order?: Order };
 
 const STOP_MAX_ROWS = 4;
 
+/** Pedidos que se entregan en una intersección; `missingLabel` para los que el servidor ya no lista. */
+function OrderRows({ orders, missingLabel = "Entregándose" }: { orders: StopOrder[]; missingLabel?: string }) {
+  const shown = orders.slice(0, STOP_MAX_ROWS);
+  return (
+    <>
+      {shown.map(({ id, packages, order: o }) => {
+        const arrival = o?.expectedDeliveryAt ?? (o?.etaMinutes != null ? `~${o.etaMinutes} min` : null);
+        return (
+          <div key={id} className="grid gap-0.5 border-t border-line pt-1.5 text-xs text-n400">
+            <div className="flex items-baseline justify-between gap-2">
+              <b className="text-[13px] text-white">Pedido {id}</b>
+              <span className="tabular-nums">{packages} paq.{o ? ` · ${o.priority}` : ""}</span>
+            </div>
+            {o ? (
+              <>
+                {o.vehiclePlate && <div className="flex justify-between gap-2"><span>Vehículo</span><b className="text-white">{o.vehiclePlate}</b></div>}
+                <div className="flex justify-between gap-2"><span>Vence en</span><b className={o.minutesLeft < 60 ? "text-warning" : "text-white"}>{formatDuration(o.minutesLeft)}</b></div>
+                {arrival && <div className="flex justify-between gap-2"><span>Llegada estimada</span><b className="text-white tabular-nums">{arrival}</b></div>}
+              </>
+            ) : <span>{missingLabel}</span>}
+          </div>
+        );
+      })}
+      {orders.length > shown.length && <span className="text-xs text-n500">y {orders.length - shown.length} más</span>}
+    </>
+  );
+}
+
 /**
  * Tooltip del mapa al pasar el cursor (o enfocar con el teclado) un marcador.
  * Solo existe para el marcador bajo el cursor; es informativo (aria-hidden):
  * el mismo texto ya está en la etiqueta accesible del marcador.
  */
 export function HoverTooltip(p: Props) {
-  const below = p.y < PIN_HEIGHT + 140;
+  const pinHeight = p.pinHeight ?? PIN_HEIGHT;
+  const below = p.y < pinHeight + 140;
   const left = Math.max(8, Math.min(p.mapWidth - WIDTH - 8, p.x - WIDTH / 2));
-  const style = { left, width: WIDTH, ...(below ? { top: p.y + 12 } : { top: p.y - PIN_HEIGHT - 8, transform: "translateY(-100%)" }) };
+  const style = { left, width: WIDTH, ...(below ? { top: p.y + 12 } : { top: p.y - pinHeight - 8, transform: "translateY(-100%)" }) };
 
   let body;
   if (p.kind === "vehicle") {
@@ -75,32 +108,41 @@ export function HoverTooltip(p: Props) {
       </>
     );
   } else if (p.kind === "stop") {
-    const shown = p.orders.slice(0, STOP_MAX_ROWS);
     body = (
       <>
         <div className="flex items-baseline gap-2">
           <b className="flex-1 text-white">Parada {p.stop} · {formatCoord(p.position)}</b>
           <span className="text-xs text-n500">{p.plate}</span>
         </div>
-        {shown.map(({ id, packages, order: o }) => {
-          const arrival = o?.expectedDeliveryAt ?? (o?.etaMinutes != null ? `~${o.etaMinutes} min` : null);
-          return (
-            <div key={id} className="grid gap-0.5 border-t border-line pt-1.5 text-xs text-n400">
-              <div className="flex items-baseline justify-between gap-2">
-                <b className="text-[13px] text-white">Pedido {id}</b>
-                <span className="tabular-nums">{packages} paq.{o ? ` · ${o.priority}` : ""}</span>
-              </div>
-              {o ? (
-                <>
-                  <div className="flex justify-between gap-2"><span>Vence en</span><b className={o.minutesLeft < 60 ? "text-warning" : "text-white"}>{formatDuration(o.minutesLeft)}</b></div>
-                  {arrival && <div className="flex justify-between gap-2"><span>Llegada estimada</span><b className="text-white tabular-nums">{arrival}</b></div>}
-                </>
-              ) : <span>Entregándose</span>}
-            </div>
-          );
-        })}
-        {p.orders.length > shown.length && <span className="text-xs text-n500">y {p.orders.length - shown.length} más</span>}
+        <OrderRows orders={p.orders} />
         <span className="text-[11px] text-n600">Pulsa para abrir {p.orders.length > 1 ? "el primero" : "el pedido"} en Pedidos</span>
+      </>
+    );
+  } else if (p.kind === "destination") {
+    body = (
+      <>
+        <div className="min-w-0">
+          <b className="block text-white">{p.title}</b>
+          <span className="text-xs text-n400">Dirección <b className="text-white tabular-nums">{formatCoord(p.position)}</b></span>
+        </div>
+        {p.orders.length > 0 ? <OrderRows orders={p.orders} missingLabel={p.missingLabel} /> : <span className="text-xs text-n500">Sin pedidos activos en esta dirección</span>}
+        {p.note && <span className="text-[11px] text-n600">{p.note}</span>}
+      </>
+    );
+  } else if (p.kind === "info") {
+    body = (
+      <>
+        <div className="min-w-0">
+          <b className="block break-words text-white">{p.title}</b>
+          {p.subtitle && <span className="text-xs text-n500">{p.subtitle}</span>}
+        </div>
+        {p.rows.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-2 text-xs text-n400">
+            <span>{k}</span>
+            <b className="text-right text-[13px] break-words text-white tabular-nums">{v}</b>
+          </div>
+        ))}
+        {p.note && <span className="text-[11px] text-n600">{p.note}</span>}
       </>
     );
   } else if (p.kind === "blockage") {
@@ -141,6 +183,10 @@ export function HoverTooltip(p: Props) {
         <div className="min-w-0">
           <b className="block break-words text-white">{w.name}</b>
           <span className="text-xs text-n500">Almacén intermedio</span>
+        </div>
+        <div className="flex items-baseline justify-between gap-2 text-xs text-n400">
+          <span>Posición</span>
+          <b className="text-[13px] text-white tabular-nums">{formatCoord(w.position)}</b>
         </div>
         <div className="flex items-baseline justify-between gap-2 text-xs text-n400">
           <span>Stock actual</span>

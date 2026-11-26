@@ -1,7 +1,7 @@
-import { CircleX, Flag, Hourglass, Package, PackageCheck, Utensils, Wrench, type LucideIcon } from "lucide-react";
+import { CircleX, Flag, Hourglass, MapPin as MapPinIcon, Package, PackageCheck, Utensils, Wrench, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { VEHICLE_META, VEHICLE_ORDER } from "@/components/domain/vehicle";
-import { PinGlyph, WarehouseGlyph } from "@/components/map/MapPin";
+import { PinGlyph, SELECT, WarehouseGlyph } from "@/components/map/MapPin";
 import { PINK, VEHICLE_EMPTY_COLOR, WAREHOUSE_LEGEND, type MapLayer, type MapLayers } from "@/components/map/layers";
 import { Switch } from "@/components/ui/choice";
 import { PanelSection, SidePanel } from "@/components/workspace/SidePanel";
@@ -35,6 +35,15 @@ export function LegendPanel({ layers, onToggle, onClose, width }: { layers: MapL
   const toggle = (layer: MapLayer, label: string) => <Switch checked={layers[layer]} onChange={(v) => onToggle(layer, v)} label={`Mostrar ${label}`} />;
   return (
     <SidePanel title="Leyenda" subtitle="Qué significa cada elemento y qué capas ver." onClose={onClose} width={width}>
+      <PanelSection title="Selección">
+        <ul>
+          <Item glyph={<PinGlyph selected color={VEHICLE_META.auto.color} Icon={VEHICLE_META.auto.Icon} />}>Elemento seleccionado: más grande, con halo azul y contorno blanco</Item>
+          <Item glyph={<WarehouseGlyph selected {...WAREHOUSE_LEGEND.principal} />}>Almacén seleccionado</Item>
+          <Item glyph={<PinGlyph selected color={SELECT} Icon={MapPinIcon} />}>Dirección de entrega del pedido seleccionado</Item>
+          <Item glyph={<svg width="30" height="14" aria-hidden><line x1="3" y1="7" x2="27" y2="7" stroke="#10161c" strokeWidth="13" strokeLinecap="round" /><line x1="3" y1="7" x2="27" y2="7" stroke={SELECT} strokeWidth="9" strokeLinecap="round" /><line x1="3" y1="7" x2="27" y2="7" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeDasharray="0.1 8" /></svg>}>Ruta seleccionada: azul continuo; los puntos avanzan en el sentido del recorrido</Item>
+        </ul>
+        <p className="text-xs text-n600">Pasa el cursor sobre cualquier marcador (almacén, vehículo, parada, dirección de entrega o bloqueo) para ver sus detalles.</p>
+      </PanelSection>
       <PanelSection title="Almacenes" action={toggle("almacenes", "almacenes")}>
         <ul>
           <Item glyph={<WarehouseGlyph {...WAREHOUSE_LEGEND.principal} />}>Almacén principal</Item>
@@ -85,9 +94,9 @@ export function LegendPanel({ layers, onToggle, onClose, width }: { layers: MapL
           <Item glyph={<svg width="20" height="20" aria-hidden><circle cx="10" cy="10" r="7" fill="#fff" stroke="#161d25" strokeWidth="2.5" /></svg>}>Destino del vehículo</Item>
         </ul>
         <p className="text-xs text-n600">La ruta toma el color del tipo de vehículo que la recorre: <span style={{ color: VEHICLE_META.auto.color }}>auto</span>, <span style={{ color: VEHICLE_META.moto.color }}>moto</span> o <span style={{ color: VEHICLE_META.bicicleta.color }}>bicicleta</span>.</p>
-        <p className="text-xs text-n600">Selecciona un vehículo para ver su ruta parpadear y los destinos de sus pedidos.</p>
+        <p className="text-xs text-n600">Selecciona un vehículo para resaltar su ruta en azul (las demás se atenúan) y ver los destinos de sus pedidos.</p>
         <ul>
-          <Item glyph={<PinGlyph color={PINK} Icon={Package} badgeText="1" />}>Parada de entrega, numerada en el orden de la ruta; pasa el cursor para ver sus pedidos y pulsa para abrirlos</Item>
+          <Item glyph={<PinGlyph color={PINK} Icon={Package} badgeText="1" badgeColor={SELECT} badgeGlyph="#fff" />}>Parada de entrega, numerada en el orden de la ruta; pasa el cursor para ver sus pedidos y pulsa para abrirlos</Item>
           <Item glyph={pin("var(--color-warning)", Flag)}>Destino final del itinerario seleccionado</Item>
         </ul>
       </PanelSection>
